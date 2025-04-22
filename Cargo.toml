@@ -1,0 +1,14 @@
+[workspace.package]
+name = "WeTEE"
+authors = ["WeTEE DAO"]
+edition = "2021"
+homepage = "https://wetee.app"
+license = "Apache 2.0"
+repository = "https://github.com/wetee-dao/chain"
+version = "0.1.0"
+
+[workspace]
+members = [
+  # contracts
+  "contracts/test",
+]

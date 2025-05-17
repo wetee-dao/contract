@@ -1,89 +1,21 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
+mod errors;
+mod events;
+
 #[ink::contract]
 mod dao {
+    use crate::{errors::Error, events::*};
     use ink::{
         env::{
             call::{build_call, ExecutionInput},
             CallFlags,
         },
         prelude::vec::Vec,
-        scale::Output,
         storage::Mapping,
         U256,
     };
-
-    type CalllId = u32;
-
-    #[derive(Clone)]
-    #[cfg_attr(
-        feature = "std",
-        derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-    )]
-    #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    pub struct Call {
-        /// The address of the contract that is call in this proposal.
-        pub contract: Address,
-        /// The selector bytes that identifies the function of the contract that should be call.
-        pub selector: [u8; 4],
-        /// The SCALE encoded parameters that are passed to the call function.
-        pub input: Vec<u8>,
-        /// The amount of chain balance that is transferred to the Proposalee.
-        pub amount: U256,
-        /// Gas limit for the execution of the call.
-        pub ref_time_limit: u64,
-        /// If set to true the transaction will be allowed to re-enter the multisig
-        /// contract. Re-entrancy can lead to vulnerabilities. Use at your own risk.
-        pub allow_reentry: bool,
-    }
-
-    #[derive(Clone, Default)]
-    #[cfg_attr(
-        feature = "std",
-        derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-    )]
-    #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    pub struct ListHelper<T> {
-        list: Vec<T>,
-        next_id: T,
-    }
-
-    #[derive(Clone)]
-    struct CallInput<'a>(&'a [u8]);
-    impl ink::scale::Encode for CallInput<'_> {
-        fn encode_to<T: Output + ?Sized>(&self, dest: &mut T) {
-            dest.write(self.0);
-        }
-    }
-
-    /// The member added event.
-    #[ink(event)]
-    pub struct MemberAdd {
-        #[ink(topic)]
-        user: Address,
-    }
-
-    #[ink(event)]
-    pub struct ProposalSubmission {
-        #[ink(topic)]
-        proposal_id: CalllId,
-    }
-
-    #[ink(event)]
-    pub struct ProposalExecution {
-        #[ink(topic)]
-        proposal_id: CalllId,
-        #[ink(topic)]
-        result: Result<Option<Vec<u8>>, Error>,
-    }
-
-    #[ink(event)]
-    pub struct SudoExecution {
-        #[ink(topic)]
-        sudo_id: CalllId,
-        #[ink(topic)]
-        result: Result<Option<Vec<u8>>, Error>,
-    }
+    use primitives::{Call, CallInput, CalllId, ListHelper};
 
     #[ink(storage)]
     pub struct DAO {
@@ -105,13 +37,6 @@ mod dao {
         member_balances: Mapping<Address, U256>,
         /// total issuance TOKEN
         total_issuance: U256,
-    }
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    pub enum Error {
-        /// Returned if the call failed.
-        CallFailed,
     }
 
     impl DAO {
@@ -243,7 +168,7 @@ mod dao {
         }
 
         /// Confirm a proposal with deposit TOKEN.
-        #[ink(message)]
+        #[ink(message, payable)]
         pub fn deposit_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
             Ok(())
         }
@@ -267,7 +192,7 @@ mod dao {
         }
 
         /// Execute proposal after vote is passed
-        #[ink(message, payable)]
+        #[ink(message)]
         pub fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error> {
             let call = self.take_proposal(proposal_id).expect("proposal not found");
 
@@ -333,5 +258,10 @@ mod dao {
                 _ => Err(Error::CallFailed),
             }
         }
+    }
+
+    #[cfg(test)]
+    mod tests {
+
     }
 }

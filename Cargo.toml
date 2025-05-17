@@ -15,4 +15,6 @@ members = [
   # "contracts/Subnet",
   # "contracts/Cloud",
   # "contracts/Bridge",
+
+  "primitives",
 ]

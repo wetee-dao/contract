@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "ink",
  "ink_e2e",
+ "primitives",
 ]
 
 [[package]]
@@ -5380,6 +5381,13 @@ dependencies = [
  "impl-serde",
  "scale-info",
  "uint 0.10.0",
+]
+
+[[package]]
+name = "primitives"
+version = "0.1.0"
+dependencies = [
+ "ink",
 ]
 
 [[package]]

@@ -65,7 +65,7 @@ pub struct Period {
     /// 两个比率能保持高于通过阈值 “安全” 地渡过这个时期（例如 1 天），
     /// 那么该公投就算正式通过了。
     pub confirm_period: BlockNumber,
-    /// 一项公投在投票通过后，再安全地度过了执行期，与该公投相关的代码就会自动在链上执行。
+    /// 一项公投在投票通过后，再安全地度过了执行期，与该公投相关的代码可以执行。
     pub decision_period: BlockNumber,
     /// 提案结束后多久能解锁
     pub min_enactment_period: BlockNumber,
@@ -78,4 +78,35 @@ pub struct Period {
     /// 最大能执行的金额
     /// 如果金额范围不合理，就无法成功执行提案
     pub max_balance: U256,
+}
+
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub enum PropStatus {
+    Pending = 0,
+    Ongoing,
+    Approved,
+    Rejected,
+    Canceled,
+}
+
+/// Voting Statistics.
+/// 投票数据统计
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct Tally {
+    /// The number of yes votes
+    /// 同意的数量
+    pub yes: U256,
+    /// The number of no votes
+    /// 不同意的数量
+    pub no: U256,
 }

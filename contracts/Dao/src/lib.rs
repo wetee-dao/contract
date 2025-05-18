@@ -30,16 +30,19 @@ mod dao {
         /// caller of proposal
         proposal_caller: Mapping<CalllId, Address>,
         /// deposit of proposal
-        deposit_of_proposal: Mapping<CalllId, Option<U256>>,
+        deposit_of_proposal: Mapping<CalllId, (Address, U256)>,
+        /// status of proposal
+        status_of_proposal: Mapping<CalllId, PropStatus>,
 
         /// periods
         periods: Mapping<u16, Period>,
         /// periods list helper
         periods_helper: ListHelper<u16>,
-        /// period rules (If the selector == none, it means the entire contract uses a single track)
-        period_rules: Mapping<(Address, Option<Selector>), u16>,
+
+        /// period rules (If selector == none, it means entire contract uses a single track)
+        period_rules: Mapping<(Option<Address>, Option<Selector>), u16>,
         /// period rules index
-        period_rule_index: Mapping<u16,(Address, Option<Selector>, u16)>,
+        period_rule_index: Mapping<u16, (Option<Address>, Option<Selector>, u16)>,
         /// period rules index helper
         period_rule_index_helper: ListHelper<u16>,
 
@@ -59,23 +62,32 @@ mod dao {
 
         /// members
         members: Vec<Address>,
-        /// member balances
+
+        /// member balance
         member_balances: Mapping<Address, U256>,
+        /// member lock balance
+        member_lock_balances: Mapping<Address, U256>,
         /// total issuance TOKEN
         total_issuance: U256,
 
         /// transfer enable
-        transfer:  bool,
+        transfer: bool,
     }
 
     impl DAO {
         /// create a new dao
         #[ink(constructor)]
-        pub fn new(args: Vec<(Address, U256)>, sudo_account: Option<Address>) -> Self {
+        pub fn new(
+            args: Vec<(Address, U256)>,
+            sudo_account: Option<Address>,
+            period: Period,
+        ) -> Self {
             let mut dao = DAO::default();
             let mut members = Vec::new();
             let mut member_balances = Mapping::default();
             let mut total_issuance = U256::from(0);
+            let mut periods = Mapping::default();
+            let mut periods_helper = ListHelper::<u16>::default();
 
             // Init members balances
             for (user, balance) in args.iter() {
@@ -91,25 +103,27 @@ mod dao {
             dao.total_issuance = total_issuance;
             dao.sudo_account = sudo_account;
 
+            periods_helper.next_id = 1;
+            periods_helper.list.push(0);
+            periods.insert(0, &period);
+            dao.periods = periods;
+            dao.periods_helper = periods_helper;
+
             dao
         }
 
-        /// Returns the list of members.
+        /// Returns list of members.
         #[ink(message)]
         pub fn members(&self) -> Vec<Address> {
             self.members.clone()
         }
 
-        /// join to DAO
+        /// Join to DAO
         #[ink(message)]
-        pub fn join(
-            &mut self,
-            new_user: Address,
-            balance: U256,
-        ) {
+        pub fn join(&mut self, new_user: Address, balance: U256) {
             self.ensure_from_gov();
 
-            // check if the user is already an member
+            // check if user is already an member
             assert!(!self.member_balances.contains(new_user));
 
             self.member_balances.insert(new_user, &balance);
@@ -123,28 +137,68 @@ mod dao {
         pub fn levae(&mut self) {
             let caller = self.env().caller();
 
-            // check if the user is already an member
-            assert!(self.member_balances.contains(caller));
+            // check if user is already an member
+            assert!(self.member_balances.contains(caller), "member not found");
+            assert!(
+                self.member_balances.get(caller).unwrap_or(U256::from(0)) == U256::from(0),
+                "member balance not zero"
+            );
+            assert!(
+                self.member_lock_balances
+                    .get(caller)
+                    .unwrap_or(U256::from(0))
+                    == U256::from(0),
+                "member lock balance not zero"
+            );
 
-            // remove the user from the list
+            // remove user from DAO
             self.member_balances.remove(caller);
+            self.member_lock_balances.remove(caller);
             self.members.retain(|x| *x != caller);
         }
 
-        /// delete a member from the list
+        // levae DAO
+        #[ink(message)]
+        pub fn levae_with_burn(&mut self) {
+            let caller = self.env().caller();
+
+            // check if user is already an member
+            assert!(self.member_balances.contains(caller), "member not found");
+
+            // get amount of user
+            let amount = self.member_balances.get(caller).unwrap_or(U256::from(0))
+                + self
+                    .member_lock_balances
+                    .get(caller)
+                    .unwrap_or(U256::from(0));
+            self.total_issuance -= amount;
+
+            // remove user from DAO
+            self.member_balances.remove(caller);
+            self.member_lock_balances.remove(caller);
+            self.members.retain(|x| *x != caller);
+        }
+
+        /// Delete member from DAO
         #[ink(message)]
         pub fn delete_member(&mut self, user: Address) {
             self.ensure_from_gov();
 
-            // check if the user is an member
+            // check if user is an member
             assert!(self.member_balances.contains(user));
 
-            let index = self.get_member_index(&user) as usize;
-            self.members.swap_remove(index);
+            // get amount of user
+            let amount = self.member_balances.get(user).unwrap_or(U256::from(0))
+                + self.member_lock_balances.get(user).unwrap_or(U256::from(0));
+            self.total_issuance -= amount;
+
+            // remove user from DAO
             self.member_balances.remove(user);
+            self.member_lock_balances.remove(user);
+            self.members.retain(|x| *x != user);
         }
 
-        /// enable transfer 
+        /// Enable transfer
         #[ink(message)]
         pub fn enable_transfer(&mut self) {
             self.ensure_from_gov();
@@ -156,31 +210,33 @@ mod dao {
             self.transfer = true;
         }
 
-        /// transfer TOKEN to user
+        /// Transfer TOKEN to user
         #[ink(message)]
-        pub fn transfer(&mut self, to: Address, amount: U256){
+        pub fn transfer(&mut self, to: Address, amount: U256) {
             assert!(self.transfer);
 
             let caller = self.env().caller();
 
-            // check if the user is an member
+            // check if user is an member
             assert!(self.member_balances.contains(caller));
             assert!(self.member_balances.contains(to));
 
-            let total = self.member_balances.get(caller).unwrap();
+            let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
             assert!(total >= amount);
 
             self.member_balances.insert(caller, &(total - amount));
-            self.member_balances.insert(to, &(self.member_balances.get(to).unwrap_or(U256::from(0)) + amount));
-            
+            self.member_balances.insert(
+                to,
+                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + amount),
+            );
         }
 
-        /// Burn tokens from the caller's balance.
+        /// Burn tokens from caller's balance.
         #[ink(message)]
-        pub fn burn(&mut self, amount: U256){
+        pub fn burn(&mut self, amount: U256) {
             let caller = self.env().caller();
 
-            // check if the user is an member
+            // check if user is an member
             assert!(self.member_balances.contains(caller));
 
             let total = self.member_balances.get(caller).unwrap();
@@ -214,7 +270,7 @@ mod dao {
             result
         }
 
-        /// After ensuring the stable operation of DAO, delete sudo.
+        /// After ensuring stable operation of DAO, delete sudo.
         #[ink(message)]
         pub fn remove_sudo(&mut self) {
             self.ensure_from_gov();
@@ -222,21 +278,34 @@ mod dao {
             self.sudo_account = None;
         }
 
-        /// Submit a proposal to the DAO
+        /// Submit a proposal to DAO
         #[ink(message)]
         pub fn submit_proposal(&mut self, call: Call) -> CalllId {
             let caller = self.env().caller();
 
-            // check if the user is an member
+            // check if user is an member
             assert!(self.member_balances.contains(caller));
 
+            //  get period of call
+            let period = self.get_period(&call);
+
+            // save proposal
             let call_id = self.proposals_helper.next_id;
             self.proposals_helper.next_id = call_id.checked_add(1).expect("proposal id overflow");
-
-            self.proposals.insert(call_id, &call);
             self.proposals_helper.list.push(call_id);
+            self.proposals.insert(call_id, &call);
+
+            // set caller of proposal
             self.proposal_caller.insert(call_id, &caller);
 
+            // set period for proposal
+            self.period_of_proposal.insert(call_id, &period);
+
+            // set proposal status
+            self.status_of_proposal
+                .insert(call_id, &PropStatus::Pending);
+
+            // emit event
             self.env().emit_event(ProposalSubmission {
                 proposal_id: call_id,
             });
@@ -247,12 +316,51 @@ mod dao {
         /// Cancel a proposal
         #[ink(message)]
         pub fn cancel_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            assert!(
+                self.status_of_proposal.get(proposal_id) == Some(PropStatus::Pending),
+                "proposal is started, cannot cancel"
+            );
+            assert!(
+                self.proposal_caller.get(proposal_id).unwrap_or_default() == caller,
+                "only caller can cancel proposal"
+            );
+
+            self.status_of_proposal
+                .insert(proposal_id, &PropStatus::Canceled);
+
             Ok(())
         }
 
         /// Confirm a proposal with deposit TOKEN.
         #[ink(message, payable)]
         pub fn deposit_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let payvalue = self.env().transferred_value();
+
+            // check status
+            let status = self.status_of_proposal.get(proposal_id).unwrap();
+            if status != PropStatus::Pending {
+                return Err(Error::InvalidProposalStatus);
+            }
+
+            // check period
+            let period_id = self.period_of_proposal.get(proposal_id).unwrap();
+            let period = self.periods.get(period_id).unwrap();
+
+            // check payvalue
+            if payvalue < period.decision_deposit {
+                return Err(Error::InvalidDeposit);
+            }
+
+            // save deposit
+            self.deposit_of_proposal.insert(proposal_id, &(caller,payvalue));
+
+            // save status
+            self.status_of_proposal
+                .insert(proposal_id, &PropStatus::Ongoing);
+
             Ok(())
         }
 
@@ -265,12 +373,14 @@ mod dao {
         /// Cancel vote before proposal is executed or rejected
         #[ink(message)]
         pub fn cancel_vote(&mut self, proposal_id: CalllId) -> Result<(), Error> {
+            
             Ok(())
         }
 
         /// Unlock tokens after proposal is executed or rejected
         #[ink(message)]
-        pub fn unlock(&mut self, proposal_id: CalllId) -> Result<(), Error> {
+        pub fn unlock(&mut self, vote_id: CalllId) -> Result<(), Error> {
+        
             Ok(())
         }
 
@@ -278,6 +388,17 @@ mod dao {
         #[ink(message)]
         pub fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error> {
             let call = self.take_proposal(proposal_id).expect("proposal not found");
+
+            // Return the deposit amount.
+            let deposit = self.deposit_of_proposal.get(proposal_id).unwrap();
+            let result = self.env().transfer(deposit.0, deposit.1);
+            if result.is_err() {
+                return Err(Error::TransferFailed);
+            }
+
+            //  Set the status to approved.
+            self.status_of_proposal
+                .insert(proposal_id, &PropStatus::Approved);
 
             let result = self.exec_call(call);
             self.env().emit_event(ProposalExecution {
@@ -288,7 +409,7 @@ mod dao {
             result
         }
 
-        /// Returns the index of the member in the list of members.
+        /// Returns index of member of members.
         fn get_member_index(&self, owner: &Address) -> u32 {
             self.members
                 .iter()
@@ -299,6 +420,22 @@ mod dao {
         /// Gov call only call from contract
         fn ensure_from_gov(&self) {
             assert_eq!(self.env().caller(), self.env().address());
+        }
+
+        /// Get period of call
+        fn get_period(&self, call: &Call) -> u16 {
+            let index = self
+                .period_rules
+                .get((call.contract.clone(), Some(call.selector.clone())))
+                .unwrap_or(0u16);
+            if index > 0 {
+                return index;
+            }
+
+            return self
+                .period_rules
+                .get((call.contract.clone(), None::<Selector>))
+                .unwrap_or(0u16);
         }
 
         /// Take proposal and remove it from list
@@ -326,7 +463,7 @@ mod dao {
             };
 
             let result = build_call::<<Self as ::ink::env::ContractEnv>::Env>()
-                .call(call.contract)
+                .call(call.contract.unwrap_or(self.env().address()))
                 .ref_time_limit(call.ref_time_limit)
                 .transferred_value(call.amount)
                 .call_flags(call_flags)

@@ -21,7 +21,7 @@ impl ink::scale::Encode for CallInput<'_> {
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Call {
     /// The address of the contract that is call in this proposal.
-    pub contract: Address,
+    pub contract: Option<Address>,
     /// The selector bytes that identifies the function of the contract that should be call.
     pub selector: Selector,
     /// The SCALE encoded parameters that are passed to the call function.

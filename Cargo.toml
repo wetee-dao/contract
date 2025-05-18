@@ -12,9 +12,15 @@ members = [
   # contracts
   "contracts/Test",
   "contracts/Dao",
-  # "contracts/Subnet",
+  "contracts/Subnet",
   # "contracts/Cloud",
   # "contracts/Bridge",
 
   "primitives",
 ]
+resolver = "2"
+
+[workspace.dependencies]
+ink = { git = "https://github.com/use-ink/ink", branch = "master", default-features = false }
+ink_e2e = { git = "https://github.com/use-ink/ink", branch = "master" }
+primitives = { path = "primitives" }

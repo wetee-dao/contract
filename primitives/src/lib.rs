@@ -3,6 +3,7 @@
 use ink::{prelude::vec::Vec, scale::Output, Address, U256};
 
 pub type CalllId = u32;
+pub type Selector = [u8; 4];
 
 #[derive(Clone)]
 pub struct CallInput<'a>(pub &'a [u8]);
@@ -22,7 +23,7 @@ pub struct Call {
     /// The address of the contract that is call in this proposal.
     pub contract: Address,
     /// The selector bytes that identifies the function of the contract that should be call.
-    pub selector: [u8; 4],
+    pub selector: Selector,
     /// The SCALE encoded parameters that are passed to the call function.
     pub input: Vec<u8>,
     /// The amount of chain balance that is transferred to the Proposalee.

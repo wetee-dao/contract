@@ -1,11 +1,12 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
+mod datas;
 mod errors;
 mod events;
 
 #[ink::contract]
 mod dao {
-    use crate::{errors::Error, events::*};
+    use crate::{datas::*, errors::Error, events::*};
     use ink::{
         env::{
             call::{build_call, ExecutionInput},
@@ -15,19 +16,44 @@ mod dao {
         storage::Mapping,
         U256,
     };
-    use primitives::{Call, CallInput, CalllId, ListHelper};
+    use primitives::{Call, CallInput, CalllId, ListHelper, Selector};
 
     #[ink(storage)]
+    #[derive(Default)]
     pub struct DAO {
         /// proposals
         proposals: Mapping<CalllId, Call>,
+        /// period of proposal
+        period_of_proposal: Mapping<CalllId, u16>,
+        /// proposals list helper
         proposals_helper: ListHelper<CalllId>,
-        proposal_owners: Mapping<CalllId, Address>,
+        /// caller of proposal
+        proposal_caller: Mapping<CalllId, Address>,
+        /// deposit of proposal
+        deposit_of_proposal: Mapping<CalllId, Option<U256>>,
+
+        /// periods
+        periods: Mapping<u16, Period>,
+        /// periods list helper
+        periods_helper: ListHelper<u16>,
+        /// period rules (If the selector == none, it means the entire contract uses a single track)
+        period_rules: Mapping<(Address, Option<Selector>), u16>,
+        /// period rules index
+        period_rule_index: Mapping<u16,(Address, Option<Selector>, u16)>,
+        /// period rules index helper
+        period_rule_index_helper: ListHelper<u16>,
+
+        /// vote of proposal
+        votes: Mapping<u128, VoteInfo>,
+        /// proposals list helper
+        votes_helper: ListHelper<u128>,
+        /// votes of member
+        vote_of_member: Mapping<Address, Vec<u128>>,
 
         /// sudo call history
         sudo_calls: Mapping<CalllId, Call>,
         /// next sudo call id
-        next_sudo_id: CalllId,
+        sudo_helper: ListHelper<CalllId>,
         /// sudo account
         sudo_account: Option<Address>,
 
@@ -37,17 +63,16 @@ mod dao {
         member_balances: Mapping<Address, U256>,
         /// total issuance TOKEN
         total_issuance: U256,
+
+        /// transfer enable
+        transfer:  bool,
     }
 
     impl DAO {
+        /// create a new dao
         #[ink(constructor)]
         pub fn new(args: Vec<(Address, U256)>, sudo_account: Option<Address>) -> Self {
-            let proposals_helper: ListHelper<CalllId> = Default::default();
-            let proposals = Mapping::default();
-            let proposal_owners = Mapping::default();
-
-            let sudo_calls = Mapping::default();
-
+            let mut dao = DAO::default();
             let mut members = Vec::new();
             let mut member_balances = Mapping::default();
             let mut total_issuance = U256::from(0);
@@ -61,17 +86,12 @@ mod dao {
                     .expect("issuance overflow");
             }
 
-            Self {
-                proposals,
-                proposals_helper,
-                proposal_owners,
-                members,
-                member_balances,
-                total_issuance,
-                sudo_calls,
-                next_sudo_id: 0,
-                sudo_account,
-            }
+            dao.members = members;
+            dao.member_balances = member_balances;
+            dao.total_issuance = total_issuance;
+            dao.sudo_account = sudo_account;
+
+            dao
         }
 
         /// Returns the list of members.
@@ -80,9 +100,13 @@ mod dao {
             self.members.clone()
         }
 
-        /// add member to DAO
+        /// join to DAO
         #[ink(message)]
-        pub fn add_member(&mut self, new_user: Address, balance: U256) {
+        pub fn join(
+            &mut self,
+            new_user: Address,
+            balance: U256,
+        ) {
             self.ensure_from_gov();
 
             // check if the user is already an member
@@ -92,6 +116,19 @@ mod dao {
             self.members.push(new_user);
 
             self.env().emit_event(MemberAdd { user: new_user });
+        }
+
+        // levae DAO
+        #[ink(message)]
+        pub fn levae(&mut self) {
+            let caller = self.env().caller();
+
+            // check if the user is already an member
+            assert!(self.member_balances.contains(caller));
+
+            // remove the user from the list
+            self.member_balances.remove(caller);
+            self.members.retain(|x| *x != caller);
         }
 
         /// delete a member from the list
@@ -107,6 +144,52 @@ mod dao {
             self.member_balances.remove(user);
         }
 
+        /// enable transfer 
+        #[ink(message)]
+        pub fn enable_transfer(&mut self) {
+            self.ensure_from_gov();
+
+            if self.transfer {
+                return;
+            }
+
+            self.transfer = true;
+        }
+
+        /// transfer TOKEN to user
+        #[ink(message)]
+        pub fn transfer(&mut self, to: Address, amount: U256){
+            assert!(self.transfer);
+
+            let caller = self.env().caller();
+
+            // check if the user is an member
+            assert!(self.member_balances.contains(caller));
+            assert!(self.member_balances.contains(to));
+
+            let total = self.member_balances.get(caller).unwrap();
+            assert!(total >= amount);
+
+            self.member_balances.insert(caller, &(total - amount));
+            self.member_balances.insert(to, &(self.member_balances.get(to).unwrap_or(U256::from(0)) + amount));
+            
+        }
+
+        /// Burn tokens from the caller's balance.
+        #[ink(message)]
+        pub fn burn(&mut self, amount: U256){
+            let caller = self.env().caller();
+
+            // check if the user is an member
+            assert!(self.member_balances.contains(caller));
+
+            let total = self.member_balances.get(caller).unwrap();
+            assert!(total >= amount);
+
+            self.member_balances.insert(caller, &(total - amount));
+            self.total_issuance -= amount;
+        }
+
         /// If sudo is enabled, sudo account can call any function without gov
         #[ink(message)]
         pub fn sudo(&mut self, call: Call) -> Result<Vec<u8>, Error> {
@@ -118,8 +201,8 @@ mod dao {
             }
 
             // Insert call into sudo history
-            let call_id = self.next_sudo_id;
-            self.next_sudo_id = call_id.checked_add(1).expect("call id overflow");
+            let call_id = self.sudo_helper.next_id;
+            self.sudo_helper.next_id = call_id.checked_add(1).expect("call id overflow");
             self.sudo_calls.insert(call_id, &call);
 
             let result = self.exec_call(call);
@@ -152,7 +235,7 @@ mod dao {
 
             self.proposals.insert(call_id, &call);
             self.proposals_helper.list.push(call_id);
-            self.proposal_owners.insert(call_id, &caller);
+            self.proposal_caller.insert(call_id, &caller);
 
             self.env().emit_event(ProposalSubmission {
                 proposal_id: call_id,
@@ -261,7 +344,5 @@ mod dao {
     }
 
     #[cfg(test)]
-    mod tests {
-
-    }
+    mod tests {}
 }

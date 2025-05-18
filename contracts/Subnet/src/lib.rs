@@ -95,14 +95,14 @@ mod subnet {
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
-            let xxx = TestCase::new();
+            let xxx = Subnet::new();
             assert_eq!(xxx.get(), false);
         }
 
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
-            let mut xxx = TestCase::new();
+            let mut xxx = Subnet::new();
             assert_eq!(xxx.get(), false);
             xxx.set();
             assert_eq!(xxx.get(), true);
@@ -130,7 +130,7 @@ mod subnet {
         #[ink_e2e::test]
         async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
             // Given
-            let mut constructor = TestCaseRef::default();
+            let mut constructor = SubnetRef::default();
 
             // When
             let contract = client
@@ -138,7 +138,7 @@ mod subnet {
                 .submit()
                 .await
                 .expect("instantiate failed");
-            let call_builder = contract.call_builder::<TestCase>();
+            let call_builder = contract.call_builder::<Subnet>();
 
             // Then
             let get = call_builder.get();
@@ -152,13 +152,13 @@ mod subnet {
         #[ink_e2e::test]
         async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
             // Given
-            let mut constructor = TestCaseRef::new(false);
+            let mut constructor = SubnetRef::new(false);
             let contract = client
                 .instantiate("xxx", &ink_e2e::bob(), &mut constructor)
                 .submit()
                 .await
                 .expect("instantiate failed");
-            let mut call_builder = contract.call_builder::<TestCase>();
+            let mut call_builder = contract.call_builder::<Subnet>();
 
             let get = call_builder.get();
             let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;

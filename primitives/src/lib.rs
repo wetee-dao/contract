@@ -2,6 +2,9 @@
 
 use ink::{prelude::vec::Vec, scale::Output, Address, U256};
 
+mod int;
+pub use int::*;
+
 pub type CalllId = u32;
 pub type Selector = [u8; 4];
 

@@ -1,6 +1,8 @@
 use ink::{env::BlockNumber, prelude::vec::Vec, U256};
 use primitives::CalllId;
 
+use crate::curve::Curve;
+
 /// vote yes or no
 /// 投票
 #[derive(Clone)]
@@ -49,7 +51,7 @@ pub struct VoteInfo {
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct Period {
+pub struct Track {
     /// 投票轨道名
     pub name: Vec<u8>,
     /// 导入期或准备期
@@ -72,18 +74,18 @@ pub struct Period {
     /// 决定押金
     pub decision_deposit: U256,
     /// 投票成功百分比
-    pub min_approval: u8,
+    pub min_approval: Curve,
     /// 投票率
-    pub min_support: u8,
+    pub min_support: Curve,
     /// 最大能执行的金额
     /// 如果金额范围不合理，就无法成功执行提案
     pub max_balance: U256,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 #[cfg_attr(
     feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+    derive(Debug, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum PropStatus {

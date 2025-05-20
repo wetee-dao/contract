@@ -3,6 +3,7 @@
 mod datas;
 mod errors;
 mod events;
+mod curve;
 
 #[ink::contract]
 mod dao {
@@ -23,8 +24,8 @@ mod dao {
     pub struct DAO {
         /// proposals
         proposals: Mapping<CalllId, Call>,
-        /// period of proposal
-        period_of_proposal: Mapping<CalllId, u16>,
+        /// track of proposal
+        track_of_proposal: Mapping<CalllId, u16>,
         /// proposals list helper
         proposals_helper: ListHelper<CalllId>,
         /// caller of proposal
@@ -34,17 +35,17 @@ mod dao {
         /// status of proposal
         status_of_proposal: Mapping<CalllId, PropStatus>,
 
-        /// periods
-        periods: Mapping<u16, Period>,
-        /// periods list helper
-        periods_helper: ListHelper<u16>,
+        /// tracks
+        tracks: Mapping<u16, Track>,
+        /// tracks list helper
+        tracks_helper: ListHelper<u16>,
 
-        /// period rules (If selector == none, it means entire contract uses a single track)
-        period_rules: Mapping<(Option<Address>, Option<Selector>), u16>,
-        /// period rules index
-        period_rule_index: Mapping<u16, (Option<Address>, Option<Selector>, u16)>,
-        /// period rules index helper
-        period_rule_index_helper: ListHelper<u16>,
+        /// track rules (If selector == none, it means entire contract uses a single track)
+        track_rules: Mapping<(Option<Address>, Option<Selector>), u16>,
+        /// track rules index
+        track_rule_index: Mapping<u16, (Option<Address>, Option<Selector>, u16)>,
+        /// track rules index helper
+        track_rule_index_helper: ListHelper<u16>,
 
         /// vote of proposal
         votes: Mapping<u128, VoteInfo>,
@@ -80,14 +81,14 @@ mod dao {
         pub fn new(
             args: Vec<(Address, U256)>,
             sudo_account: Option<Address>,
-            period: Period,
+            track: Track,
         ) -> Self {
             let mut dao = DAO::default();
             let mut members = Vec::new();
             let mut member_balances = Mapping::default();
             let mut total_issuance = U256::from(0);
-            let mut periods = Mapping::default();
-            let mut periods_helper = ListHelper::<u16>::default();
+            let mut tracks = Mapping::default();
+            let mut tracks_helper = ListHelper::<u16>::default();
 
             // Init members balances
             for (user, balance) in args.iter() {
@@ -103,11 +104,11 @@ mod dao {
             dao.total_issuance = total_issuance;
             dao.sudo_account = sudo_account;
 
-            periods_helper.next_id = 1;
-            periods_helper.list.push(0);
-            periods.insert(0, &period);
-            dao.periods = periods;
-            dao.periods_helper = periods_helper;
+            tracks_helper.next_id = 1;
+            tracks_helper.list.push(0);
+            tracks.insert(0, &track);
+            dao.tracks = tracks;
+            dao.tracks_helper = tracks_helper;
 
             dao
         }
@@ -286,8 +287,8 @@ mod dao {
             // check if user is an member
             assert!(self.member_balances.contains(caller));
 
-            //  get period of call
-            let period = self.get_period(&call);
+            //  get track of call
+            let track = self.get_track(&call);
 
             // save proposal
             let call_id = self.proposals_helper.next_id;
@@ -298,8 +299,8 @@ mod dao {
             // set caller of proposal
             self.proposal_caller.insert(call_id, &caller);
 
-            // set period for proposal
-            self.period_of_proposal.insert(call_id, &period);
+            // set track for proposal
+            self.track_of_proposal.insert(call_id, &track);
 
             // set proposal status
             self.status_of_proposal
@@ -345,12 +346,12 @@ mod dao {
                 return Err(Error::InvalidProposalStatus);
             }
 
-            // check period
-            let period_id = self.period_of_proposal.get(proposal_id).unwrap();
-            let period = self.periods.get(period_id).unwrap();
+            // check track
+            let track_id = self.track_of_proposal.get(proposal_id).unwrap();
+            let track = self.tracks.get(track_id).unwrap();
 
             // check payvalue
-            if payvalue < period.decision_deposit {
+            if payvalue < track.decision_deposit {
                 return Err(Error::InvalidDeposit);
             }
 
@@ -422,10 +423,10 @@ mod dao {
             assert_eq!(self.env().caller(), self.env().address());
         }
 
-        /// Get period of call
-        fn get_period(&self, call: &Call) -> u16 {
+        /// Get track of call
+        fn get_track(&self, call: &Call) -> u16 {
             let index = self
-                .period_rules
+                .track_rules
                 .get((call.contract.clone(), Some(call.selector.clone())))
                 .unwrap_or(0u16);
             if index > 0 {
@@ -433,7 +434,7 @@ mod dao {
             }
 
             return self
-                .period_rules
+                .track_rules
                 .get((call.contract.clone(), None::<Selector>))
                 .unwrap_or(0u16);
         }

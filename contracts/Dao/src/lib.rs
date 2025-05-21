@@ -1,13 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
+mod curve;
 mod datas;
 mod errors;
 mod events;
-mod curve;
+mod tail;
 
 #[ink::contract]
 mod dao {
-    use crate::{datas::*, errors::Error, events::*};
+    use crate::{datas::*, errors::Error, events::*, tail::*};
     use ink::{
         env::{
             call::{build_call, ExecutionInput},
@@ -31,9 +32,13 @@ mod dao {
         /// caller of proposal
         proposal_caller: Mapping<CalllId, Address>,
         /// deposit of proposal
-        deposit_of_proposal: Mapping<CalllId, (Address, U256)>,
+        deposit_of_proposal: Mapping<CalllId, (Address, U256, BlockNumber)>,
         /// status of proposal
         status_of_proposal: Mapping<CalllId, PropStatus>,
+        /// votes of proposal
+        votes_of_proposal: Mapping<CalllId, Vec<u128>>,
+        /// submit block number
+        submit_block_of_proposal: Mapping<CalllId, BlockNumber>,
 
         /// tracks
         tracks: Mapping<u16, Track>,
@@ -53,6 +58,8 @@ mod dao {
         votes_helper: ListHelper<u128>,
         /// votes of member
         vote_of_member: Mapping<Address, Vec<u128>>,
+        /// lock of votes
+        unlock_of_votes: Mapping<u128, ()>,
 
         /// sudo call history
         sudo_calls: Mapping<CalllId, Call>,
@@ -75,53 +82,16 @@ mod dao {
         transfer: bool,
     }
 
-    impl DAO {
-        /// create a new dao
-        #[ink(constructor)]
-        pub fn new(
-            args: Vec<(Address, U256)>,
-            sudo_account: Option<Address>,
-            track: Track,
-        ) -> Self {
-            let mut dao = DAO::default();
-            let mut members = Vec::new();
-            let mut member_balances = Mapping::default();
-            let mut total_issuance = U256::from(0);
-            let mut tracks = Mapping::default();
-            let mut tracks_helper = ListHelper::<u16>::default();
-
-            // Init members balances
-            for (user, balance) in args.iter() {
-                member_balances.insert(*user, balance);
-                members.push(*user);
-                total_issuance = total_issuance
-                    .checked_add(*balance)
-                    .expect("issuance overflow");
-            }
-
-            dao.members = members;
-            dao.member_balances = member_balances;
-            dao.total_issuance = total_issuance;
-            dao.sudo_account = sudo_account;
-
-            tracks_helper.next_id = 1;
-            tracks_helper.list.push(0);
-            tracks.insert(0, &track);
-            dao.tracks = tracks;
-            dao.tracks_helper = tracks_helper;
-
-            dao
-        }
-
+    impl DaoTrait for DAO {
         /// Returns list of members.
         #[ink(message)]
-        pub fn members(&self) -> Vec<Address> {
+        fn members(&self) -> Vec<Address> {
             self.members.clone()
         }
 
         /// Join to DAO
         #[ink(message)]
-        pub fn join(&mut self, new_user: Address, balance: U256) {
+        fn join(&mut self, new_user: Address, balance: U256) {
             self.ensure_from_gov();
 
             // check if user is already an member
@@ -135,7 +105,7 @@ mod dao {
 
         // levae DAO
         #[ink(message)]
-        pub fn levae(&mut self) {
+        fn levae(&mut self) {
             let caller = self.env().caller();
 
             // check if user is already an member
@@ -160,7 +130,7 @@ mod dao {
 
         // levae DAO
         #[ink(message)]
-        pub fn levae_with_burn(&mut self) {
+        fn levae_with_burn(&mut self) {
             let caller = self.env().caller();
 
             // check if user is already an member
@@ -182,7 +152,7 @@ mod dao {
 
         /// Delete member from DAO
         #[ink(message)]
-        pub fn delete_member(&mut self, user: Address) {
+        fn delete_member(&mut self, user: Address) {
             self.ensure_from_gov();
 
             // check if user is an member
@@ -198,10 +168,20 @@ mod dao {
             self.member_lock_balances.remove(user);
             self.members.retain(|x| *x != user);
         }
+    }
+
+    impl Erc20Trait for DAO {
+        #[ink(message)]
+        fn balance_of(&self, user: Address) -> (U256, U256) {
+            let balance = self.member_balances.get(user).unwrap_or(U256::from(0));
+            let lock = self.member_lock_balances.get(user).unwrap_or(U256::from(0));
+
+            (balance, lock)
+        }
 
         /// Enable transfer
         #[ink(message)]
-        pub fn enable_transfer(&mut self) {
+        fn enable_transfer(&mut self) {
             self.ensure_from_gov();
 
             if self.transfer {
@@ -213,7 +193,7 @@ mod dao {
 
         /// Transfer TOKEN to user
         #[ink(message)]
-        pub fn transfer(&mut self, to: Address, amount: U256) {
+        fn transfer(&mut self, to: Address, amount: U256) {
             assert!(self.transfer);
 
             let caller = self.env().caller();
@@ -223,7 +203,11 @@ mod dao {
             assert!(self.member_balances.contains(to));
 
             let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
-            assert!(total >= amount);
+            let lock = self
+                .member_lock_balances
+                .get(caller)
+                .unwrap_or(U256::from(0));
+            assert!(total - lock >= amount);
 
             self.member_balances.insert(caller, &(total - amount));
             self.member_balances.insert(
@@ -234,7 +218,7 @@ mod dao {
 
         /// Burn tokens from caller's balance.
         #[ink(message)]
-        pub fn burn(&mut self, amount: U256) {
+        fn burn(&mut self, amount: U256) {
             let caller = self.env().caller();
 
             // check if user is an member
@@ -246,10 +230,12 @@ mod dao {
             self.member_balances.insert(caller, &(total - amount));
             self.total_issuance -= amount;
         }
+    }
 
+    impl SudoTrait for DAO {
         /// If sudo is enabled, sudo account can call any function without gov
         #[ink(message)]
-        pub fn sudo(&mut self, call: Call) -> Result<Vec<u8>, Error> {
+        fn sudo(&mut self, call: Call) -> Result<Vec<u8>, Error> {
             let caller = self.env().caller();
 
             // Only sudo account can call sudo
@@ -273,22 +259,24 @@ mod dao {
 
         /// After ensuring stable operation of DAO, delete sudo.
         #[ink(message)]
-        pub fn remove_sudo(&mut self) {
+        fn remove_sudo(&mut self) {
             self.ensure_from_gov();
 
             self.sudo_account = None;
         }
+    }
 
+    impl GovTrait for DAO {
         /// Submit a proposal to DAO
         #[ink(message)]
-        pub fn submit_proposal(&mut self, call: Call) -> CalllId {
+        fn submit_proposal(&mut self, call: Call) -> CalllId {
             let caller = self.env().caller();
 
             // check if user is an member
             assert!(self.member_balances.contains(caller));
 
             //  get track of call
-            let track = self.get_track(&call);
+            let track = self.get_track_rule(&call);
 
             // save proposal
             let call_id = self.proposals_helper.next_id;
@@ -306,6 +294,10 @@ mod dao {
             self.status_of_proposal
                 .insert(call_id, &PropStatus::Pending);
 
+            // set submit block number for proposal
+            self.submit_block_of_proposal
+                .insert(call_id, &self.env().block_number());
+
             // emit event
             self.env().emit_event(ProposalSubmission {
                 proposal_id: call_id,
@@ -316,13 +308,14 @@ mod dao {
 
         /// Cancel a proposal
         #[ink(message)]
-        pub fn cancel_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
+        fn cancel_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
             let caller = self.env().caller();
 
             assert!(
                 self.status_of_proposal.get(proposal_id) == Some(PropStatus::Pending),
                 "proposal is started, cannot cancel"
             );
+
             assert!(
                 self.proposal_caller.get(proposal_id).unwrap_or_default() == caller,
                 "only caller can cancel proposal"
@@ -336,7 +329,7 @@ mod dao {
 
         /// Confirm a proposal with deposit TOKEN.
         #[ink(message, payable)]
-        pub fn deposit_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
+        fn deposit_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
             let caller = self.env().caller();
             let payvalue = self.env().transferred_value();
 
@@ -346,9 +339,14 @@ mod dao {
                 return Err(Error::InvalidProposalStatus);
             }
 
+            let deposit = self.deposit_of_proposal.get(proposal_id).unwrap();
+
             // check track
-            let track_id = self.track_of_proposal.get(proposal_id).unwrap();
-            let track = self.tracks.get(track_id).unwrap();
+            let track = self.get_track(proposal_id);
+            let now = self.env().block_number();
+            if now < deposit.2 + track.prepare_period {
+                return Err(Error::InvalidDepositTime);
+            }
 
             // check payvalue
             if payvalue < track.decision_deposit {
@@ -356,7 +354,8 @@ mod dao {
             }
 
             // save deposit
-            self.deposit_of_proposal.insert(proposal_id, &(caller,payvalue));
+            self.deposit_of_proposal
+                .insert(proposal_id, &(caller, payvalue, now));
 
             // save status
             self.status_of_proposal
@@ -367,28 +366,162 @@ mod dao {
 
         /// Vote for a proposal
         #[ink(message)]
-        pub fn vote_for_prop(&mut self, proposal_id: CalllId) -> Result<(), Error> {
+        fn vote(&mut self, proposal_id: CalllId, opinion: Opinion) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            // check token
+            let payvalue = self.env().transferred_value();
+            let total = self.member_balances.get(caller).unwrap();
+            let lock = self
+                .member_lock_balances
+                .get(caller)
+                .unwrap_or(U256::from(0));
+            if total - lock < payvalue {
+                return Err(Error::LowBalance);
+            }
+
+            // check status
+            if self.status_of_proposal.get(proposal_id).unwrap() != PropStatus::Ongoing {
+                return Err(Error::PropNotOngoing);
+            }
+
+            // check time
+            let deposit_block = self.submit_block_of_proposal.get(proposal_id).unwrap();
+            let track = self.get_track(proposal_id);
+            let now = self.env().block_number();
+            if now > deposit_block + track.max_deciding {
+                return Err(Error::InvalidVoteTime);
+            }
+
+            let vid = self.votes_helper.next_id;
+            let vote = VoteInfo {
+                pledge: payvalue,
+                opinion,
+                vote_weight: 1u32.into(),
+                unlock_block: 1u32.into(),
+                call_id: proposal_id,
+                calller: caller,
+                vote_block: now,
+                deleted: false,
+            };
+
+            // lock token
+            self.member_lock_balances.insert(caller, &(lock + payvalue));
+
+            // save vote
+            let mut votes = self.vote_of_member.get(caller).unwrap_or_default();
+            votes.push(vid);
+            self.vote_of_member.insert(caller, &votes);
+
+            let mut votes_of_proposal = self.votes_of_proposal.get(proposal_id).unwrap_or_default();
+            votes_of_proposal.push(vid);
+            self.votes_of_proposal
+                .insert(proposal_id, &votes_of_proposal);
+
+            self.votes.insert(vid, &vote);
+            self.votes_helper.list.push(vid);
+            self.votes_helper.next_id = vid + 1;
+
             Ok(())
         }
 
         /// Cancel vote before proposal is executed or rejected
         #[ink(message)]
-        pub fn cancel_vote(&mut self, proposal_id: CalllId) -> Result<(), Error> {
-            
+        fn cancel_vote(&mut self, vote_id: u128) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            let mut vote = self.votes.get(vote_id).unwrap();
+
+            // check vote user
+            if vote.calller != caller {
+                return Err(Error::InvalidVoteUser);
+            }
+
+            // check proposal status
+            let proposal_id = self.votes.get(vote_id).unwrap().call_id;
+            if self.status_of_proposal.get(proposal_id).unwrap() != PropStatus::Ongoing {
+                return Err(Error::PropNotOngoing);
+            }
+
+            vote.deleted = true;
+            self.votes.insert(vote_id, &vote);
+
+            // unlock token
+            let lock = self
+                .member_lock_balances
+                .get(caller)
+                .unwrap_or(U256::from(0));
+            self.member_lock_balances
+                .insert(caller, &(lock - vote.pledge));
+
             Ok(())
         }
 
         /// Unlock tokens after proposal is executed or rejected
         #[ink(message)]
-        pub fn unlock(&mut self, vote_id: CalllId) -> Result<(), Error> {
-        
+        fn unlock(&mut self, vote_id: u128) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            // check vote unlock status
+            if self.unlock_of_votes.contains(vote_id) {
+                return Err(Error::VoteAlreadyUnlocked);
+            }
+
+            let vote = self.votes.get(vote_id).unwrap();
+
+            // check vote status
+            if vote.deleted {
+                return Err(Error::InvalidVoteStatus);
+            }
+
+            // check vote user
+            if vote.calller != caller {
+                return Err(Error::InvalidVoteUser);
+            }
+
+            // check vote unlock time
+            if vote.unlock_block > self.env().block_number() {
+                return Err(Error::InvalidVoteUnlockTime);
+            }
+
+            // check proposal status
+            let proposal_id = self.votes.get(vote_id).unwrap().call_id;
+            let status = self.status_of_proposal.get(proposal_id).unwrap();
+            if status != PropStatus::Approved && status != PropStatus::Rejected {
+                return Err(Error::PropNotOngoing);
+            }
+
+            // unlock token
+            let lock = self
+                .member_lock_balances
+                .get(caller)
+                .unwrap_or(U256::from(0));
+            self.member_lock_balances
+                .insert(caller, &(lock - vote.pledge));
+            self.unlock_of_votes.insert(vote_id, &());
+
             Ok(())
         }
 
         /// Execute proposal after vote is passed
         #[ink(message)]
-        pub fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error> {
-            let call = self.take_proposal(proposal_id).expect("proposal not found");
+        fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error> {
+            let call = self.proposals.get(proposal_id).expect("proposal not found");
+
+            // check status
+            if self.status_of_proposal.get(proposal_id).unwrap() != PropStatus::Ongoing {
+                return Err(Error::PropNotOngoing);
+            }
+
+            let (is_confirm,end) =  self.calculate_proposal_status(proposal_id);
+            if !is_confirm {
+                let now = self.env().block_number();
+                if now > end {
+                    self.status_of_proposal
+                        .insert(proposal_id, &PropStatus::Rejected);
+                }
+                return Err(Error::ProposalNotConfirmed);
+            }
 
             // Return the deposit amount.
             let deposit = self.deposit_of_proposal.get(proposal_id).unwrap();
@@ -410,12 +543,66 @@ mod dao {
             result
         }
 
-        /// Returns index of member of members.
-        fn get_member_index(&self, owner: &Address) -> u32 {
-            self.members
-                .iter()
-                .position(|x| *x == *owner)
-                .expect("Member not found in members list") as u32
+        /// Calculate proposal status
+        #[ink(message)]
+        fn proposal_status(&self, proposal_id: CalllId) -> PropStatus {
+            // check status
+            let status = self.status_of_proposal.get(proposal_id).unwrap();
+            if status != PropStatus::Ongoing {
+                return status;
+            }
+
+            let (is_confirm,end) =  self.calculate_proposal_status(proposal_id);
+            if !is_confirm {
+                let now = self.env().block_number();
+                if now > end {
+                    return PropStatus::Rejected;
+                }
+                return PropStatus::Ongoing;
+            }
+
+            return PropStatus::Approved;
+        }
+    }
+
+    impl DAO {
+        /// create a new dao
+        #[ink(constructor)]
+        pub fn new(
+            args: Vec<(Address, U256)>,
+            sudo_account: Option<Address>,
+            track: Track,
+        ) -> Self {
+            let mut dao = DAO::default();
+            let mut members = Vec::new();
+            let mut member_balances = Mapping::default();
+            let mut total_issuance = U256::from(0);
+            let mut tracks = Mapping::default();
+            let mut tracks_helper = ListHelper::<u16>::default();
+
+            // init members balances
+            for (user, balance) in args.iter() {
+                member_balances.insert(*user, balance);
+                members.push(*user);
+                total_issuance = total_issuance
+                    .checked_add(*balance)
+                    .expect("issuance overflow");
+            }
+
+            // init DAO
+            dao.members = members;
+            dao.member_balances = member_balances;
+            dao.total_issuance = total_issuance;
+            dao.sudo_account = sudo_account;
+
+            // init vote track
+            tracks_helper.next_id = 1;
+            tracks_helper.list.push(0);
+            tracks.insert(0, &track);
+            dao.tracks = tracks;
+            dao.tracks_helper = tracks_helper;
+
+            dao
         }
 
         /// Gov call only call from contract
@@ -423,8 +610,8 @@ mod dao {
             assert_eq!(self.env().caller(), self.env().address());
         }
 
-        /// Get track of call
-        fn get_track(&self, call: &Call) -> u16 {
+        /// Get track rule of call
+        fn get_track_rule(&self, call: &Call) -> u16 {
             let index = self
                 .track_rules
                 .get((call.contract.clone(), Some(call.selector.clone())))
@@ -439,20 +626,75 @@ mod dao {
                 .unwrap_or(0u16);
         }
 
-        /// Take proposal and remove it from list
-        fn take_proposal(&mut self, pid: CalllId) -> Option<Call> {
-            let proposal = self.proposals.get(pid);
-            if proposal.is_some() {
-                self.proposals.remove(pid);
-                let pos = self
-                    .proposals_helper
-                    .list
-                    .iter()
-                    .position(|t| t == &pid)
-                    .expect("Proposal not found in list");
-                self.proposals_helper.list.swap_remove(pos);
+        /// Get track of call
+        fn get_track(&self, proposal_id: CalllId) -> Track {
+            let track_id = self.track_of_proposal.get(proposal_id).unwrap();
+            let track = self.tracks.get(track_id).unwrap();
+
+            track
+        }
+
+        fn calculate_proposal_status(&self, proposal_id: CalllId) -> (bool, BlockNumber) {
+            // get votes
+            let vote_ids = self.votes_of_proposal.get(proposal_id).unwrap();
+            let mut votes = Vec::new();
+            for id in vote_ids {
+                let vote = self.votes.get(id).unwrap();
+                votes.push(vote);
             }
-            proposal
+
+            // get track
+            let track = self.get_track(proposal_id);
+
+            // get vote begin and end time
+            let (_, _, begin) = self.deposit_of_proposal.get(proposal_id).unwrap();
+            let end = begin + track.max_deciding;
+            let confirm_period = track.confirm_period;
+            let all = self.total_issuance;
+
+            // statistical results
+            let mut yes = U256::from(0);
+            let mut no = U256::from(0);
+            let mut support = U256::from(0);
+            let mut is_confirm = false;
+            let mut last_achieve_block: BlockNumber = 0;
+
+            for vote in votes {
+                if vote.deleted {
+                    continue;
+                }
+
+                // calculate min
+                let min_approval = U256::from(track.min_approval.y(vote.vote_block));
+                let min_support = U256::from(track.min_support.y(vote.vote_block));
+
+                // calculate vote info
+                support += vote.pledge;
+                match vote.opinion {
+                    Opinion::YES => {
+                        yes += vote.pledge * vote.vote_weight;
+                    }
+                    Opinion::NO => {
+                        no += vote.pledge * vote.vote_weight;
+                    }
+                }
+
+                if yes * 10000 / no >= min_approval && support * 10000 / all >= min_support {
+                    if vote.vote_block - last_achieve_block > confirm_period {
+                        is_confirm = true;
+                        break;
+                    }
+
+                    // 记录上次成功的投票块
+                    if last_achieve_block == 0 {
+                        last_achieve_block = vote.vote_block;
+                    }
+                } else {
+                    last_achieve_block = 0;
+                }
+            }
+
+            (is_confirm, end)
         }
 
         /// Run call

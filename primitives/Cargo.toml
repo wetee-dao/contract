@@ -5,7 +5,8 @@ authors = ["[your_name] <[your_email]>"]
 edition = "2021"
 
 [dependencies]
-ink = { git = "https://github.com/use-ink/ink", branch = "master", default-features = false, features = ["unstable-hostfn"] }
+ink = { workspace = true, default-features = false, features = ["unstable-hostfn"] }
+# ink = { git = "https://github.com/use-ink/ink", branch = "master", default-features = false, features = ["unstable-hostfn"] }
 
 [features]
 default = ["std"]

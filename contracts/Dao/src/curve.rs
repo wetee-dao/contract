@@ -88,11 +88,6 @@ impl Curve {
                 x_offset,
                 y_offset,
             } => {
-                // println!(
-                //     "factor = {}, x = {}, x_scale = {}, x_offset = {}",
-                //     factor, x, x_scale, x_offset,
-                // );
-
                 // A recipocal (`K/(x+S)-T`) curve: `factor` is `K` and `x_offset` is `S`, `y_offset` is `T`.
                 ((fixed_from_i64(*factor as i64)
                     / (fixed_from_u64(x as u64) / (*x_scale as i128)

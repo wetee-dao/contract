@@ -1,4 +1,4 @@
-use ink::{env::BlockNumber, prelude::vec::Vec, U256};
+use ink::{env::BlockNumber, prelude::vec::Vec, Address, U256};
 use primitives::CalllId;
 
 use crate::curve::Curve;
@@ -42,6 +42,12 @@ pub struct VoteInfo {
     /// The prop id corresponding to the vote.
     /// 投票的公投
     pub call_id: CalllId,
+    /// 投票人
+    pub calller: Address,
+    /// vote time
+    pub vote_block: BlockNumber,
+    /// is deleted
+    pub deleted: bool
 }
 
 /// 投票轨道

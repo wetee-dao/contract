@@ -4,11 +4,11 @@ mod curve;
 mod datas;
 mod errors;
 mod events;
-mod tail;
+mod traits;
 
 #[ink::contract]
 mod dao {
-    use crate::{datas::*, errors::Error, events::*, tail::*};
+    use crate::{datas::*, errors::Error, events::*, traits::*};
     use ink::{
         env::{
             call::{build_call, ExecutionInput},
@@ -82,7 +82,7 @@ mod dao {
         transfer: bool,
     }
 
-    impl DaoTrait for DAO {
+    impl Member for DAO {
         /// Returns list of members.
         #[ink(message)]
         fn members(&self) -> Vec<Address> {
@@ -170,7 +170,7 @@ mod dao {
         }
     }
 
-    impl Erc20Trait for DAO {
+    impl Erc20 for DAO {
         #[ink(message)]
         fn balance_of(&self, user: Address) -> (U256, U256) {
             let balance = self.member_balances.get(user).unwrap_or(U256::from(0));
@@ -232,7 +232,7 @@ mod dao {
         }
     }
 
-    impl SudoTrait for DAO {
+    impl Sudo for DAO {
         /// If sudo is enabled, sudo account can call any function without gov
         #[ink(message)]
         fn sudo(&mut self, call: Call) -> Result<Vec<u8>, Error> {
@@ -266,7 +266,7 @@ mod dao {
         }
     }
 
-    impl GovTrait for DAO {
+    impl Gov for DAO {
         /// Submit a proposal to DAO
         #[ink(message)]
         fn submit_proposal(&mut self, call: Call) -> CalllId {
@@ -513,7 +513,7 @@ mod dao {
                 return Err(Error::PropNotOngoing);
             }
 
-            let (is_confirm,end) =  self.calculate_proposal_status(proposal_id);
+            let (is_confirm, end) = self.calculate_proposal_status(proposal_id);
             if !is_confirm {
                 let now = self.env().block_number();
                 if now > end {
@@ -545,23 +545,27 @@ mod dao {
 
         /// Calculate proposal status
         #[ink(message)]
-        fn proposal_status(&self, proposal_id: CalllId) -> PropStatus {
+        fn proposal_status(&self, proposal_id: CalllId) -> Result<PropStatus, Error> {
+            if !self.status_of_proposal.contains(proposal_id) {
+                return Err(Error::InvalidProposal);
+            }
+
             // check status
             let status = self.status_of_proposal.get(proposal_id).unwrap();
             if status != PropStatus::Ongoing {
-                return status;
+                return Ok(status);
             }
 
-            let (is_confirm,end) =  self.calculate_proposal_status(proposal_id);
+            let (is_confirm, end) = self.calculate_proposal_status(proposal_id);
             if !is_confirm {
                 let now = self.env().block_number();
                 if now > end {
-                    return PropStatus::Rejected;
+                    return Ok(PropStatus::Rejected);
                 }
-                return PropStatus::Ongoing;
+                return Ok(PropStatus::Ongoing);
             }
 
-            return PropStatus::Approved;
+            return Ok(PropStatus::Approved);
         }
     }
 
@@ -722,7 +726,7 @@ mod dao {
             }
         }
     }
-
-    #[cfg(test)]
-    mod tests {}
 }
+
+#[cfg(test)]
+mod tests;

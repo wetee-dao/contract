@@ -1,7 +1,7 @@
 use ink::{Address, U256};
 
 #[ink::trait_definition]
-pub trait Erc20Trait {
+pub trait Erc20 {
     #[ink(message)]
     fn enable_transfer(&mut self);
 

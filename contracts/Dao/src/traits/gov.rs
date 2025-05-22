@@ -4,7 +4,7 @@ use primitives::{Call, CalllId};
 use crate::{datas::{Opinion, PropStatus}, errors::Error};
 
 #[ink::trait_definition]
-pub trait GovTrait {
+pub trait Gov {
     #[ink(message)]
     fn submit_proposal(&mut self, call: Call) -> CalllId;
 
@@ -27,5 +27,5 @@ pub trait GovTrait {
     fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error>;
 
     #[ink(message)]
-    fn proposal_status(&self, proposal_id: CalllId) -> PropStatus;
+    fn proposal_status(&self, proposal_id: CalllId) -> Result<PropStatus,Error>;
 }

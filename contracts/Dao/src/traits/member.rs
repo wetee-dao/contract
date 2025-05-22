@@ -2,7 +2,7 @@ use ink::{Address, U256};
 use ink::prelude::vec::Vec;
 
 #[ink::trait_definition]
-pub trait DaoTrait {
+pub trait Member {
     #[ink(message)]
     fn members(&self) -> Vec<Address>;
 

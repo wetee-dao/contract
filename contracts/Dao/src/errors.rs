@@ -1,4 +1,3 @@
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Error {
@@ -6,14 +5,16 @@ pub enum Error {
     LowBalance,
     /// Returned if call failed.
     CallFailed,
-    /// Returned if proposal status is invalid.
-    InvalidProposalStatus,
     /// Returned if decision deposit is invalid.
     InvalidDeposit,
     /// Returned if transfer failed.
     TransferFailed,
     /// Prposal is not ongoing
     PropNotOngoing,
+    /// Returned if proposal is invalid.
+    InvalidProposal,
+    /// Returned if proposal status is invalid.
+    InvalidProposalStatus,
     /// Returned if deposit time is invalid.
     InvalidDepositTime,
     /// Returned if vote time is invalid.

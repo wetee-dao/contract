@@ -4,7 +4,7 @@ use primitives::Call;
 use crate::errors::Error;
 
 #[ink::trait_definition]
-pub trait SudoTrait {
+pub trait Sudo {
     #[ink(message)]
     fn sudo(&mut self, call: Call) -> Result<Vec<u8>, Error>;
 

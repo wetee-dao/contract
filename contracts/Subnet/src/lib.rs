@@ -3,15 +3,7 @@
 #[ink::contract]
 mod subnet {
     use ink::{
-        env::{
-        //     call::{
-        //         build_call,
-        //         ExecutionInput,
-        //     },
-        //     CallFlags,
-        },
         prelude::vec::Vec,
-        // scale::Output,
         storage::Mapping,
     };
 

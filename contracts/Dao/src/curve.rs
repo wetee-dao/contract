@@ -221,7 +221,14 @@ mod tests {
     #[test]
     fn test_reciprocal_curve() {
         println!("reciprocal_curve:");
-        let curve = make_reciprocal(Percent::new(2), 100, 10000, 2000);
+        let curve = arg_to_curve(
+            CurveArg::Reciprocal {
+                begin: 10000,
+                end: 2000,
+                x_offset_percent: Percent::from(2),
+                x_scale_arg: 100,
+            },
+        );
 
         for x in 0..=300 {
             let y = curve.y(x);

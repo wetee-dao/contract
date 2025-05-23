@@ -20,7 +20,7 @@ pub struct Percent {
 }
 
 impl Percent {
-    pub const fn new(v: u32) -> Self {
+    pub const fn from(v: u32) -> Self {
         if v > 100 {
             panic!("percent overflow")
         }

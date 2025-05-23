@@ -4,7 +4,7 @@ use ink_e2e::ContractsBackend;
 type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[ink_e2e::test]
-async fn test_error<Client: E2EBackend>(
+async fn test_get<Client: E2EBackend>(
     mut client: Client,
 ) -> E2EResult<()> {
     let mut constructor = TestCaseRef::new();
@@ -25,9 +25,40 @@ async fn test_error<Client: E2EBackend>(
         .submit()
         .await;
 
-    println!("{:?}", result);
+    // println!("{:?}", result);
+    // println!("xxxxxxxxxxxxxxxx {:?}", result.err());
 
     assert!(result.is_err());
+
+    Ok(())
+}
+
+#[ink_e2e::test]
+async fn test_error<Client: E2EBackend>(
+    mut client: Client,
+) -> E2EResult<()> {
+    let mut constructor = TestCaseRef::new();
+    let contract = client
+        .instantiate("test", &ink_e2e::alice(), &mut constructor)
+        .submit()
+        .await
+        .expect("instantiate failed");
+    
+    let mut call_builder = contract.call_builder::<TestCase>();
+
+    // when
+    let result = client
+        .call(
+            &ink_e2e::alice(),
+            &call_builder.test_error(),
+        )
+        .submit()
+        .await;
+
+    println!("{:?}", result);
+    println!("xxxxxxxxxxxxxxxx {:?}", result.err());
+    let error = result.err().unwrap();
+    // assert!(result.is_err());
 
     Ok(())
 }
@@ -53,8 +84,6 @@ async fn test_set<Client: E2EBackend>(
         .await;
 
     assert!(result.is_ok());
-
-    println!("{:?}", result);
 
     let call_builder2 = contract.call_builder::<TestCase>();
     let result2 = client

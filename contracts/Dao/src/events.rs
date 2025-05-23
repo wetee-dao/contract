@@ -21,7 +21,6 @@ pub struct ProposalSubmission {
 pub struct ProposalExecution {
     #[ink(topic)]
     pub proposal_id: CalllId,
-    #[ink(topic)]
     pub result: Result<Option<Vec<u8>>, Error>,
 }
 
@@ -30,6 +29,5 @@ pub struct ProposalExecution {
 pub struct SudoExecution {
     #[ink(topic)]
     pub sudo_id: CalllId,
-    #[ink(topic)]
     pub result: Result<Option<Vec<u8>>, Error>,
 }

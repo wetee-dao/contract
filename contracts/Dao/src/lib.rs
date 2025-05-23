@@ -8,7 +8,13 @@ mod traits;
 
 #[ink::contract]
 mod dao {
-    use crate::{curve::{arg_to_curve, Curve, CurveArg}, datas::*, errors::Error, events::*, traits::*};
+    use crate::{
+        curve::{arg_to_curve, Curve, CurveArg},
+        datas::*,
+        errors::Error,
+        events::*,
+        traits::*,
+    };
     use ink::{
         env::{
             call::{build_call, ExecutionInput},
@@ -18,7 +24,7 @@ mod dao {
         storage::Mapping,
         U256,
     };
-    use primitives::{CallInput, ListHelper};
+    use primitives::{ensure, ListHelper};
 
     #[ink(storage)]
     #[derive(Default)]
@@ -93,50 +99,63 @@ mod dao {
 
         /// Join to DAO
         #[ink(message)]
-        fn join(&mut self, new_user: Address, balance: U256) {
-            self.ensure_from_gov();
+        fn join(&mut self, new_user: Address, balance: U256) -> Result<(), Error> {
+            self.ensure_from_gov()?;
 
             // check if user is already an member
-            assert!(!self.member_balances.contains(new_user));
+            ensure!(
+                !self.member_balances.contains(new_user),
+                Err(Error::MemberExisted)
+            );
 
             self.member_balances.insert(new_user, &balance);
             self.members.push(new_user);
 
             self.env().emit_event(MemberAdd { user: new_user });
+
+            Ok(())
         }
 
         // levae DAO
         #[ink(message)]
-        fn levae(&mut self) {
+        fn levae(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
 
             // check if user is already an member
-            assert!(self.member_balances.contains(caller), "member not found");
-            assert!(
-                self.member_balances.get(caller).unwrap_or(U256::from(0)) == U256::from(0),
-                "member balance not zero"
+            ensure!(
+                self.member_balances.contains(caller),
+                Err(Error::MemberNotExisted)
             );
-            assert!(
+            ensure!(
+                self.member_balances.get(caller).unwrap_or(U256::from(0)) == U256::from(0),
+                Err(Error::MemberBalanceNotZero)
+            );
+            ensure!(
                 self.member_lock_balances
                     .get(caller)
                     .unwrap_or(U256::from(0))
                     == U256::from(0),
-                "member lock balance not zero"
+                Err(Error::MemberBalanceNotZero)
             );
 
             // remove user from DAO
             self.member_balances.remove(caller);
             self.member_lock_balances.remove(caller);
             self.members.retain(|x| *x != caller);
+
+            Ok(())
         }
 
         // levae DAO
         #[ink(message)]
-        fn levae_with_burn(&mut self) {
+        fn levae_with_burn(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
 
             // check if user is already an member
-            assert!(self.member_balances.contains(caller), "member not found");
+            ensure!(
+                self.member_balances.contains(caller),
+                Err(Error::MemberNotExisted)
+            );
 
             // get amount of user
             let amount = self.member_balances.get(caller).unwrap_or(U256::from(0))
@@ -150,15 +169,20 @@ mod dao {
             self.member_balances.remove(caller);
             self.member_lock_balances.remove(caller);
             self.members.retain(|x| *x != caller);
+
+            Ok(())
         }
 
         /// Delete member from DAO
         #[ink(message)]
-        fn delete_member(&mut self, user: Address) {
-            self.ensure_from_gov();
+        fn delete_member(&mut self, user: Address) -> Result<(), Error> {
+            self.ensure_from_gov()?;
 
             // check if user is an member
-            assert!(self.member_balances.contains(user));
+            ensure!(
+                self.member_balances.contains(user),
+                Err(Error::MemberNotExisted)
+            );
 
             // get amount of user
             let amount = self.member_balances.get(user).unwrap_or(U256::from(0))
@@ -169,6 +193,8 @@ mod dao {
             self.member_balances.remove(user);
             self.member_lock_balances.remove(user);
             self.members.retain(|x| *x != user);
+
+            Ok(())
         }
     }
 
@@ -183,54 +209,67 @@ mod dao {
 
         /// Enable transfer
         #[ink(message)]
-        fn enable_transfer(&mut self) {
-            self.ensure_from_gov();
+        fn enable_transfer(&mut self) -> Result<(), Error> {
+            self.ensure_from_gov()?;
 
-            if self.transfer {
-                return;
+            if !self.transfer {
+                self.transfer = true;
             }
 
-            self.transfer = true;
+            Ok(())
         }
 
         /// Transfer TOKEN to user
         #[ink(message)]
-        fn transfer(&mut self, to: Address, amount: U256) {
-            assert!(self.transfer);
+        fn transfer(&mut self, to: Address, amount: U256) -> Result<(), Error> {
+            ensure!(self.transfer, Err(Error::TransferDisable));
 
             let caller = self.env().caller();
 
             // check if user is an member
-            assert!(self.member_balances.contains(caller));
-            assert!(self.member_balances.contains(to));
+            ensure!(
+                self.member_balances.contains(caller),
+                Err(Error::MemberNotExisted)
+            );
+            ensure!(
+                self.member_balances.contains(to),
+                Err(Error::MemberNotExisted)
+            );
 
             let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
             let lock = self
                 .member_lock_balances
                 .get(caller)
                 .unwrap_or(U256::from(0));
-            assert!(total - lock >= amount);
+            ensure!(total - lock >= amount, Err(Error::LowBalance));
 
             self.member_balances.insert(caller, &(total - amount));
             self.member_balances.insert(
                 to,
                 &(self.member_balances.get(to).unwrap_or(U256::from(0)) + amount),
             );
+
+            Ok(())
         }
 
         /// Burn tokens from caller's balance.
         #[ink(message)]
-        fn burn(&mut self, amount: U256) {
+        fn burn(&mut self, amount: U256) -> Result<(), Error> {
             let caller = self.env().caller();
 
             // check if user is an member
-            assert!(self.member_balances.contains(caller));
+            ensure!(
+                self.member_balances.contains(caller),
+                Err(Error::MemberNotExisted)
+            );
 
             let total = self.member_balances.get(caller).unwrap();
-            assert!(total >= amount);
+            ensure!(total >= amount, Err(Error::LowBalance));
 
             self.member_balances.insert(caller, &(total - amount));
             self.total_issuance -= amount;
+
+            Ok(())
         }
     }
 
@@ -261,25 +300,29 @@ mod dao {
 
         /// After ensuring stable operation of DAO, delete sudo.
         #[ink(message)]
-        fn remove_sudo(&mut self) {
-            self.ensure_from_gov();
+        fn remove_sudo(&mut self) -> Result<(), Error> {
+            self.ensure_from_gov()?;
 
             self.sudo_account = None;
+
+            Ok(())
         }
     }
 
     impl Gov for DAO {
+        /// set default track, all gov proposal will use this track if no track is specified
         #[ink(message)]
         fn set_defalut_track(&mut self, id: u16) -> Result<(), Error> {
-            self.ensure_from_gov();
+            self.ensure_from_gov()?;
 
-            assert!(self.tracks.contains(&id));
+            ensure!(self.tracks.contains(&id), Err(Error::NoTrack));
 
             self.defalut_track = Some(id);
 
             Ok(())
         }
 
+        /// add a new vote track
         #[ink(message)]
         fn add_track(
             &mut self,
@@ -294,7 +337,7 @@ mod dao {
             min_approval: CurveArg,
             min_support: CurveArg,
         ) -> Result<(), Error> {
-            self.ensure_from_gov();
+            self.ensure_from_gov()?;
 
             let id = self.tracks_helper.next_id;
             let approval = arg_to_curve(min_approval);
@@ -316,10 +359,11 @@ mod dao {
             );
             self.tracks_helper.next_id = id.checked_add(1).expect("track id overflow");
             self.tracks_helper.list.push(id);
-            
+
             Ok(())
         }
 
+        /// edit a track
         #[ink(message)]
         fn edit_track(
             &mut self,
@@ -335,9 +379,9 @@ mod dao {
             min_approval: CurveArg,
             min_support: CurveArg,
         ) -> Result<(), Error> {
-            self.ensure_from_gov();
+            self.ensure_from_gov()?;
 
-            assert!(self.tracks.contains(&id));
+            ensure!(self.tracks.contains(&id), Err(Error::NoTrack));
 
             let approval = arg_to_curve(min_approval);
             let support = arg_to_curve(min_support);
@@ -366,15 +410,19 @@ mod dao {
             let caller = self.env().caller();
 
             // check if user is an member
-            assert!(self.member_balances.contains(caller));
+            ensure!(
+                self.member_balances.contains(caller),
+                Err(Error::MemberNotExisted)
+            );
 
             //  get track of call
             let track_wrap = self.get_track_id(&call);
             if track_wrap.is_none() {
                 return Err(Error::NoTrack);
             }
+
             let track = track_wrap.unwrap();
-            
+
             // save proposal
             let call_id = self.proposals_helper.next_id;
             self.proposals_helper.next_id = call_id.checked_add(1).expect("proposal id overflow");
@@ -408,14 +456,14 @@ mod dao {
         fn cancel_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
             let caller = self.env().caller();
 
-            assert!(
+            ensure!(
                 self.status_of_proposal.get(proposal_id) == Some(PropStatus::Pending),
-                "proposal is started, cannot cancel"
+                Err(Error::InvalidProposalStatus)
             );
 
-            assert!(
+            ensure!(
                 self.proposal_caller.get(proposal_id).unwrap_or_default() == caller,
-                "only caller can cancel proposal"
+                Err(Error::InvalidProposalCaller)
             );
 
             self.status_of_proposal
@@ -576,16 +624,13 @@ mod dao {
                 return Err(Error::InvalidVoteUser);
             }
 
-            // check vote unlock time
-            if vote.unlock_block > self.env().block_number() {
-                return Err(Error::InvalidVoteUnlockTime);
-            }
-
-            // check proposal status
             let proposal_id = self.votes.get(vote_id).unwrap().call_id;
-            let status = self.status_of_proposal.get(proposal_id).unwrap();
-            if status != PropStatus::Approved && status != PropStatus::Rejected {
-                return Err(Error::PropNotOngoing);
+
+            // check vote unlock time
+            let end_block = self.calculate_proposal_end_block(proposal_id)?;
+            let now = self.env().block_number();
+            if now < end_block + vote.unlock_block {
+                return Err(Error::InvalidVoteUnlockTime);
             }
 
             // unlock token
@@ -610,14 +655,18 @@ mod dao {
                 return Err(Error::PropNotOngoing);
             }
 
-            let (is_confirm, end) = self.calculate_proposal_status(proposal_id);
+            let (is_confirm, end, track) = self.calculate_proposal_status(proposal_id);
+            let now = self.env().block_number();
             if !is_confirm {
-                let now = self.env().block_number();
                 if now > end {
                     self.status_of_proposal
-                        .insert(proposal_id, &PropStatus::Rejected);
+                        .insert(proposal_id, &PropStatus::Rejected(end));
                 }
                 return Err(Error::ProposalNotConfirmed);
+            }
+
+            if now < end + track.decision_period {
+                return Err(Error::ProposalInDecision);
             }
 
             // Return the deposit amount.
@@ -629,7 +678,7 @@ mod dao {
 
             //  Set the status to approved.
             self.status_of_proposal
-                .insert(proposal_id, &PropStatus::Approved);
+                .insert(proposal_id, &PropStatus::Approved(now));
 
             let result = self.exec_call(call);
             self.env().emit_event(ProposalExecution {
@@ -653,16 +702,16 @@ mod dao {
                 return Ok(status);
             }
 
-            let (is_confirm, end) = self.calculate_proposal_status(proposal_id);
+            let (is_confirm, end_block, _) = self.calculate_proposal_status(proposal_id);
             if !is_confirm {
                 let now = self.env().block_number();
-                if now > end {
-                    return Ok(PropStatus::Rejected);
+                if now > end_block {
+                    return Ok(PropStatus::Rejected(end_block));
                 }
                 return Ok(PropStatus::Ongoing);
             }
 
-            return Ok(PropStatus::Approved);
+            return Ok(PropStatus::Approved(0));
         }
     }
 
@@ -693,7 +742,7 @@ mod dao {
             dao
         }
 
-        /// create a new dao with track
+        /// create a new dao with gov track
         #[ink(constructor)]
         pub fn new_with_track(
             users: Vec<(Address, U256)>,
@@ -733,6 +782,7 @@ mod dao {
             dao
         }
 
+        /// create a new dao with default gov track
         #[ink(constructor)]
         pub fn new_with_default_track(
             users: Vec<(Address, U256)>,
@@ -763,8 +813,13 @@ mod dao {
         }
 
         /// Gov call only call from contract
-        fn ensure_from_gov(&self) {
-            assert_eq!(self.env().caller(), self.env().address());
+        fn ensure_from_gov(&self) -> Result<(), Error> {
+            ensure!(
+                self.env().caller() == self.env().address(),
+                Err(Error::MustCallByGov)
+            );
+
+            Ok(())
         }
 
         /// Get track rule of call
@@ -799,7 +854,8 @@ mod dao {
             track
         }
 
-        fn calculate_proposal_status(&self, proposal_id: CalllId) -> (bool, BlockNumber) {
+        /// Calculate proposal status
+        fn calculate_proposal_status(&self, proposal_id: CalllId) -> (bool, BlockNumber, Track) {
             // get votes
             let vote_ids = self.votes_of_proposal.get(proposal_id).unwrap();
             let mut votes = Vec::new();
@@ -859,7 +915,33 @@ mod dao {
                 }
             }
 
-            (is_confirm, end)
+            (is_confirm, end, track)
+        }
+
+        /// Calculate proposal end block
+        fn calculate_proposal_end_block(&self, proposal_id: CalllId) -> Result<BlockNumber, Error> {
+            let status = self.status_of_proposal.get(proposal_id).unwrap();
+            match status {
+                PropStatus::Ongoing => {
+                    let (is_confirm, end, _) = self.calculate_proposal_status(proposal_id);
+                    if !is_confirm {
+                        let now = self.env().block_number();
+                        if now > end {
+                            return Ok(end);
+                        }
+                    }
+                    return Err(Error::InvalidProposalStatus);
+                }
+                PropStatus::Rejected(b) => {
+                    return Ok(b);
+                }
+                PropStatus::Approved(b) => {
+                    return Ok(b);
+                }
+                _ => {
+                    return Err(Error::InvalidProposalStatus);
+                }
+            }
         }
 
         /// Run call

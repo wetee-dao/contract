@@ -6,6 +6,7 @@ mod test {
         // scale::Output,
         storage::Mapping,
     };
+    use primitives::ensure;
     
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -39,7 +40,9 @@ mod test {
 
         #[ink(message)]
         pub fn test_error(&mut self) -> Result<(), Error> {
-            Err(Error::InvalidProposal)
+            ensure!(1<0, Err(Error::InvalidProposal));
+
+            Ok(())
         }
 
 
@@ -60,5 +63,5 @@ mod test {
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(test, feature = "e2e-tests"))]
+// #[cfg(all(test, feature = "e2e-tests"))]
 mod e2e_tests;

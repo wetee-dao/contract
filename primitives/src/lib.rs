@@ -1,17 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-use ink::{prelude::vec::Vec, scale::Output};
+use ink::prelude::vec::Vec;
 
 mod int;
 pub use int::*;
-
-#[derive(Clone)]
-pub struct CallInput<'a>(pub &'a [u8]);
-impl ink::scale::Encode for CallInput<'_> {
-    fn encode_to<T: Output + ?Sized>(&self, dest: &mut T) {
-        dest.write(self.0);
-    }
-}
 
 #[derive(Clone, Default)]
 #[cfg_attr(
@@ -22,4 +14,14 @@ impl ink::scale::Encode for CallInput<'_> {
 pub struct ListHelper<T> {
     pub list: Vec<T>,
     pub next_id: T,
+}
+
+
+#[macro_export]
+macro_rules! ensure {
+    ($condition:expr, $error:expr) => {
+        if !$condition {
+            return $error;
+        }
+    };
 }

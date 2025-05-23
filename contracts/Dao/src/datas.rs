@@ -1,6 +1,6 @@
-use ink::{env::BlockNumber, prelude::vec::Vec, Address, U256};
+use ink::{env::BlockNumber, prelude::vec::Vec, scale::Output, Address, U256};
 
-use crate::{curve::Curve};
+use crate::curve::Curve;
 
 /// vote yes or no
 /// 投票
@@ -46,7 +46,7 @@ pub struct VoteInfo {
     /// vote time
     pub vote_block: BlockNumber,
     /// is deleted
-    pub deleted: bool
+    pub deleted: bool,
 }
 
 /// 投票轨道
@@ -75,7 +75,7 @@ pub struct Track {
     /// decision 阶段
     /// 一项公投在投票通过后，再安全地度过了执行期，与该公投相关的代码可以执行。
     pub decision_period: BlockNumber,
-    
+
     /// 提案结束后多久能解锁
     pub min_enactment_period: BlockNumber,
 
@@ -95,11 +95,11 @@ pub struct Track {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum PropStatus {
-    Pending = 0,
+    Pending,
     Ongoing,
     Confirming,
-    Approved,
-    Rejected,
+    Approved(BlockNumber),
+    Rejected(BlockNumber),
     Canceled,
 }
 
@@ -143,4 +143,12 @@ pub struct Call {
     /// If set to true the transaction will be allowed to re-enter the multisig
     /// contract. Re-entrancy can lead to vulnerabilities. Use at your own risk.
     pub allow_reentry: bool,
+}
+
+#[derive(Clone)]
+pub struct CallInput<'a>(pub &'a [u8]);
+impl ink::scale::Encode for CallInput<'_> {
+    fn encode_to<T: Output + ?Sized>(&self, dest: &mut T) {
+        dest.write(self.0);
+    }
 }

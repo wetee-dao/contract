@@ -29,4 +29,6 @@ pub enum Error {
     InvalidVoteUnlockTime,
     /// Returned if proposal is not confirmed.
     ProposalNotConfirmed,
+    /// Returned if dao has no track.
+    NoTrack,
 }

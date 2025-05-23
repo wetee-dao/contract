@@ -8,7 +8,7 @@ mod traits;
 
 #[ink::contract]
 mod dao {
-    use crate::{datas::*, errors::Error, events::*, traits::*};
+    use crate::{curve::{arg_to_curve, Curve, CurveArg}, datas::*, errors::Error, events::*, traits::*};
     use ink::{
         env::{
             call::{build_call, ExecutionInput},
@@ -18,7 +18,7 @@ mod dao {
         storage::Mapping,
         U256,
     };
-    use primitives::{Call, CallInput, CalllId, ListHelper, Selector};
+    use primitives::{CallInput, ListHelper};
 
     #[ink(storage)]
     #[derive(Default)]
@@ -51,6 +51,8 @@ mod dao {
         track_rule_index: Mapping<u16, (Option<Address>, Option<Selector>, u16)>,
         /// track rules index helper
         track_rule_index_helper: ListHelper<u16>,
+        /// default track
+        defalut_track: Option<u16>,
 
         /// vote of proposal
         votes: Mapping<u128, VoteInfo>,
@@ -267,17 +269,112 @@ mod dao {
     }
 
     impl Gov for DAO {
+        #[ink(message)]
+        fn set_defalut_track(&mut self, id: u16) -> Result<(), Error> {
+            self.ensure_from_gov();
+
+            assert!(self.tracks.contains(&id));
+
+            self.defalut_track = Some(id);
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        fn add_track(
+            &mut self,
+            name: Vec<u8>,
+            prepare_period: BlockNumber,
+            decision_deposit: U256,
+            max_deciding: BlockNumber,
+            confirm_period: BlockNumber,
+            decision_period: BlockNumber,
+            min_enactment_period: BlockNumber,
+            max_balance: U256,
+            min_approval: CurveArg,
+            min_support: CurveArg,
+        ) -> Result<(), Error> {
+            self.ensure_from_gov();
+
+            let id = self.tracks_helper.next_id;
+            let approval = arg_to_curve(min_approval);
+            let support = arg_to_curve(min_support);
+            self.tracks.insert(
+                id,
+                &Track {
+                    name,
+                    prepare_period,
+                    decision_deposit,
+                    max_deciding,
+                    confirm_period,
+                    decision_period,
+                    min_enactment_period,
+                    max_balance,
+                    min_approval: approval,
+                    min_support: support,
+                },
+            );
+            self.tracks_helper.next_id = id.checked_add(1).expect("track id overflow");
+            self.tracks_helper.list.push(id);
+            
+            Ok(())
+        }
+
+        #[ink(message)]
+        fn edit_track(
+            &mut self,
+            id: u16,
+            name: Vec<u8>,
+            prepare_period: BlockNumber,
+            decision_deposit: U256,
+            max_deciding: BlockNumber,
+            confirm_period: BlockNumber,
+            decision_period: BlockNumber,
+            min_enactment_period: BlockNumber,
+            max_balance: U256,
+            min_approval: CurveArg,
+            min_support: CurveArg,
+        ) -> Result<(), Error> {
+            self.ensure_from_gov();
+
+            assert!(self.tracks.contains(&id));
+
+            let approval = arg_to_curve(min_approval);
+            let support = arg_to_curve(min_support);
+            self.tracks.insert(
+                id,
+                &Track {
+                    name,
+                    prepare_period,
+                    decision_deposit,
+                    max_deciding,
+                    confirm_period,
+                    decision_period,
+                    min_enactment_period,
+                    max_balance,
+                    min_approval: approval,
+                    min_support: support,
+                },
+            );
+
+            Ok(())
+        }
+
         /// Submit a proposal to DAO
         #[ink(message)]
-        fn submit_proposal(&mut self, call: Call) -> CalllId {
+        fn submit_proposal(&mut self, call: Call) -> Result<CalllId, Error> {
             let caller = self.env().caller();
 
             // check if user is an member
             assert!(self.member_balances.contains(caller));
 
             //  get track of call
-            let track = self.get_track_rule(&call);
-
+            let track_wrap = self.get_track_id(&call);
+            if track_wrap.is_none() {
+                return Err(Error::NoTrack);
+            }
+            let track = track_wrap.unwrap();
+            
             // save proposal
             let call_id = self.proposals_helper.next_id;
             self.proposals_helper.next_id = call_id.checked_add(1).expect("proposal id overflow");
@@ -303,7 +400,7 @@ mod dao {
                 proposal_id: call_id,
             });
 
-            call_id
+            Ok(call_id)
         }
 
         /// Cancel a proposal
@@ -572,8 +669,34 @@ mod dao {
     impl DAO {
         /// create a new dao
         #[ink(constructor)]
-        pub fn new(
-            args: Vec<(Address, U256)>,
+        pub fn new(users: Vec<(Address, U256)>, sudo_account: Option<Address>) -> Self {
+            let mut dao = DAO::default();
+            let mut members = Vec::new();
+            let mut member_balances = Mapping::default();
+            let mut total_issuance = U256::from(0);
+
+            // init members balances
+            for (user, balance) in users.iter() {
+                member_balances.insert(*user, balance);
+                members.push(*user);
+                total_issuance = total_issuance
+                    .checked_add(*balance)
+                    .expect("issuance overflow");
+            }
+
+            // init DAO
+            dao.members = members;
+            dao.member_balances = member_balances;
+            dao.total_issuance = total_issuance;
+            dao.sudo_account = sudo_account;
+
+            dao
+        }
+
+        /// create a new dao with track
+        #[ink(constructor)]
+        pub fn new_with_track(
+            users: Vec<(Address, U256)>,
             sudo_account: Option<Address>,
             track: Track,
         ) -> Self {
@@ -585,7 +708,7 @@ mod dao {
             let mut tracks_helper = ListHelper::<u16>::default();
 
             // init members balances
-            for (user, balance) in args.iter() {
+            for (user, balance) in users.iter() {
                 member_balances.insert(*user, balance);
                 members.push(*user);
                 total_issuance = total_issuance
@@ -605,8 +728,38 @@ mod dao {
             tracks.insert(0, &track);
             dao.tracks = tracks;
             dao.tracks_helper = tracks_helper;
+            dao.defalut_track = Some(0);
 
             dao
+        }
+
+        #[ink(constructor)]
+        pub fn new_with_default_track(
+            users: Vec<(Address, U256)>,
+            sudo_account: Option<Address>,
+        ) -> Self {
+            let track = Track {
+                name: Vec::new(),
+                prepare_period: 1,
+                max_deciding: 1,
+                confirm_period: 1,
+                decision_period: 1,
+                min_enactment_period: 1,
+                decision_deposit: U256::from(1),
+                max_balance: U256::from(1),
+                min_approval: Curve::LinearDecreasing {
+                    begin: 10000,
+                    end: 5000,
+                    length: 30,
+                },
+                min_support: Curve::LinearDecreasing {
+                    begin: 10000,
+                    end: 50,
+                    length: 30,
+                },
+            };
+
+            DAO::new_with_track(users, sudo_account, track)
         }
 
         /// Gov call only call from contract
@@ -615,19 +768,27 @@ mod dao {
         }
 
         /// Get track rule of call
-        fn get_track_rule(&self, call: &Call) -> u16 {
-            let index = self
+        fn get_track_id(&self, call: &Call) -> Option<u16> {
+            let mut index = self
                 .track_rules
-                .get((call.contract.clone(), Some(call.selector.clone())))
-                .unwrap_or(0u16);
-            if index > 0 {
+                .get((call.contract.clone(), Some(call.selector.clone())));
+            if index.is_some() {
                 return index;
             }
 
-            return self
+            index = self
                 .track_rules
-                .get((call.contract.clone(), None::<Selector>))
-                .unwrap_or(0u16);
+                .get((call.contract.clone(), None::<Selector>));
+
+            if index.is_some() {
+                return index;
+            }
+
+            if self.defalut_track.is_some() {
+                return self.defalut_track;
+            }
+
+            return None;
         }
 
         /// Get track of call

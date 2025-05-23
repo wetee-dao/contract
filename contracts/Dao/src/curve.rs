@@ -1,6 +1,34 @@
 use ink::env::BlockNumber;
 use primitives::{fixed_from_i64, fixed_from_u64, u32_from_fixed, Percent};
 
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub enum CurveArg {
+    LinearDecreasing {
+        // 开始 最大
+        begin: u32,
+        // 结束 最小
+        end: u32,
+        // 轨道长度
+        length: BlockNumber,
+    },
+    SteppedDecreasing {
+        // 开始 最大
+        begin: u32,
+        // 结束 最小
+        end: u32,
+        // 下降步长
+        step: u32,
+        // 下降周期
+        period: BlockNumber,
+    },
+    Reciprocal{
+        x_offset_percent: Percent, 
+        x_scale_arg: u32, 
+        begin: u32, 
+        end: u32,
+    }
+}
+
 /// 投票轨道
 #[derive(Clone)]
 #[cfg_attr(
@@ -98,36 +126,60 @@ impl Curve {
     }
 }
 
-pub fn make_reciprocal(x_offset_percent: Percent, x_scale_arg: u32, begin: u32, end: u32) -> Curve {
-    let x_scale = if x_scale_arg == 0 { 1 } else { x_scale_arg };
+pub fn arg_to_curve(arg: CurveArg) -> Curve {
+    match arg {
+        CurveArg::LinearDecreasing { begin, end, length } => Curve::LinearDecreasing {
+            begin: begin,
+            end: end,
+            length: length,
+        },
+        CurveArg::SteppedDecreasing {
+            begin,
+            end,
+            step,
+            period,
+        } => Curve::SteppedDecreasing {
+            begin: begin,
+            end: end,
+            step: step,
+            period: period,
+        },
+        CurveArg::Reciprocal {
+            begin,
+            end,
+            x_offset_percent,
+            x_scale_arg,
+        } => {
+            let x_scale = if x_scale_arg == 0 { 1 } else { x_scale_arg };
 
-    let mut slot = begin - end;
-    let mut x_offset: i64 = 0;
-    let y_offset: i64 = -(end as i64);
+            let mut slot = begin - end;
+            let mut x_offset: i64 = 0;
+            let y_offset: i64 = -(end as i64);
 
-    if x_offset_percent.v > 0 {
-        let x = x_offset_percent.mul_i64(slot as i64);
-        let y = (fixed_from_i64(slot as i64)
-            / (fixed_from_u64(x as u64) + fixed_from_i64(x_offset)))
-            as u32;
+            if x_offset_percent.v > 0 {
+                let x = x_offset_percent.mul_i64(slot as i64);
+                let y = (fixed_from_i64(slot as i64)
+                    / (fixed_from_u64(x as u64) + fixed_from_i64(x_offset)))
+                    as u32;
 
-        let ratio = slot / y;
-        slot = slot * ratio;
+                let ratio = slot / y;
+                slot = slot * ratio;
 
-        x_offset = x as i64;
+                x_offset = x as i64;
+            } else {
+                x_offset = 1;
+                if x_scale > 1 {
+                    x_offset = x_scale as i64;
+                }
+            }
 
-    } else {
-        x_offset = 1;
-        if x_scale > 1 {
-            x_offset = x_scale as i64;
+            Curve::Reciprocal {
+                factor: slot,
+                x_scale,
+                x_offset: x_offset,
+                y_offset: y_offset,
+            }
         }
-    }
-
-    Curve::Reciprocal {
-        factor: slot,
-        x_scale,
-        x_offset: x_offset,
-        y_offset: y_offset,
     }
 }
 

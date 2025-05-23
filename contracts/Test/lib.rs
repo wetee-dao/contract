@@ -3,12 +3,9 @@
 #[ink::contract]
 mod test {
     use ink::{
-        prelude::vec::Vec,
         // scale::Output,
         storage::Mapping,
     };
-
-    type TransactionId = u32;
     
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -48,18 +45,14 @@ mod test {
 
         #[ink(message)]
         pub fn set(&mut self) {
-            let t = self.ts.insert(1, &2);
+            self.ts.insert(1, &2);
         }
 
         #[ink(message)]
-        pub fn get(&self) -> bool {
-            let t = self.ts.get(1);
+        pub fn get(&self) -> u64 {
+            let t = self.ts.get(1).unwrap_or(0);
 
-            if t.is_some() {
-                return true;
-            }
-
-            false
+            t
         }
     }
 }

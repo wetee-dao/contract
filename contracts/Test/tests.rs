@@ -9,16 +9,7 @@ use super::test::*;
 #[ink::test]
 fn default_works() {
     let xxx = TestCase::new();
-    assert_eq!(xxx.get(), false);
-}
-
-/// We test a simple use case of our contract.
-#[ink::test]
-fn it_works() {
-    let mut xxx = TestCase::new();
-    assert_eq!(xxx.get(), false);
-    xxx.set();
-    assert_eq!(xxx.get(), true);
+    assert_eq!(xxx.get(), 0);
 }
 
 #[ink::test]

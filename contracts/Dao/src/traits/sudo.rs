@@ -1,7 +1,6 @@
 use ink::prelude::vec::Vec;
-use primitives::Call;
 
-use crate::errors::Error;
+use crate::{datas::Call, errors::Error};
 
 #[ink::trait_definition]
 pub trait Sudo {

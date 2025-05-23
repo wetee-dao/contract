@@ -14,6 +14,7 @@ pub const fn u32_from_fixed(i: FixedI64) -> u32 {
 }
 
 /// Percent v/1000
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Percent {
     pub v: u32,
 }

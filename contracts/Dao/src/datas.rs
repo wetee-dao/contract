@@ -1,7 +1,6 @@
 use ink::{env::BlockNumber, prelude::vec::Vec, Address, U256};
-use primitives::CalllId;
 
-use crate::curve::Curve;
+use crate::{curve::Curve};
 
 /// vote yes or no
 /// 投票
@@ -60,32 +59,33 @@ pub struct VoteInfo {
 pub struct Track {
     /// 投票轨道名
     pub name: Vec<u8>,
+
     /// 导入期或准备期
     /// 在这个阶段，提案人或其他人需要支付一笔 “决定押金”。
     pub prepare_period: BlockNumber,
-    /// 最长决策期
-    /// 就像上面说到的，如果在 28 天内的某个时间点，
-    /// Approval 和 Support 均达到了通过阈值时，
-    /// 公投就进入下一个 Confirming 阶段
+    /// 决定押金 (Native DOT)
+    /// 质押后进入投票阶段
+    pub decision_deposit: U256,
+    /// 投票阶段 => 最长决策期
+    /// 如果在 28 天内的某个时间点，Approval 和 Support 均达到了通过阈值时，公投就进入下一个 Confirming 阶段
     pub max_deciding: BlockNumber,
-    /// Confirming 阶段的长度视轨道参数决定
-    /// 在 Confirminig 阶段，如果 Approval 和 Support
-    /// 两个比率能保持高于通过阈值 “安全” 地渡过这个时期（例如 1 天），
-    /// 那么该公投就算正式通过了。
+    /// Confirminig 阶段
+    /// 如果 Approval 和 Support 两个比率能保持高于通过阈值 “安全” 地渡过这个时期（例如 1 天），该公投就算正式通过了。
     pub confirm_period: BlockNumber,
+    /// decision 阶段
     /// 一项公投在投票通过后，再安全地度过了执行期，与该公投相关的代码可以执行。
     pub decision_period: BlockNumber,
+    
     /// 提案结束后多久能解锁
     pub min_enactment_period: BlockNumber,
-    /// 决定押金
-    pub decision_deposit: U256,
+
+    /// 最大能执行的金额  用于国库支出相关提案
+    pub max_balance: U256,
+
     /// 投票成功百分比
     pub min_approval: Curve,
     /// 投票率
     pub min_support: Curve,
-    /// 最大能执行的金额
-    /// 如果金额范围不合理，就无法成功执行提案
-    pub max_balance: U256,
 }
 
 #[derive(Clone, PartialEq)]
@@ -97,6 +97,7 @@ pub struct Track {
 pub enum PropStatus {
     Pending = 0,
     Ongoing,
+    Confirming,
     Approved,
     Rejected,
     Canceled,
@@ -117,4 +118,29 @@ pub struct Tally {
     /// The number of no votes
     /// 不同意的数量
     pub no: U256,
+}
+
+pub type CalllId = u32;
+pub type Selector = [u8; 4];
+
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct Call {
+    /// The address of the contract that is call in this proposal.
+    pub contract: Option<Address>,
+    /// The selector bytes that identifies the function of the contract that should be call.
+    pub selector: Selector,
+    /// The SCALE encoded parameters that are passed to the call function.
+    pub input: Vec<u8>,
+    /// The amount of chain balance that is transferred to the Proposalee.
+    pub amount: U256,
+    /// Gas limit for the execution of the call.
+    pub ref_time_limit: u64,
+    /// If set to true the transaction will be allowed to re-enter the multisig
+    /// contract. Re-entrancy can lead to vulnerabilities. Use at your own risk.
+    pub allow_reentry: bool,
 }

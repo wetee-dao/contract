@@ -47,4 +47,6 @@ pub enum Error {
     NoTrack,
     /// Returned if transfer is disable.
     TransferDisable,
+    /// return if vote is invalid.
+    InvalidVote,
 }

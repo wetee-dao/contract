@@ -21,7 +21,27 @@ pub struct ListHelper<T> {
 macro_rules! ensure {
     ($condition:expr, $error:expr) => {
         if !$condition {
-            return $error;
+            return Err($error);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! result_or_err {
+    ($result:expr, $error:expr) => {
+        match $result {
+            Ok(val) => val,
+            Err(_) => return Err($error),
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! option_or_err {
+    ($option:expr, $error:expr) => {
+        match $option {
+            Some(val) => val,
+            None => return Err($error),
         }
     };
 }

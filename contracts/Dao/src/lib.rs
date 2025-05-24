@@ -24,7 +24,7 @@ mod dao {
         storage::Mapping,
         U256,
     };
-    use primitives::{ensure, ListHelper};
+    use primitives::{ensure, option_or_err, ListHelper};
 
     #[ink(storage)]
     #[derive(Default)]
@@ -105,7 +105,7 @@ mod dao {
             // check if user is already an member
             ensure!(
                 !self.member_balances.contains(new_user),
-                Err(Error::MemberExisted)
+                Error::MemberExisted
             );
 
             self.member_balances.insert(new_user, &balance);
@@ -124,18 +124,18 @@ mod dao {
             // check if user is already an member
             ensure!(
                 self.member_balances.contains(caller),
-                Err(Error::MemberNotExisted)
+                Error::MemberNotExisted
             );
             ensure!(
                 self.member_balances.get(caller).unwrap_or(U256::from(0)) == U256::from(0),
-                Err(Error::MemberBalanceNotZero)
+                Error::MemberBalanceNotZero
             );
             ensure!(
                 self.member_lock_balances
                     .get(caller)
                     .unwrap_or(U256::from(0))
                     == U256::from(0),
-                Err(Error::MemberBalanceNotZero)
+                Error::MemberBalanceNotZero
             );
 
             // remove user from DAO
@@ -154,7 +154,7 @@ mod dao {
             // check if user is already an member
             ensure!(
                 self.member_balances.contains(caller),
-                Err(Error::MemberNotExisted)
+                Error::MemberNotExisted
             );
 
             // get amount of user
@@ -181,7 +181,7 @@ mod dao {
             // check if user is an member
             ensure!(
                 self.member_balances.contains(user),
-                Err(Error::MemberNotExisted)
+                Error::MemberNotExisted
             );
 
             // get amount of user
@@ -222,18 +222,18 @@ mod dao {
         /// Transfer TOKEN to user
         #[ink(message)]
         fn transfer(&mut self, to: Address, amount: U256) -> Result<(), Error> {
-            ensure!(self.transfer, Err(Error::TransferDisable));
+            ensure!(self.transfer, Error::TransferDisable);
 
             let caller = self.env().caller();
 
             // check if user is an member
             ensure!(
                 self.member_balances.contains(caller),
-                Err(Error::MemberNotExisted)
+                Error::MemberNotExisted
             );
             ensure!(
                 self.member_balances.contains(to),
-                Err(Error::MemberNotExisted)
+                Error::MemberNotExisted
             );
 
             let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
@@ -241,7 +241,7 @@ mod dao {
                 .member_lock_balances
                 .get(caller)
                 .unwrap_or(U256::from(0));
-            ensure!(total - lock >= amount, Err(Error::LowBalance));
+            ensure!(total - lock >= amount, Error::LowBalance);
 
             self.member_balances.insert(caller, &(total - amount));
             self.member_balances.insert(
@@ -260,11 +260,11 @@ mod dao {
             // check if user is an member
             ensure!(
                 self.member_balances.contains(caller),
-                Err(Error::MemberNotExisted)
+                Error::MemberNotExisted
             );
 
             let total = self.member_balances.get(caller).unwrap();
-            ensure!(total >= amount, Err(Error::LowBalance));
+            ensure!(total >= amount, Error::LowBalance);
 
             self.member_balances.insert(caller, &(total - amount));
             self.total_issuance -= amount;
@@ -315,7 +315,7 @@ mod dao {
         fn set_defalut_track(&mut self, id: u16) -> Result<(), Error> {
             self.ensure_from_gov()?;
 
-            ensure!(self.tracks.contains(&id), Err(Error::NoTrack));
+            ensure!(self.tracks.contains(&id),Error::NoTrack);
 
             self.defalut_track = Some(id);
 
@@ -381,7 +381,7 @@ mod dao {
         ) -> Result<(), Error> {
             self.ensure_from_gov()?;
 
-            ensure!(self.tracks.contains(&id), Err(Error::NoTrack));
+            ensure!(self.tracks.contains(&id), Error::NoTrack);
 
             let approval = arg_to_curve(min_approval);
             let support = arg_to_curve(min_support);
@@ -412,7 +412,7 @@ mod dao {
             // check if user is an member
             ensure!(
                 self.member_balances.contains(caller),
-                Err(Error::MemberNotExisted)
+                Error::MemberNotExisted
             );
 
             //  get track of call
@@ -458,12 +458,12 @@ mod dao {
 
             ensure!(
                 self.status_of_proposal.get(proposal_id) == Some(PropStatus::Pending),
-                Err(Error::InvalidProposalStatus)
+                Error::InvalidProposalStatus
             );
 
             ensure!(
                 self.proposal_caller.get(proposal_id).unwrap_or_default() == caller,
-                Err(Error::InvalidProposalCaller)
+                Error::InvalidProposalCaller
             );
 
             self.status_of_proposal
@@ -479,12 +479,18 @@ mod dao {
             let payvalue = self.env().transferred_value();
 
             // check status
-            let status = self.status_of_proposal.get(proposal_id).unwrap();
+            let status = option_or_err!(
+                self.status_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
             if status != PropStatus::Pending {
                 return Err(Error::InvalidProposalStatus);
             }
 
-            let deposit = self.deposit_of_proposal.get(proposal_id).unwrap();
+            let deposit = option_or_err!(
+                self.deposit_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
 
             // check track
             let track = self.get_track(proposal_id);
@@ -516,7 +522,7 @@ mod dao {
 
             // check token
             let payvalue = self.env().transferred_value();
-            let total = self.member_balances.get(caller).unwrap();
+            let total = option_or_err!(self.member_balances.get(caller), Error::MemberNotExisted);
             let lock = self
                 .member_lock_balances
                 .get(caller)
@@ -526,12 +532,19 @@ mod dao {
             }
 
             // check status
-            if self.status_of_proposal.get(proposal_id).unwrap() != PropStatus::Ongoing {
+            let status = option_or_err!(
+                self.status_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
+            if status != PropStatus::Ongoing {
                 return Err(Error::PropNotOngoing);
             }
 
             // check time
-            let deposit_block = self.submit_block_of_proposal.get(proposal_id).unwrap();
+            let deposit_block = option_or_err!(
+                self.submit_block_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
             let track = self.get_track(proposal_id);
             let now = self.env().block_number();
             if now > deposit_block + track.max_deciding {
@@ -575,7 +588,7 @@ mod dao {
         fn cancel_vote(&mut self, vote_id: u128) -> Result<(), Error> {
             let caller = self.env().caller();
 
-            let mut vote = self.votes.get(vote_id).unwrap();
+            let mut vote = option_or_err!(self.votes.get(vote_id), Error::InvalidVote);
 
             // check vote user
             if vote.calller != caller {
@@ -584,7 +597,11 @@ mod dao {
 
             // check proposal status
             let proposal_id = self.votes.get(vote_id).unwrap().call_id;
-            if self.status_of_proposal.get(proposal_id).unwrap() != PropStatus::Ongoing {
+            let status = option_or_err!(
+                self.status_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
+            if status != PropStatus::Ongoing {
                 return Err(Error::PropNotOngoing);
             }
 
@@ -612,7 +629,7 @@ mod dao {
                 return Err(Error::VoteAlreadyUnlocked);
             }
 
-            let vote = self.votes.get(vote_id).unwrap();
+            let vote = option_or_err!(self.votes.get(vote_id), Error::InvalidVote);
 
             // check vote status
             if vote.deleted {
@@ -624,7 +641,7 @@ mod dao {
                 return Err(Error::InvalidVoteUser);
             }
 
-            let proposal_id = self.votes.get(vote_id).unwrap().call_id;
+            let proposal_id = vote.call_id;
 
             // check vote unlock time
             let end_block = self.calculate_proposal_end_block(proposal_id)?;
@@ -648,10 +665,14 @@ mod dao {
         /// Execute proposal after vote is passed
         #[ink(message)]
         fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error> {
-            let call = self.proposals.get(proposal_id).expect("proposal not found");
+            let call = option_or_err!(self.proposals.get(proposal_id), Error::InvalidProposal);
 
             // check status
-            if self.status_of_proposal.get(proposal_id).unwrap() != PropStatus::Ongoing {
+            let status = option_or_err!(
+                self.status_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
+            if status != PropStatus::Ongoing {
                 return Err(Error::PropNotOngoing);
             }
 
@@ -697,7 +718,10 @@ mod dao {
             }
 
             // check status
-            let status = self.status_of_proposal.get(proposal_id).unwrap();
+            let status = option_or_err!(
+                self.status_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
             if status != PropStatus::Ongoing {
                 return Ok(status);
             }
@@ -816,7 +840,7 @@ mod dao {
         fn ensure_from_gov(&self) -> Result<(), Error> {
             ensure!(
                 self.env().caller() == self.env().address(),
-                Err(Error::MustCallByGov)
+                Error::MustCallByGov
             );
 
             Ok(())
@@ -920,7 +944,10 @@ mod dao {
 
         /// Calculate proposal end block
         fn calculate_proposal_end_block(&self, proposal_id: CalllId) -> Result<BlockNumber, Error> {
-            let status = self.status_of_proposal.get(proposal_id).unwrap();
+            let status = option_or_err!(
+                self.status_of_proposal.get(proposal_id),
+                Error::InvalidProposalStatus
+            );
             match status {
                 PropStatus::Ongoing => {
                     let (is_confirm, end, _) = self.calculate_proposal_status(proposal_id);

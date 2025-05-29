@@ -1,173 +1,297 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
+mod datas;
+mod errors;
+mod events;
+
 #[ink::contract]
 mod subnet {
-    use ink::{
-        prelude::vec::Vec,
-        storage::Mapping,
-    };
+    use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
+    use primitives::{ensure, ok_or_err, some_or_err, ListHelper, VecIndex};
 
-    type TransactionId = u32;
-
-    #[derive(Clone)]
-    #[cfg_attr(
-        feature = "std",
-        derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-    )]
-    #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    pub struct Transaction {
-        pub i: u64,
-    }
-
-    #[derive(Clone, Default)]
-    #[cfg_attr(
-        feature = "std",
-        derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-    )]
-    #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    pub struct Transactions {
-        transactions: Vec<TransactionId>,
-        next_id: TransactionId,
-    }
+    use crate::{datas::*, errors::Error};
 
     #[ink(storage)]
+    #[derive(Default)]
     pub struct Subnet {
-        transaction_list: Transactions,
-        ts: Mapping<u32,Transactions>,
+        /// parent contract ==> cloud contract
+        parent_contract: Address,
+        /// workers
+        workers: Mapping<NodeID, K8sCluster>,
+        /// workers list helper
+        workers_helper: ListHelper<NodeID>,
+        /// user off worker
+        worker_of_user: Mapping<Address, NodeID>,
+
+        /// secrets
+        secrets: Mapping<NodeID, SecretNode>,
+        /// secrets list helper
+        secrets_helper: ListHelper<NodeID>,
+        /// user off secret
+        secret_of_user: Mapping<Address, NodeID>,
+        /// secret mortgages
+        secret_mortgages: Mapping<NodeID, U256>,
+
+        /// run secrets
+        runing_secrets: Vec<NodeID>,
+        /// pending secrets
+        pending_secrets: Vec<NodeID>,
+
+        /// worker node code TEE version (TEE Signer,TEE signature)
+        dworker_code: (Vec<u8>, Vec<u8>),
+        /// Secret node code TEE version (TEE Signer,TEE signature)
+        dsecret_code: (Vec<u8>, Vec<u8>),
+
+        /// worker mortgage
+        worker_mortgages: Mapping<u128, AssetDeposit>,
+        /// mortgage list helper
+        worker_mortgage_helper: ListHelper<u128>,
+        /// node of worker
+        mortgage_of_worker: Mapping<NodeID, VecIndex<u128>>,
+
+        /// USD of deposit Price
+        deposit_prices: Mapping<u8, U256>,
+        /// n/1_000_000 of USD
+        deposit_ratio: Mapping<u32, U256>,
     }
 
     impl Subnet {
         #[ink(constructor)]
         pub fn new() -> Self {
-            let transaction_list:Transactions = Default::default();
-            let ts = Mapping::default();
-            Self { transaction_list, ts }
+            let caller = Self::env().caller();
+            let mut net: Subnet = Default::default();
+            net.parent_contract = caller;
+
+            net
         }
 
         #[ink(message)]
-        pub fn set(&mut self) {
-            // let caller = self::env().caller();
-            let t = self.ts.get(1);
-            let transaction_list:Transactions = Default::default();
-
-            if t.is_some() {
-                let mut rt = t.unwrap();
-                rt.transactions.push(2);
-                self.ts.insert(1,&rt);
-            } else {
-                self.ts.insert(1,&transaction_list);
-            }
-        }
-
-        #[ink(message)]
-        pub fn get(&self) -> bool {
-            let t = self.ts.get(1);
-
-            if t.is_some() {
-                return true;
-            }
-
-            false
-        }
-
-        #[ink(message)]
-        pub fn list(&self) -> Option<Transactions>{
-            self.ts.get(1)
-        }
-    }
-
-    /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
-    /// module and test functions are marked with a `#[test]` attribute.
-    /// The below code is technically just normal Rust code.
-    #[cfg(test)]
-    mod tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
-
-        /// We test if the default constructor does its job.
-        #[ink::test]
-        fn default_works() {
-            let xxx = Subnet::new();
-            assert_eq!(xxx.get(), false);
-        }
-
-        /// We test a simple use case of our contract.
-        #[ink::test]
-        fn it_works() {
-            let mut xxx = Subnet::new();
-            assert_eq!(xxx.get(), false);
-            xxx.set();
-            assert_eq!(xxx.get(), true);
-        }
-    }
-
-
-    /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
-    ///
-    /// When running these you need to make sure that you:
-    /// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
-    /// - Are running a Substrate node which contains `pallet-contracts` in the background
-    #[cfg(all(test, feature = "e2e-tests"))]
-    mod e2e_tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
-
-        /// A helper function used for calling contract messages.
-        use ink_e2e::ContractsBackend;
-
-        /// The End-to-End test `Result` type.
-        type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-        /// We test that we can upload and instantiate the contract using its default constructor.
-        #[ink_e2e::test]
-        async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let mut constructor = SubnetRef::default();
-
-            // When
-            let contract = client
-                .instantiate("xxx", &ink_e2e::alice(), &mut constructor)
-                .submit()
-                .await
-                .expect("instantiate failed");
-            let call_builder = contract.call_builder::<Subnet>();
-
-            // Then
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::alice(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
+        pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
+            self.ensure_from_parent()?;
+            ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
 
             Ok(())
         }
 
-        /// We test that we can read and write a value from the on-chain contract.
-        #[ink_e2e::test]
-        async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let mut constructor = SubnetRef::new(false);
-            let contract = client
-                .instantiate("xxx", &ink_e2e::bob(), &mut constructor)
-                .submit()
-                .await
-                .expect("instantiate failed");
-            let mut call_builder = contract.call_builder::<Subnet>();
+        #[ink(message)]
+        pub fn worker_register(
+            &mut self,
+            name: Vec<u8>,
+            ip: Vec<Ip>,
+            port: u32,
+            level: u8,
+        ) -> Result<NodeID, Error> {
+            let caller = self.env().caller();
+            let now = self.env().block_number();
 
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), false));
+            let worker = K8sCluster {
+                name: name,
+                ip: ip,
+                port: port,
+                level: level,
+                owner: caller,
+                start_block: now,
+                stop_block: None,
+                terminal_block: None,
+                status: 0,
+            };
 
-            // When
-            let flip = call_builder.flip();
-            let _flip_result = client
-                .call(&ink_e2e::bob(), &flip)
-                .submit()
-                .await
-                .expect("flip failed");
+            let id = self.workers_helper.next_id;
+            self.workers.insert(id, &worker);
 
-            // Then
-            let get = call_builder.get();
-            let get_result = client.call(&ink_e2e::bob(), &get).dry_run().await?;
-            assert!(matches!(get_result.return_value(), true));
+            self.worker_of_user.insert(caller, &id);
+            self.workers_helper.list.push(id);
+            self.workers_helper.next_id += 1;
+
+            Ok(id)
+        }
+
+        #[ink(message)]
+        pub fn worker_mortgage(
+            &mut self,
+            id: NodeID,
+            cpu: u32,
+            mem: u32,
+            cvm_cpu: u32,
+            cvm_mem: u32,
+            disk: u32,
+            gpu: u32,
+            deposit: U256,
+        ) -> Result<NodeID, Error> {
+            let caller = self.env().caller();
+            let worker = some_or_err!(self.workers.get(id), Error::WorkerNotExist);
+
+            ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
+            ensure!(worker.status == 0, Error::WorkerStatusNotReady);
+
+            let deposit = AssetDeposit {
+                amount: deposit,
+                cpu,
+                cvm_cpu,
+                mem,
+                cvm_mem,
+                disk,
+                gpu,
+                deleted: None,
+            };
+
+            let mid = self.worker_mortgage_helper.next_id;
+            self.worker_mortgages.insert(mid, &deposit);
+            self.worker_mortgage_helper.next_id += 1;
+            self.worker_mortgage_helper.list.push(mid);
+
+            let mut index = self.mortgage_of_worker.get(id).unwrap_or_default();
+            index.list.push(mid);
+            self.mortgage_of_worker.insert(id, &index);
+
+            Ok(mid)
+        }
+
+        #[ink(message)]
+        pub fn worker_unmortgage(
+            &mut self,
+            id: NodeID,
+            mortgage_id: u128,
+        ) -> Result<NodeID, Error> {
+            let caller = self.env().caller();
+            let worker = some_or_err!(self.workers.get(id), Error::WorkerNotExist);
+
+            ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
+            ensure!(worker.status == 0, Error::WorkerStatusNotReady);
+
+            let mut index = self.mortgage_of_worker.get(id).unwrap_or_default();
+            let i = some_or_err!(
+                index.list.iter().position(|t| t == &mortgage_id),
+                Error::WorkerMortgageNotExist
+            );
+            index.list.swap_remove(i);
+
+            self.mortgage_of_worker.insert(id, &index);
+
+            let mut mortgage =
+                some_or_err!(self.worker_mortgages.get(id), Error::WorkerMortgageNotExist);
+            mortgage.deleted = Some(self.env().block_number());
+            self.worker_mortgages.insert(id, &mortgage);
+
+            ok_or_err!(
+                self.env().transfer(worker.owner, mortgage.amount),
+                Error::TransferFailed
+            );
+
+            Ok(mortgage_id)
+        }
+
+        #[ink(message)]
+        pub fn worker_stop(&mut self, id: NodeID) -> Result<NodeID, Error> {
+            let caller = self.env().caller();
+            let worker = some_or_err!(self.workers.get(id), Error::WorkerNotExist);
+
+            ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
+            ensure!(worker.status == 0, Error::WorkerStatusNotReady);
+
+            let worker = self
+                .mortgage_of_worker
+                .get(id)
+                .ok_or(Error::WorkerMortgageNotExist)?;
+            if worker.list.len() > 0 {
+                return Err(Error::WorkerIsUseByUser);
+            }
+
+            self.mortgage_of_worker.remove(id);
+
+            Ok(id)
+        }
+
+        #[ink(message)]
+        pub fn secret_register(
+            &mut self,
+            name: Vec<u8>,
+            ip: Vec<Ip>,
+            port: u32,
+        ) -> Result<NodeID, Error> {
+            let caller = self.env().caller();
+            let now = self.env().block_number();
+
+            let node = SecretNode {
+                name: name,
+                ip: ip,
+                port: port,
+                owner: caller,
+                start_block: now,
+                stop_block: None,
+                terminal_block: None,
+                status: 0,
+            };
+
+            let id = self.secrets_helper.next_id;
+            self.secrets.insert(id, &node);
+
+            self.secret_of_user.insert(caller, &id);
+            self.secrets_helper.list.push(id);
+            self.secrets_helper.next_id += 1;
+
+            Ok(id)
+        }
+
+        #[ink(message)]
+        pub fn secret_deposit(&mut self, id: NodeID, deposit: U256) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let node = some_or_err!(self.secrets.get(id), Error::NodeNotExist);
+
+            ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
+            ensure!(node.status == 0, Error::WorkerStatusNotReady);
+
+            let mut amount = self.secret_mortgages.get(id).unwrap_or_default();
+            amount += deposit;
+            self.secret_mortgages.insert(id, &amount);
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn secret_join(&mut self, id: NodeID) -> Result<(), Error> {
+            self.ensure_from_parent()?;
+
+            let pending = self.pending_secrets.clone();
+            ensure!(pending.contains(&id), Error::SecretNodeAlreadyExists);
+
+            let nodes = self.runing_secrets.clone();
+            ensure!(nodes.contains(&id), Error::SecretNodeAlreadyExists);
+
+            self.pending_secrets.push(id);
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn secret_delete(&mut self, id: NodeID) -> Result<(), Error> {
+            self.ensure_from_parent()?;
+
+            let nodes = self.runing_secrets.clone();
+            if nodes.contains(&id) {
+                let i = nodes.iter().position(|t| t == &id);
+                if i.is_some() {
+                    self.runing_secrets.swap_remove(i.unwrap());
+                }
+            }
+
+            let pendding = self.pending_secrets.clone();
+            if pendding.contains(&id) {
+                let i = pendding.iter().position(|t| t == &id);
+                if i.is_some() {
+                    self.pending_secrets.swap_remove(i.unwrap());
+                }
+            }
+
+            Ok(())
+        }
+
+        /// Gov call only call from contract
+        fn ensure_from_parent(&self) -> Result<(), Error> {
+            ensure!(
+                self.env().caller() == self.parent_contract,
+                Error::MustCallByMainContract
+            );
 
             Ok(())
         }

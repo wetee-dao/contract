@@ -6,7 +6,7 @@ use crate::errors::Error;
 #[ink::trait_definition]
 pub trait Member {
     #[ink(message)]
-    fn members(&self) -> Vec<Address>;
+    fn list(&self) -> Vec<Address>;
 
     #[ink(message)]
     fn join(&mut self, new_user: Address, balance: U256) -> Result<(), Error>;
@@ -18,5 +18,5 @@ pub trait Member {
     fn levae_with_burn(&mut self) -> Result<(), Error>;
 
     #[ink(message)]
-    fn delete_member(&mut self, user: Address) -> Result<(), Error>;
+    fn delete(&mut self, user: Address) -> Result<(), Error>;
 }

@@ -1,0 +1,1 @@
+nohup wetee-node --dev --base-path  ./out/chain-data &

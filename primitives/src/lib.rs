@@ -16,6 +16,15 @@ pub struct ListHelper<T> {
     pub next_id: T,
 }
 
+#[derive(Clone, Default)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct VecIndex<T> {
+    pub list: Vec<T>,
+}
 
 #[macro_export]
 macro_rules! ensure {
@@ -27,7 +36,7 @@ macro_rules! ensure {
 }
 
 #[macro_export]
-macro_rules! result_or_err {
+macro_rules! ok_or_err {
     ($result:expr, $error:expr) => {
         match $result {
             Ok(val) => val,
@@ -37,7 +46,7 @@ macro_rules! result_or_err {
 }
 
 #[macro_export]
-macro_rules! option_or_err {
+macro_rules! some_or_err {
     ($option:expr, $error:expr) => {
         match $option {
             Some(val) => val,

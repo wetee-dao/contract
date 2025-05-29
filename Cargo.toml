@@ -10,7 +10,6 @@ version = "0.1.0"
 [workspace]
 members = [
   # contracts
-  "contracts/Test",
   "contracts/Dao",
   "contracts/Subnet",
   # "contracts/Cloud",

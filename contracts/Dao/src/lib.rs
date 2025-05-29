@@ -22,19 +22,19 @@ mod dao {
         },
         prelude::vec::Vec,
         storage::Mapping,
-        U256,
+        H256, U256,
     };
-    use primitives::{ensure, option_or_err, ListHelper};
+    use primitives::{ensure, ok_or_err, some_or_err, ListHelper};
 
     #[ink(storage)]
     #[derive(Default)]
     pub struct DAO {
         /// proposals
         proposals: Mapping<CalllId, Call>,
-        /// track of proposal
-        track_of_proposal: Mapping<CalllId, u16>,
         /// proposals list helper
         proposals_helper: ListHelper<CalllId>,
+        /// track of proposal
+        track_of_proposal: Mapping<CalllId, u16>,
         /// caller of proposal
         proposal_caller: Mapping<CalllId, Address>,
         /// deposit of proposal
@@ -93,7 +93,7 @@ mod dao {
     impl Member for DAO {
         /// Returns list of members.
         #[ink(message)]
-        fn members(&self) -> Vec<Address> {
+        fn list(&self) -> Vec<Address> {
             self.members.clone()
         }
 
@@ -175,14 +175,11 @@ mod dao {
 
         /// Delete member from DAO
         #[ink(message)]
-        fn delete_member(&mut self, user: Address) -> Result<(), Error> {
+        fn delete(&mut self, user: Address) -> Result<(), Error> {
             self.ensure_from_gov()?;
 
             // check if user is an member
-            ensure!(
-                self.member_balances.contains(user),
-                Error::MemberNotExisted
-            );
+            ensure!(self.member_balances.contains(user), Error::MemberNotExisted);
 
             // get amount of user
             let amount = self.member_balances.get(user).unwrap_or(U256::from(0))
@@ -231,10 +228,7 @@ mod dao {
                 self.member_balances.contains(caller),
                 Error::MemberNotExisted
             );
-            ensure!(
-                self.member_balances.contains(to),
-                Error::MemberNotExisted
-            );
+            ensure!(self.member_balances.contains(to), Error::MemberNotExisted);
 
             let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
             let lock = self
@@ -315,7 +309,7 @@ mod dao {
         fn set_defalut_track(&mut self, id: u16) -> Result<(), Error> {
             self.ensure_from_gov()?;
 
-            ensure!(self.tracks.contains(&id),Error::NoTrack);
+            ensure!(self.tracks.contains(&id), Error::NoTrack);
 
             self.defalut_track = Some(id);
 
@@ -416,12 +410,7 @@ mod dao {
             );
 
             //  get track of call
-            let track_wrap = self.get_track_id(&call);
-            if track_wrap.is_none() {
-                return Err(Error::NoTrack);
-            }
-
-            let track = track_wrap.unwrap();
+            let track = some_or_err!(self.get_track_id(&call), Error::NoTrack);
 
             // save proposal
             let call_id = self.proposals_helper.next_id;
@@ -479,7 +468,7 @@ mod dao {
             let payvalue = self.env().transferred_value();
 
             // check status
-            let status = option_or_err!(
+            let status = some_or_err!(
                 self.status_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
@@ -487,13 +476,13 @@ mod dao {
                 return Err(Error::InvalidProposalStatus);
             }
 
-            let deposit = option_or_err!(
+            let deposit = some_or_err!(
                 self.deposit_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
 
             // check track
-            let track = self.get_track(proposal_id);
+            let track = self.get_track(proposal_id)?;
             let now = self.env().block_number();
             if now < deposit.2 + track.prepare_period {
                 return Err(Error::InvalidDepositTime);
@@ -522,7 +511,7 @@ mod dao {
 
             // check token
             let payvalue = self.env().transferred_value();
-            let total = option_or_err!(self.member_balances.get(caller), Error::MemberNotExisted);
+            let total = some_or_err!(self.member_balances.get(caller), Error::MemberNotExisted);
             let lock = self
                 .member_lock_balances
                 .get(caller)
@@ -532,7 +521,7 @@ mod dao {
             }
 
             // check status
-            let status = option_or_err!(
+            let status = some_or_err!(
                 self.status_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
@@ -541,11 +530,11 @@ mod dao {
             }
 
             // check time
-            let deposit_block = option_or_err!(
+            let deposit_block = some_or_err!(
                 self.submit_block_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
-            let track = self.get_track(proposal_id);
+            let track = self.get_track(proposal_id)?;
             let now = self.env().block_number();
             if now > deposit_block + track.max_deciding {
                 return Err(Error::InvalidVoteTime);
@@ -588,7 +577,7 @@ mod dao {
         fn cancel_vote(&mut self, vote_id: u128) -> Result<(), Error> {
             let caller = self.env().caller();
 
-            let mut vote = option_or_err!(self.votes.get(vote_id), Error::InvalidVote);
+            let mut vote = some_or_err!(self.votes.get(vote_id), Error::InvalidVote);
 
             // check vote user
             if vote.calller != caller {
@@ -596,8 +585,8 @@ mod dao {
             }
 
             // check proposal status
-            let proposal_id = self.votes.get(vote_id).unwrap().call_id;
-            let status = option_or_err!(
+            let proposal_id = vote.call_id;
+            let status = some_or_err!(
                 self.status_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
@@ -629,7 +618,7 @@ mod dao {
                 return Err(Error::VoteAlreadyUnlocked);
             }
 
-            let vote = option_or_err!(self.votes.get(vote_id), Error::InvalidVote);
+            let vote = some_or_err!(self.votes.get(vote_id), Error::InvalidVote);
 
             // check vote status
             if vote.deleted {
@@ -665,10 +654,10 @@ mod dao {
         /// Execute proposal after vote is passed
         #[ink(message)]
         fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error> {
-            let call = option_or_err!(self.proposals.get(proposal_id), Error::InvalidProposal);
+            let call = some_or_err!(self.proposals.get(proposal_id), Error::InvalidProposal);
 
             // check status
-            let status = option_or_err!(
+            let status = some_or_err!(
                 self.status_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
@@ -676,7 +665,7 @@ mod dao {
                 return Err(Error::PropNotOngoing);
             }
 
-            let (is_confirm, end, track) = self.calculate_proposal_status(proposal_id);
+            let (is_confirm, end, track) = self.calculate_proposal_status(proposal_id)?;
             let now = self.env().block_number();
             if !is_confirm {
                 if now > end {
@@ -718,7 +707,7 @@ mod dao {
             }
 
             // check status
-            let status = option_or_err!(
+            let status = some_or_err!(
                 self.status_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
@@ -726,7 +715,7 @@ mod dao {
                 return Ok(status);
             }
 
-            let (is_confirm, end_block, _) = self.calculate_proposal_status(proposal_id);
+            let (is_confirm, end_block, _) = self.calculate_proposal_status(proposal_id)?;
             if !is_confirm {
                 let now = self.env().block_number();
                 if now > end_block {
@@ -836,6 +825,14 @@ mod dao {
             DAO::new_with_track(users, sudo_account, track)
         }
 
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
+            self.ensure_from_gov()?;
+            ok_or_err!(self.env().set_code_hash(&code_hash),Error::SetCodeFailed);
+
+            Ok(())
+        }
+
         /// Gov call only call from contract
         fn ensure_from_gov(&self) -> Result<(), Error> {
             ensure!(
@@ -871,15 +868,18 @@ mod dao {
         }
 
         /// Get track of call
-        fn get_track(&self, proposal_id: CalllId) -> Track {
-            let track_id = self.track_of_proposal.get(proposal_id).unwrap();
-            let track = self.tracks.get(track_id).unwrap();
+        fn get_track(&self, proposal_id: CalllId) -> Result<Track, Error> {
+            let track_id = some_or_err!(self.track_of_proposal.get(proposal_id), Error::NoTrack);
+            let track = some_or_err!(self.tracks.get(track_id), Error::NoTrack);
 
-            track
+            Ok(track)
         }
 
         /// Calculate proposal status
-        fn calculate_proposal_status(&self, proposal_id: CalllId) -> (bool, BlockNumber, Track) {
+        fn calculate_proposal_status(
+            &self,
+            proposal_id: CalllId,
+        ) -> Result<(bool, BlockNumber, Track), Error> {
             // get votes
             let vote_ids = self.votes_of_proposal.get(proposal_id).unwrap();
             let mut votes = Vec::new();
@@ -889,7 +889,7 @@ mod dao {
             }
 
             // get track
-            let track = self.get_track(proposal_id);
+            let track = self.get_track(proposal_id)?;
 
             // get vote begin and end time
             let (_, _, begin) = self.deposit_of_proposal.get(proposal_id).unwrap();
@@ -939,18 +939,18 @@ mod dao {
                 }
             }
 
-            (is_confirm, end, track)
+            Ok((is_confirm, end, track))
         }
 
         /// Calculate proposal end block
         fn calculate_proposal_end_block(&self, proposal_id: CalllId) -> Result<BlockNumber, Error> {
-            let status = option_or_err!(
+            let status = some_or_err!(
                 self.status_of_proposal.get(proposal_id),
                 Error::InvalidProposalStatus
             );
             match status {
                 PropStatus::Ongoing => {
-                    let (is_confirm, end, _) = self.calculate_proposal_status(proposal_id);
+                    let (is_confirm, end, _) = self.calculate_proposal_status(proposal_id)?;
                     if !is_confirm {
                         let now = self.env().block_number();
                         if now > end {
@@ -1000,3 +1000,6 @@ mod dao {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, feature = "e2e-tests"))]
+mod e2e_tests;

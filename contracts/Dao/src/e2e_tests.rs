@@ -1,71 +1,28 @@
-use super::test::*;
+use super::dao::*;
+use crate::traits::Member;
 use ink_e2e::ContractsBackend;
 
 type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[ink_e2e::test]
-async fn test_error<Client: E2EBackend>(
-    mut client: Client,
-) -> E2EResult<()> {
-    let mut constructor = TestCaseRef::new();
+async fn test_member_list<Client: E2EBackend>(mut client: Client) -> E2EResult<()> {
+    let mut constructor = DAORef::new(Vec::new(), None);
     let contract = client
-        .instantiate("test", &ink_e2e::alice(), &mut constructor)
+        .instantiate("DAO", &ink_e2e::alice(), &mut constructor)
         .submit()
         .await
         .expect("instantiate failed");
-    
-    let mut call_builder = contract.call_builder::<TestCase>();
+
+    let call_builder = contract.call_builder::<DAO>();
 
     // when
     let result = client
-        .call(
-            &ink_e2e::alice(),
-            &call_builder.test_error(),
-        )
-        .submit()
-        .await;
-
-    println!("{:?}", result);
-    println!("xxxxxxxxxxxxxxxx {:?}", result.err());
-    // assert!(result.is_err());
-
-    Ok(())
-}
-
-    let mut constructor = TestCaseRef::new();
-    let contract = client
-        .instantiate("test", &ink_e2e::alice(), &mut constructor)
-        .submit()
-        .await
-        .expect("instantiate failed");
-
-    let mut call_builder = contract.call_builder::<TestCase>();
-    let result = client
-        .call(
-            &ink_e2e::alice(),
-            &call_builder.set(),
-        )
-        .submit()
-        .await;
-
-    assert!(result.is_ok());
-
-    let call_builder2 = contract.call_builder::<TestCase>();
-    let result2 = client
-        .call(
-            &ink_e2e::alice(),
-            &call_builder2.get(),
-        )
-        .submit()
-        .await
-        .expect("Calling `insert_balance` failed")
+        .call(&ink_e2e::alice(), &call_builder.list())
+        .dry_run()
+        .await?
         .return_value();
 
-    println!("{:?}", result2);
-
-    assert!(result2 == 2);
-
-    // assert!(result.is_ok());
+    println!("{:?}", result);
 
     Ok(())
 }

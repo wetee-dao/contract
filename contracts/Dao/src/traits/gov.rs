@@ -1,4 +1,7 @@
-use crate::{curve::CurveArg, datas::CalllId};
+use crate::{
+    curve::CurveArg,
+    datas::{CalllId, Track, VoteInfo},
+};
 use ink::{env::BlockNumber, prelude::vec::Vec, U256};
 
 use crate::{
@@ -10,6 +13,15 @@ use crate::{
 pub trait Gov {
     #[ink(message)]
     fn set_defalut_track(&mut self, id: u16) -> Result<(), Error>;
+
+    #[ink(message)]
+    fn defalut_track(&self) -> Option<u16>;
+
+    #[ink(message)]
+    fn track_list(&self, page: u16, size: u16) -> Vec<Track>;
+
+    #[ink(message)]
+    fn track(&self, id: u16) -> Option<Track>;
 
     #[ink(message)]
     fn add_track(
@@ -43,6 +55,12 @@ pub trait Gov {
     ) -> Result<(), Error>;
 
     #[ink(message)]
+    fn proposals(&self, page: u16, size: u16) -> Vec<Call>;
+
+    #[ink(message)]
+    fn proposal(&self, id: u32) -> Option<Call>;
+
+    #[ink(message)]
     fn submit_proposal(&mut self, call: Call) -> Result<CalllId, Error>;
 
     #[ink(message)]
@@ -52,7 +70,13 @@ pub trait Gov {
     fn deposit_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error>;
 
     #[ink(message)]
-    fn vote(&mut self, proposal_id: CalllId, opinion: Opinion) -> Result<(), Error>;
+    fn vote_list(&self, proposal_id: CalllId) -> Vec<VoteInfo>;
+
+    #[ink(message)]
+    fn vote(&mut self, vote_id: u128) -> Option<VoteInfo>;
+
+    #[ink(message)]
+    fn submit_vote(&mut self, proposal_id: CalllId, opinion: Opinion) -> Result<(), Error>;
 
     #[ink(message)]
     fn cancel_vote(&mut self, proposal_id: u128) -> Result<(), Error>;

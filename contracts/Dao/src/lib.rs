@@ -316,6 +316,26 @@ mod dao {
             Ok(())
         }
 
+        #[ink(message)]
+        fn defalut_track(&self) -> Option<u16> {
+            self.defalut_track
+        }
+
+        #[ink(message)]
+        fn track_list(&self, page: u16, size: u16) -> Vec<Track> {
+            let mut list = Vec::new();
+            let start = (page - 1) * size;
+            for i in start..start + size {
+                list.push(self.tracks.get(i).unwrap())
+            }
+            list
+        }
+
+        #[ink(message)]
+        fn track(&self, id: u16) -> Option<Track> {
+            self.tracks.get(id)
+        }
+
         /// add a new vote track
         #[ink(message)]
         fn add_track(
@@ -396,6 +416,21 @@ mod dao {
             );
 
             Ok(())
+        }
+
+        #[ink(message)]
+        fn proposals(&self, page: u16, size: u16) -> Vec<Call> {
+            let mut list = Vec::new();
+            let start = ((page - 1) * size) as u32;
+            for i in start..start + size as u32 {
+                list.push(self.proposals.get(i as u32).unwrap())
+            }
+            list
+        }
+
+        #[ink(message)]
+        fn proposal(&self, id: u32) -> Option<Call> {
+            self.proposals.get(id)
         }
 
         /// Submit a proposal to DAO
@@ -504,9 +539,20 @@ mod dao {
             Ok(())
         }
 
+        #[ink(message)]
+        fn vote_list(&self, proposal_id: CalllId) -> Vec<VoteInfo> {
+            let list = self.votes_of_proposal.get(proposal_id).unwrap_or_default();
+            list.into_iter().map(|id| self.votes.get(id).unwrap()).collect()
+        }
+
+        #[ink(message)]
+        fn vote(&mut self, vote_id: u128) -> Option<VoteInfo> {
+            self.votes.get(vote_id)
+        }
+
         /// Vote for a proposal
         #[ink(message)]
-        fn vote(&mut self, proposal_id: CalllId, opinion: Opinion) -> Result<(), Error> {
+        fn submit_vote(&mut self, proposal_id: CalllId, opinion: Opinion) -> Result<(), Error> {
             let caller = self.env().caller();
 
             // check token
@@ -828,7 +874,7 @@ mod dao {
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
             self.ensure_from_gov()?;
-            ok_or_err!(self.env().set_code_hash(&code_hash),Error::SetCodeFailed);
+            ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
 
             Ok(())
         }

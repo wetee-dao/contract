@@ -1,7 +1,7 @@
 use ink::{env::BlockNumber, prelude::vec::Vec, Address, U256};
 
 pub type NodeID = u128;
-pub type AssetId = u64;
+// pub type AssetId = u64;
 
 #[derive(Clone, PartialEq)]
 #[cfg_attr(

@@ -61,7 +61,7 @@ pub trait Gov {
     fn proposal(&self, id: u32) -> Option<Call>;
 
     #[ink(message)]
-    fn submit_proposal(&mut self, call: Call) -> Result<CalllId, Error>;
+    fn submit_proposal(&mut self, call: Call, track_id: u16) -> Result<CalllId, Error>;
 
     #[ink(message)]
     fn cancel_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error>;

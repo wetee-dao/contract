@@ -100,7 +100,7 @@ mod subnet {
             self.workers.insert(id, &worker);
 
             self.worker_of_user.insert(caller, &id);
-            self.workers_helper.list.push(id);
+            // self.workers_helper.list.push(id);
             self.workers_helper.next_id += 1;
 
             Ok(id)
@@ -138,7 +138,7 @@ mod subnet {
             let mid = self.worker_mortgage_helper.next_id;
             self.worker_mortgages.insert(mid, &deposit);
             self.worker_mortgage_helper.next_id += 1;
-            self.worker_mortgage_helper.list.push(mid);
+            // self.worker_mortgage_helper.list.push(mid);
 
             let mut index = self.mortgage_of_worker.get(id).unwrap_or_default();
             index.list.push(mid);
@@ -227,7 +227,7 @@ mod subnet {
             self.secrets.insert(id, &node);
 
             self.secret_of_user.insert(caller, &id);
-            self.secrets_helper.list.push(id);
+            // self.secrets_helper.list.push(id);
             self.secrets_helper.next_id += 1;
 
             Ok(id)

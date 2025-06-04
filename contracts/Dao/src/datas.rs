@@ -152,3 +152,16 @@ impl ink::scale::Encode for CallInput<'_> {
         dest.write(self.0);
     }
 }
+
+#[derive(Clone,Default)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct Spend {
+    pub caller: Address,
+    pub to: Address,
+    pub amount: U256,
+    pub payout: bool,
+}

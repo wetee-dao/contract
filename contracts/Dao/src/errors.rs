@@ -45,10 +45,18 @@ pub enum Error {
     ProposalNotConfirmed,
     /// Returned if dao has no track.
     NoTrack,
+    /// Returned if max balance overflow track max balance.
+    MaxBalanceOverflow,
     /// Returned if transfer is disable.
     TransferDisable,
     /// Return if vote is invalid.
     InvalidVote,
     /// Update: set code failed
     SetCodeFailed,
+    /// Spend not found
+    SpendNotFound,
+    /// Spend already exists
+    SpendAlreadyExecuted,
+    /// Spend transfer error
+    SpendTransferError,
 }

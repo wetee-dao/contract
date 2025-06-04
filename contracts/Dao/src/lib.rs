@@ -17,9 +17,10 @@ mod dao {
     };
     use ink::{
         env::{
-            call::{build_call, ExecutionInput},
+            call::{build_call, ExecutionInput,utils::ArgumentList},
             CallFlags,
         },
+        scale::Encode,
         prelude::vec::Vec,
         storage::Mapping,
         H256, U256,
@@ -78,16 +79,19 @@ mod dao {
 
         /// members
         members: Vec<Address>,
-
         /// member balance
         member_balances: Mapping<Address, U256>,
         /// member lock balance
         member_lock_balances: Mapping<Address, U256>,
         /// total issuance TOKEN
         total_issuance: U256,
-
         /// transfer enable
         transfer: bool,
+
+        /// next spend id
+        next_spend_id: u64,
+        /// spends of treasury
+        spends: Mapping<u64, Spend>,
     }
 
     impl Member for DAO {
@@ -372,7 +376,6 @@ mod dao {
                 },
             );
             self.tracks_helper.next_id = id.checked_add(1).expect("track id overflow");
-            self.tracks_helper.list.push(id);
 
             Ok(())
         }
@@ -435,7 +438,7 @@ mod dao {
 
         /// Submit a proposal to DAO
         #[ink(message)]
-        fn submit_proposal(&mut self, call: Call) -> Result<CalllId, Error> {
+        fn submit_proposal(&mut self, call: Call, track_id: u16) -> Result<CalllId, Error> {
             let caller = self.env().caller();
 
             // check if user is an member
@@ -444,20 +447,25 @@ mod dao {
                 Error::MemberNotExisted
             );
 
-            //  get track of call
-            let track = some_or_err!(self.get_track_id(&call), Error::NoTrack);
+            //  check track of call
+            let tracks = self.get_track_id(&call);
+            ensure!(tracks.contains(&track_id), Error::NoTrack);
+
+            // check call amount
+            let track = self.tracks.get(track_id).unwrap();
+            ensure!(call.amount >= track.max_balance, Error::MaxBalanceOverflow);
 
             // save proposal
             let call_id = self.proposals_helper.next_id;
             self.proposals_helper.next_id = call_id.checked_add(1).expect("proposal id overflow");
-            self.proposals_helper.list.push(call_id);
+            // self.proposals_helper.list.push(call_id);
             self.proposals.insert(call_id, &call);
 
             // set caller of proposal
             self.proposal_caller.insert(call_id, &caller);
 
             // set track for proposal
-            self.track_of_proposal.insert(call_id, &track);
+            self.track_of_proposal.insert(call_id, &track_id);
 
             // set proposal status
             self.status_of_proposal
@@ -542,7 +550,9 @@ mod dao {
         #[ink(message)]
         fn vote_list(&self, proposal_id: CalllId) -> Vec<VoteInfo> {
             let list = self.votes_of_proposal.get(proposal_id).unwrap_or_default();
-            list.into_iter().map(|id| self.votes.get(id).unwrap()).collect()
+            list.into_iter()
+                .map(|id| self.votes.get(id).unwrap())
+                .collect()
         }
 
         #[ink(message)]
@@ -612,7 +622,7 @@ mod dao {
                 .insert(proposal_id, &votes_of_proposal);
 
             self.votes.insert(vid, &vote);
-            self.votes_helper.list.push(vid);
+            // self.votes_helper.list.push(vid);
             self.votes_helper.next_id = vid + 1;
 
             Ok(())
@@ -774,6 +784,63 @@ mod dao {
         }
     }
 
+    impl Treasury for DAO {
+        #[ink(message)]
+        fn spend(&mut self, track_id: u16,to: Address, _assert_id: u64, amount: U256) -> Result<u64, Error> {
+            let caller = self.env().caller();
+            
+            // check if user is an member
+            ensure!(
+                self.member_balances.contains(caller),
+                Error::MemberNotExisted
+            );
+
+            let id = self.next_spend_id;
+            self.spends.insert(
+                id,
+                &Spend {
+                    caller: caller,
+                    amount: amount,
+                    to: to,
+                    payout: false,
+                },
+            );
+
+            let call_args = ArgumentList::empty().push_arg(&id);
+
+            let call = Call{
+                contract: None,
+                selector: [159,160,185,236],
+                input: call_args.encode(),
+                amount: amount,
+                ref_time_limit: u64::MAX,
+                allow_reentry: false,
+            };
+
+            self.submit_proposal(call, track_id)?;
+            self.next_spend_id += 1;
+
+            Ok(id)
+        }
+
+        #[ink(message)]
+        fn payout(&mut self, spend_index: u64) -> Result<(), Error> {
+            self.ensure_from_gov()?;
+
+            // check spend
+            let mut spend = self.spends.get(spend_index).ok_or(Error::SpendNotFound)?;
+            ensure!(!spend.payout, Error::SpendAlreadyExecuted);
+
+            // transfer token
+            ok_or_err!(self.env().transfer(spend.to, spend.amount),Error::SpendTransferError);
+            
+            // save state
+            spend.payout = true;
+            self.spends.insert(spend_index, &spend);
+            Ok(())
+        }
+    }
+
     impl DAO {
         /// create a new dao
         #[ink(constructor)]
@@ -832,7 +899,7 @@ mod dao {
 
             // init vote track
             tracks_helper.next_id = 1;
-            tracks_helper.list.push(0);
+            // tracks_helper.list.push(0);
             tracks.insert(0, &track);
             dao.tracks = tracks;
             dao.tracks_helper = tracks_helper;
@@ -890,27 +957,29 @@ mod dao {
         }
 
         /// Get track rule of call
-        fn get_track_id(&self, call: &Call) -> Option<u16> {
-            let mut index = self
+        fn get_track_id(&self, call: &Call) -> Vec<u16> {
+            let mut ids = Vec::new();
+
+            let id = self
                 .track_rules
                 .get((call.contract.clone(), Some(call.selector.clone())));
-            if index.is_some() {
-                return index;
+            if id.is_some() {
+                ids.push(id.unwrap());
             }
 
-            index = self
+            let contract_id = self
                 .track_rules
                 .get((call.contract.clone(), None::<Selector>));
 
-            if index.is_some() {
-                return index;
+            if contract_id.is_some() {
+                ids.push(contract_id.unwrap());
             }
 
             if self.defalut_track.is_some() {
-                return self.defalut_track;
+                ids.push(self.defalut_track.unwrap());
             }
 
-            return None;
+            return Vec::new();
         }
 
         /// Get track of call

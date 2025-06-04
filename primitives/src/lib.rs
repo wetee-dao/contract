@@ -12,7 +12,6 @@ pub use int::*;
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct ListHelper<T> {
-    pub list: Vec<T>,
     pub next_id: T,
 }
 

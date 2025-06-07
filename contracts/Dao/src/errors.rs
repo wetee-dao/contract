@@ -7,6 +7,8 @@ pub enum Error {
     MemberNotExisted,
     /// Returned if member has balance.
     MemberBalanceNotZero,
+    /// Returned if member public join not allowed.
+    PublicJoinNotAllowed,
     /// Returned if balance is too low.
     LowBalance,
     /// Returned if call failed.

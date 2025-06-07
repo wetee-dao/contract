@@ -2,10 +2,7 @@ use super::dao::*;
 use crate::traits::Gov;
 
 fn init() -> DAO {
-    DAO::new(
-        Vec::new(),
-        None
-    )
+    DAO::new_with_default_track(Vec::new(), true, None)
 }
 
 #[ink::test]

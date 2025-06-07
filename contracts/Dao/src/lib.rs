@@ -17,11 +17,11 @@ mod dao {
     };
     use ink::{
         env::{
-            call::{build_call, ExecutionInput,utils::ArgumentList},
+            call::{build_call, utils::ArgumentList, ExecutionInput},
             CallFlags,
         },
-        scale::Encode,
         prelude::vec::Vec,
+        scale::Encode,
         storage::Mapping,
         H256, U256,
     };
@@ -79,6 +79,8 @@ mod dao {
 
         /// members
         members: Vec<Address>,
+        /// member can join without gov
+        public_join: bool,
         /// member balance
         member_balances: Mapping<Address, U256>,
         /// member lock balance
@@ -99,6 +101,36 @@ mod dao {
         #[ink(message)]
         fn list(&self) -> Vec<Address> {
             self.members.clone()
+        }
+
+        #[ink(message)]
+        fn get_public_join(&self) -> bool {
+            self.public_join
+        }
+
+        #[ink(message)]
+        fn public_join(&mut self) -> Result<(), Error> {
+            ensure!(self.public_join, Error::PublicJoinNotAllowed);
+
+            let caller = self.env().caller();
+
+            // check if user is already an member
+            ensure!(!self.member_balances.contains(caller), Error::MemberExisted);
+
+            self.member_balances.insert(caller, &U256::from(0));
+            self.members.push(caller);
+
+            self.env().emit_event(MemberAdd { user: caller });
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        fn set_public_join(&mut self, public_join: bool) -> Result<(), Error> {
+            self.ensure_from_gov()?;
+            self.public_join = public_join;
+
+            Ok(())
         }
 
         /// Join to DAO
@@ -199,58 +231,22 @@ mod dao {
         }
     }
 
-    impl Erc20 for DAO {
-        #[ink(message)]
-        fn balance_of(&self, user: Address) -> (U256, U256) {
-            let balance = self.member_balances.get(user).unwrap_or(U256::from(0));
-            let lock = self.member_lock_balances.get(user).unwrap_or(U256::from(0));
-
-            (balance, lock)
-        }
-
+    impl PSP22 for DAO {
         /// Enable transfer
         #[ink(message)]
         fn enable_transfer(&mut self) -> Result<(), Error> {
             self.ensure_from_gov()?;
-
             if !self.transfer {
                 self.transfer = true;
             }
-
             Ok(())
         }
 
-        /// Transfer TOKEN to user
         #[ink(message)]
-        fn transfer(&mut self, to: Address, amount: U256) -> Result<(), Error> {
-            ensure!(self.transfer, Error::TransferDisable);
-
-            let caller = self.env().caller();
-
-            // check if user is an member
-            ensure!(
-                self.member_balances.contains(caller),
-                Error::MemberNotExisted
-            );
-            ensure!(self.member_balances.contains(to), Error::MemberNotExisted);
-
-            let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
-            let lock = self
-                .member_lock_balances
-                .get(caller)
-                .unwrap_or(U256::from(0));
-            ensure!(total - lock >= amount, Error::LowBalance);
-
-            self.member_balances.insert(caller, &(total - amount));
-            self.member_balances.insert(
-                to,
-                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + amount),
-            );
-
-            Ok(())
+        fn can_transfer(&self) -> bool {
+            self.transfer
         }
 
-        /// Burn tokens from caller's balance.
         #[ink(message)]
         fn burn(&mut self, amount: U256) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -267,6 +263,116 @@ mod dao {
             self.member_balances.insert(caller, &(total - amount));
             self.total_issuance -= amount;
 
+            Ok(())
+        }
+
+        // Token info
+        #[ink(message, selector = 0x3d26)]
+        fn token_name(&self, asset_id: u32) -> Result<Vec<u8>, Error> {
+            Ok(Vec::new())
+        }
+
+        #[ink(message, selector = 0x3420)]
+        fn token_symbol(&self, asset_id: u32) -> Result<Vec<u8>, Error> {
+            Ok(Vec::new())
+        }
+
+        #[ink(message, selector = 0x7271)]
+        fn token_decimals(&self, asset_id: u32) -> Result<u8, Error> {
+            Ok(0)
+        }
+
+        // PSP22 interface queries
+        #[ink(message, selector = 0x162d)]
+        fn total_supply(&self, asset_id: u32) -> Result<U256, Error> {
+            Ok(U256::from(0))
+        }
+
+        #[ink(message, selector = 0x6568)]
+        fn balance_of(&self, asset_id: u32, owner: Address) -> Result<U256, Error> {
+            let balance = self.member_balances.get(owner).unwrap_or(U256::from(0));
+            let lock = self.member_lock_balances.get(owner).unwrap_or(U256::from(0));
+
+            Ok(balance - lock)
+        }
+
+        #[ink(message, selector = 0x4d47)]
+        fn allowance(
+            &self,
+            asset_id: u32,
+            owner: Address,
+            spender: Address,
+        ) -> Result<U256, Error> {
+            Ok(U256::from(0))
+        }
+
+        // PSP22 transfer
+        #[ink(message, selector = 0xdb20)]
+        fn transfer(&mut self, asset_id: u32, to: Address, value: U256) -> Result<(), Error> {
+            ensure!(self.transfer, Error::TransferDisable);
+
+            let caller = self.env().caller();
+
+            // check if user is an member
+            ensure!(
+                self.member_balances.contains(caller),
+                Error::MemberNotExisted
+            );
+            ensure!(self.member_balances.contains(to), Error::MemberNotExisted);
+
+            let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
+            let lock = self
+                .member_lock_balances
+                .get(caller)
+                .unwrap_or(U256::from(0));
+            ensure!(total - lock >= value, Error::LowBalance);
+
+            self.member_balances.insert(caller, &(total - value));
+            self.member_balances.insert(
+                to,
+                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + value),
+            );
+
+            Ok(())
+        }
+
+        // PSP22 transfer_from
+        #[ink(message, selector = 0x54b3)]
+        fn transfer_from(
+            &mut self,
+            asset_id: u32,
+            from: Address,
+            to: Address,
+            value: U256,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        // PSP22 approve
+        #[ink(message, selector = 0xb20f)]
+        fn approve(&mut self, asset_id: u32, spender: Address, value: U256) -> Result<(), Error> {
+            Ok(())
+        }
+
+        // PSP22 increase_allowance
+        #[ink(message, selector = 0x96d6)]
+        fn increase_allowance(
+            &mut self,
+            asset_id: u32,
+            spender: Address,
+            value: U256,
+        ) -> Result<(), Error> {
+            Ok(())
+        }
+
+        // PSP22 decrease_allowance
+        #[ink(message, selector = 0xfecb)]
+        fn decrease_allowance(
+            &mut self,
+            asset_id: u32,
+            spender: Address,
+            value: U256,
+        ) -> Result<(), Error> {
             Ok(())
         }
     }
@@ -786,9 +892,15 @@ mod dao {
 
     impl Treasury for DAO {
         #[ink(message)]
-        fn spend(&mut self, track_id: u16,to: Address, _assert_id: u64, amount: U256) -> Result<u64, Error> {
+        fn spend(
+            &mut self,
+            track_id: u16,
+            to: Address,
+            _assert_id: u64,
+            amount: U256,
+        ) -> Result<u64, Error> {
             let caller = self.env().caller();
-            
+
             // check if user is an member
             ensure!(
                 self.member_balances.contains(caller),
@@ -808,9 +920,9 @@ mod dao {
 
             let call_args = ArgumentList::empty().push_arg(&id);
 
-            let call = Call{
+            let call = Call {
                 contract: None,
-                selector: [159,160,185,236],
+                selector: [159, 160, 185, 236],
                 input: call_args.encode(),
                 amount: amount,
                 ref_time_limit: u64::MAX,
@@ -832,8 +944,11 @@ mod dao {
             ensure!(!spend.payout, Error::SpendAlreadyExecuted);
 
             // transfer token
-            ok_or_err!(self.env().transfer(spend.to, spend.amount),Error::SpendTransferError);
-            
+            ok_or_err!(
+                self.env().transfer(spend.to, spend.amount),
+                Error::SpendTransferError
+            );
+
             // save state
             spend.payout = true;
             self.spends.insert(spend_index, &spend);
@@ -844,36 +959,11 @@ mod dao {
     impl DAO {
         /// create a new dao
         #[ink(constructor)]
-        pub fn new(users: Vec<(Address, U256)>, sudo_account: Option<Address>) -> Self {
-            let mut dao = DAO::default();
-            let mut members = Vec::new();
-            let mut member_balances = Mapping::default();
-            let mut total_issuance = U256::from(0);
-
-            // init members balances
-            for (user, balance) in users.iter() {
-                member_balances.insert(*user, balance);
-                members.push(*user);
-                total_issuance = total_issuance
-                    .checked_add(*balance)
-                    .expect("issuance overflow");
-            }
-
-            // init DAO
-            dao.members = members;
-            dao.member_balances = member_balances;
-            dao.total_issuance = total_issuance;
-            dao.sudo_account = sudo_account;
-
-            dao
-        }
-
-        /// create a new dao with gov track
-        #[ink(constructor)]
-        pub fn new_with_track(
+        pub fn new(
             users: Vec<(Address, U256)>,
+            public_join: bool,
             sudo_account: Option<Address>,
-            track: Track,
+            track: Option<Track>,
         ) -> Self {
             let mut dao = DAO::default();
             let mut members = Vec::new();
@@ -896,22 +986,37 @@ mod dao {
             dao.member_balances = member_balances;
             dao.total_issuance = total_issuance;
             dao.sudo_account = sudo_account;
+            dao.public_join = public_join;
 
-            // init vote track
-            tracks_helper.next_id = 1;
-            // tracks_helper.list.push(0);
-            tracks.insert(0, &track);
-            dao.tracks = tracks;
-            dao.tracks_helper = tracks_helper;
-            dao.defalut_track = Some(0);
+            if track.is_some() {
+                // init vote track
+                tracks_helper.next_id = 1;
+                // tracks_helper.list.push(0);
+                tracks.insert(0, &track.unwrap());
+                dao.tracks = tracks;
+                dao.tracks_helper = tracks_helper;
+                dao.defalut_track = Some(0);
+            }
 
             dao
+        }
+
+        /// create a new dao with gov track
+        #[ink(constructor)]
+        pub fn new_with_track(
+            users: Vec<(Address, U256)>,
+            public_join: bool,
+            sudo_account: Option<Address>,
+            track: Track,
+        ) -> Self {
+            DAO::new(users, public_join, sudo_account, Some(track))
         }
 
         /// create a new dao with default gov track
         #[ink(constructor)]
         pub fn new_with_default_track(
             users: Vec<(Address, U256)>,
+            public_join: bool,
             sudo_account: Option<Address>,
         ) -> Self {
             let track = Track {
@@ -935,7 +1040,7 @@ mod dao {
                 },
             };
 
-            DAO::new_with_track(users, sudo_account, track)
+            DAO::new_with_track(users, public_join, sudo_account, track)
         }
 
         #[ink(message)]

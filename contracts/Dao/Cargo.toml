@@ -1,24 +1,26 @@
 [package]
-name = "dao"
-version = "0.1.0"
 authors = ["[your_name] <[your_email]>"]
 edition = "2021"
+name = "dao"
+version = "0.1.0"
 
 [dependencies]
-ink = { workspace = true, default-features = false, features = ["unstable-hostfn"] }
-primitives = { path = "../../primitives", package = "primitives", default-features = false }
+ed25519-zebra = {version = "4.0.3", optional = true, default-features = false}
+ink = {workspace = true, default-features = false, features = ["unstable-hostfn"]}
+primitives = {path = "../../primitives", package = "primitives", default-features = false}
 
 [dev-dependencies]
-ink_e2e = { workspace = true }
+ink_e2e = {workspace = true}
 
 [lib]
 path = "src/lib.rs"
 
 [features]
 default = ["std"]
-std = [
-    "ink/std",
-    "primitives/std",
-]
-ink-as-dependency = []
 e2e-tests = []
+ink-as-dependency = []
+std = [
+  "ink/std",
+  "primitives/std",
+  "ed25519-zebra/std",
+]

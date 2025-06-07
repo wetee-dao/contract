@@ -160,8 +160,12 @@ impl ink::scale::Encode for CallInput<'_> {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Spend {
+    /// caller address
     pub caller: Address,
+    /// pay to address
     pub to: Address,
+    /// amount
     pub amount: U256,
+    /// is payout
     pub payout: bool,
 }

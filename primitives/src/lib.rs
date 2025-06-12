@@ -43,13 +43,3 @@ macro_rules! ok_or_err {
         }
     };
 }
-
-#[macro_export]
-macro_rules! some_or_err {
-    ($option:expr, $error:expr) => {
-        match $option {
-            Some(val) => val,
-            None => return Err($error),
-        }
-    };
-}

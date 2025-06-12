@@ -5,7 +5,6 @@ name = "dao"
 version = "0.1.0"
 
 [dependencies]
-ed25519-zebra = {version = "4.0.3", optional = true, default-features = false}
 ink = {workspace = true, default-features = false, features = ["unstable-hostfn"]}
 primitives = {path = "../../primitives", package = "primitives", default-features = false}
 
@@ -22,5 +21,4 @@ ink-as-dependency = []
 std = [
   "ink/std",
   "primitives/std",
-  "ed25519-zebra/std",
 ]

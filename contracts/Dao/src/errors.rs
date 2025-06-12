@@ -1,6 +1,8 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Error {
+    /// token not found
+    TokenNotFound,
     /// Returned if member already exists.
     MemberExisted,
     /// Returned if  member does not exist.

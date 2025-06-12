@@ -9,7 +9,7 @@ pub trait Treasury {
         &mut self,
         track_id: u16,
         to: Address,
-        assert_id: u64,
+        assert_id: u32,
         amount: U256,
     ) -> Result<u64, Error>;
 

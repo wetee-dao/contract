@@ -2,7 +2,7 @@
 
 use ink::{prelude::vec::Vec, Address, U256};
 
-use crate::{dao::DAO, errors::Error};
+use crate::errors::Error;
 
 #[ink::trait_definition]
 pub trait PSP22 {

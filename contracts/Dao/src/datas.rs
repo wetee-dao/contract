@@ -2,6 +2,18 @@ use ink::{env::BlockNumber, prelude::vec::Vec, scale::Output, Address, U256};
 
 use crate::curve::Curve;
 
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct TokenInfo {
+    pub name: Vec<u8>,
+    pub symbol: Vec<u8>,
+    pub decimals: u8,
+}
+
 /// vote yes or no
 /// 投票
 #[derive(Clone)]

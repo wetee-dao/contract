@@ -7,7 +7,7 @@ mod events;
 #[ink::contract]
 mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
-    use primitives::{ensure, ok_or_err, some_or_err, ListHelper, VecIndex};
+    use primitives::{ensure, ok_or_err, ListHelper, VecIndex};
 
     use crate::{datas::*, errors::Error};
 
@@ -119,7 +119,7 @@ mod subnet {
             deposit: U256,
         ) -> Result<NodeID, Error> {
             let caller = self.env().caller();
-            let worker = some_or_err!(self.workers.get(id), Error::WorkerNotExist);
+            let worker = self.workers.get(id).ok_or(Error::WorkerNotExist)?;
 
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
@@ -154,22 +154,25 @@ mod subnet {
             mortgage_id: u128,
         ) -> Result<NodeID, Error> {
             let caller = self.env().caller();
-            let worker = some_or_err!(self.workers.get(id), Error::WorkerNotExist);
+            let worker = self.workers.get(id).ok_or(Error::WorkerNotExist)?;
 
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
 
             let mut index = self.mortgage_of_worker.get(id).unwrap_or_default();
-            let i = some_or_err!(
-                index.list.iter().position(|t| t == &mortgage_id),
-                Error::WorkerMortgageNotExist
-            );
+            let i = index
+                .list
+                .iter()
+                .position(|t| t == &mortgage_id)
+                .ok_or(Error::WorkerMortgageNotExist)?;
             index.list.swap_remove(i);
 
             self.mortgage_of_worker.insert(id, &index);
 
-            let mut mortgage =
-                some_or_err!(self.worker_mortgages.get(id), Error::WorkerMortgageNotExist);
+            let mut mortgage = self
+                .worker_mortgages
+                .get(id)
+                .ok_or(Error::WorkerMortgageNotExist)?;
             mortgage.deleted = Some(self.env().block_number());
             self.worker_mortgages.insert(id, &mortgage);
 
@@ -184,7 +187,7 @@ mod subnet {
         #[ink(message)]
         pub fn worker_stop(&mut self, id: NodeID) -> Result<NodeID, Error> {
             let caller = self.env().caller();
-            let worker = some_or_err!(self.workers.get(id), Error::WorkerNotExist);
+            let worker = self.workers.get(id).ok_or(Error::WorkerNotExist)?;
 
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
@@ -236,7 +239,7 @@ mod subnet {
         #[ink(message)]
         pub fn secret_deposit(&mut self, id: NodeID, deposit: U256) -> Result<(), Error> {
             let caller = self.env().caller();
-            let node = some_or_err!(self.secrets.get(id), Error::NodeNotExist);
+            let node = self.secrets.get(id).ok_or(Error::NodeNotExist)?;
 
             ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(node.status == 0, Error::WorkerStatusNotReady);
@@ -284,25 +287,22 @@ mod subnet {
             }
 
             let public_key: [u8; 32] = [
-                212, 53, 147, 199, 21, 253, 211, 28, 97, 20, 26, 189, 4, 169, 159, 214,
-                130, 44, 133, 88, 133, 76, 205, 227, 154, 86, 132, 231, 165, 109, 162,
-                125,
+                212, 53, 147, 199, 21, 253, 211, 28, 97, 20, 26, 189, 4, 169, 159, 214, 130, 44,
+                133, 88, 133, 76, 205, 227, 154, 86, 132, 231, 165, 109, 162, 125,
             ];
             let message: [u8; 49] = [
-                60, 66, 121, 116, 101, 115, 62, 48, 120, 52, 54, 102, 98, 55, 52, 48, 56,
-                100, 52, 102, 50, 56, 53, 50, 50, 56, 102, 52, 97, 102, 53, 49, 54, 101,
-                97, 50, 53, 56, 53, 49, 98, 60, 47, 66, 121, 116, 101, 115, 62,
+                60, 66, 121, 116, 101, 115, 62, 48, 120, 52, 54, 102, 98, 55, 52, 48, 56, 100, 52,
+                102, 50, 56, 53, 50, 50, 56, 102, 52, 97, 102, 53, 49, 54, 101, 97, 50, 53, 56, 53,
+                49, 98, 60, 47, 66, 121, 116, 101, 115, 62,
             ];
             // alice's signature of the message
             let signature: [u8; 64] = [
-                10, 125, 162, 182, 49, 112, 76, 220, 254, 147, 199, 64, 228, 18, 23, 185,
-                172, 102, 122, 12, 135, 85, 216, 218, 26, 130, 50, 219, 82, 127, 72, 124,
-                135, 231, 128, 210, 237, 193, 137, 106, 235, 107, 27, 239, 11, 199, 195,
-                141, 157, 242, 19, 91, 99, 62, 171, 139, 251, 23, 119, 232, 47, 173, 58,
-                143,
+                10, 125, 162, 182, 49, 112, 76, 220, 254, 147, 199, 64, 228, 18, 23, 185, 172, 102,
+                122, 12, 135, 85, 216, 218, 26, 130, 50, 219, 82, 127, 72, 124, 135, 231, 128, 210,
+                237, 193, 137, 106, 235, 107, 27, 239, 11, 199, 195, 141, 157, 242, 19, 91, 99, 62,
+                171, 139, 251, 23, 119, 232, 47, 173, 58, 143,
             ];
-            let result = ink::env::sr25519_verify(&signature, &message, &public_key);
-            self.env().sr25519_verify(&signature, &message, pub_key);
+            ok_or_err!(self.env().sr25519_verify(&signature, &message, &public_key),Error::NodeNotExist);
 
             Ok(())
         }

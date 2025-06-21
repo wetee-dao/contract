@@ -16,6 +16,7 @@ mod subnet {
     pub struct Subnet {
         /// parent contract ==> cloud contract
         parent_contract: Address,
+
         /// workers
         workers: Mapping<NodeID, K8sCluster>,
         /// workers list helper
@@ -23,7 +24,7 @@ mod subnet {
         /// user off worker
         worker_of_user: Mapping<Address, NodeID>,
 
-        /// secrets
+        /// secret validators
         secrets: Mapping<NodeID, SecretNode>,
         /// secrets list helper
         secrets_helper: ListHelper<NodeID>,
@@ -32,10 +33,17 @@ mod subnet {
         /// secret mortgages
         secret_mortgages: Mapping<NodeID, U256>,
 
+        /// subnet epoch
+        epoch: u32,
+        /// last epoch block
+        last_epoch_block: BlockNumber,
+        /// next epoch validators
+        next_epoch_validators: U256,
+
         /// run secrets
-        runing_secrets: Vec<NodeID>,
+        runing_secrets: Vec<(NodeID, u32)>,
         /// pending secrets
-        pending_secrets: Vec<NodeID>,
+        pending_secrets: Vec<(NodeID, u32)>,
 
         /// worker node code TEE version (TEE Signer,TEE signature)
         dworker_code: (Vec<u8>, Vec<u8>),
@@ -53,6 +61,9 @@ mod subnet {
         deposit_prices: Mapping<u8, U256>,
         /// n/1_000_000 of USD
         deposit_ratio: Mapping<u32, U256>,
+
+        /// boot nooes
+        boot_nodes: Vec<NodeID>,
     }
 
     impl Subnet {
@@ -74,10 +85,43 @@ mod subnet {
         }
 
         #[ink(message)]
+        pub fn boot_nodes(&self) -> Result<Vec<SecretNode>, Error> {
+            let mut nodes = Vec::new();
+            for id in self.boot_nodes.iter() {
+                let node = self.secrets.get(*id).ok_or(Error::NodeNotExist)?;
+                nodes.push(node);
+            }
+
+            return Ok(nodes);
+        }
+
+        #[ink(message)]
+        pub fn set_boot_nodes(&mut self, nodes: Vec<NodeID>) -> Result<(), Error> {
+            self.ensure_from_parent()?;
+            self.boot_nodes = nodes;
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn workers(&self) -> Result<Vec<K8sCluster>, Error> {
+            let id = self.workers_helper.next_id - 1;
+            let mut workers = Vec::new();
+            for i in 0..id {
+                let worker = self.workers.get(i).ok_or(Error::NodeNotExist)?;
+                workers.push(worker);
+            }
+
+            return Ok(workers);
+        }
+
+        #[ink(message)]
         pub fn worker_register(
             &mut self,
             name: Vec<u8>,
-            ip: Vec<Ip>,
+            validator_id: AccountId,
+            p2p_id: AccountId,
+            ip: Ip,
             port: u32,
             level: u8,
         ) -> Result<NodeID, Error> {
@@ -86,6 +130,8 @@ mod subnet {
 
             let worker = K8sCluster {
                 name: name,
+                validator_id,
+                p2p_id,
                 ip: ip,
                 port: port,
                 level: level,
@@ -206,10 +252,24 @@ mod subnet {
         }
 
         #[ink(message)]
+        pub fn secrets(&self) -> Result<Vec<SecretNode>, Error> {
+            let id = self.secrets_helper.next_id - 1;
+            let mut secrets = Vec::new();
+            for i in 0..id {
+                let secret = self.secrets.get(i).ok_or(Error::NodeNotExist)?;
+                secrets.push(secret);
+            }
+
+            return Ok(secrets);
+        }
+
+        #[ink(message)]
         pub fn secret_register(
             &mut self,
             name: Vec<u8>,
-            ip: Vec<Ip>,
+            validator_id: AccountId,
+            p2p_id: AccountId,
+            ip: Ip,
             port: u32,
         ) -> Result<NodeID, Error> {
             let caller = self.env().caller();
@@ -220,6 +280,8 @@ mod subnet {
                 ip: ip,
                 port: port,
                 owner: caller,
+                validator_id,
+                p2p_id,
                 start_block: now,
                 stop_block: None,
                 terminal_block: None,
@@ -255,13 +317,18 @@ mod subnet {
         pub fn secret_join(&mut self, id: NodeID) -> Result<(), Error> {
             self.ensure_from_parent()?;
 
-            let pending = self.pending_secrets.clone();
-            ensure!(pending.contains(&id), Error::SecretNodeAlreadyExists);
-
-            let nodes = self.runing_secrets.clone();
-            ensure!(nodes.contains(&id), Error::SecretNodeAlreadyExists);
-
-            self.pending_secrets.push(id);
+            let mut nodes = self.pending_secrets.clone();
+            let mut is_in = false;
+            for (_, node) in nodes.iter_mut().enumerate() {
+                if node.0 == id {
+                    is_in = true;
+                    node.1 = 1;
+                    break;
+                }
+            }
+            if !is_in {
+                nodes.push((id, 1));
+            }
 
             Ok(())
         }
@@ -270,41 +337,67 @@ mod subnet {
         pub fn secret_delete(&mut self, id: NodeID) -> Result<(), Error> {
             self.ensure_from_parent()?;
 
-            let nodes = self.runing_secrets.clone();
-            if nodes.contains(&id) {
-                let i = nodes.iter().position(|t| t == &id);
-                if i.is_some() {
-                    self.runing_secrets.swap_remove(i.unwrap());
+            let mut nodes = self.pending_secrets.clone();
+            let mut is_in = false;
+            for (_, node) in nodes.iter_mut().enumerate() {
+                if node.0 == id {
+                    is_in = true;
+                    *node = (node.0, 0u32);
+                    break;
                 }
             }
-
-            let pendding = self.pending_secrets.clone();
-            if pendding.contains(&id) {
-                let i = pendding.iter().position(|t| t == &id);
-                if i.is_some() {
-                    self.pending_secrets.swap_remove(i.unwrap());
-                }
+            if !is_in {
+                nodes.push((id, 0));
             }
-
-            let public_key: [u8; 32] = [
-                212, 53, 147, 199, 21, 253, 211, 28, 97, 20, 26, 189, 4, 169, 159, 214, 130, 44,
-                133, 88, 133, 76, 205, 227, 154, 86, 132, 231, 165, 109, 162, 125,
-            ];
-            let message: [u8; 49] = [
-                60, 66, 121, 116, 101, 115, 62, 48, 120, 52, 54, 102, 98, 55, 52, 48, 56, 100, 52,
-                102, 50, 56, 53, 50, 50, 56, 102, 52, 97, 102, 53, 49, 54, 101, 97, 50, 53, 56, 53,
-                49, 98, 60, 47, 66, 121, 116, 101, 115, 62,
-            ];
-            // alice's signature of the message
-            let signature: [u8; 64] = [
-                10, 125, 162, 182, 49, 112, 76, 220, 254, 147, 199, 64, 228, 18, 23, 185, 172, 102,
-                122, 12, 135, 85, 216, 218, 26, 130, 50, 219, 82, 127, 72, 124, 135, 231, 128, 210,
-                237, 193, 137, 106, 235, 107, 27, 239, 11, 199, 195, 141, 157, 242, 19, 91, 99, 62,
-                171, 139, 251, 23, 119, 232, 47, 173, 58, 143,
-            ];
-            ok_or_err!(self.env().sr25519_verify(&signature, &message, &public_key),Error::NodeNotExist);
 
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn epoch(&self) -> (u32, BlockNumber, BlockNumber) {
+            let now = self.env().block_number();
+            (self.epoch, self.last_epoch_block, now)
+        }
+
+        #[ink(message)]
+        pub fn next_epoch(&mut self) -> Result<(), Error> {
+            let now = self.env().block_number();
+            let last_epoch = self.last_epoch_block;
+
+            ensure!(now - last_epoch >= 72000u32.into(), Error::EpochNotExpired);
+
+            self.epoch += 1;
+            self.last_epoch_block = now;
+            self.calc_new_validators();
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn next_epoch_with_gov(&mut self) -> Result<(), Error> {
+            self.ensure_from_parent()?;
+            let now = self.env().block_number();
+
+            self.epoch += 1;
+            self.last_epoch_block = now;
+            self.calc_new_validators();
+
+            Ok(())
+        }
+
+        fn calc_new_validators(&mut self) {
+            let mut runings = self.runing_secrets.clone();
+            let pendings = self.pending_secrets.clone();
+            for (_, runing) in runings.iter_mut().enumerate() {
+                for (_, pending) in pendings.iter().enumerate() {
+                    if runing.0 == pending.0 {
+                        *runing = (runing.0, pending.1);
+                        break;
+                    }
+                }
+            }
+            runings.retain(|x| x.1 != 0);
+            self.runing_secrets = runings;
         }
 
         /// Gov call only call from contract

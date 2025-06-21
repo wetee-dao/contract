@@ -23,4 +23,6 @@ pub enum Error {
     SecretNodeAlreadyExists,
     /// Update: set code failed
     SetCodeFailed,
+    /// Epoch not expired
+    EpochNotExpired,
 }

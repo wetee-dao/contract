@@ -1,4 +1,4 @@
-use ink::{env::BlockNumber, prelude::vec::Vec, Address, U256};
+use ink::{env::BlockNumber, prelude::vec::Vec, primitives::AccountId, Address, U256};
 
 pub type NodeID = u128;
 // pub type AssetId = u64;
@@ -10,6 +10,9 @@ pub type NodeID = u128;
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct K8sCluster {
+    /// name of the K8sCluster.
+    /// 集群名字
+    pub name: Vec<u8>,
     /// owner of K8sCluster
     /// 创建者
     pub owner: Address,
@@ -25,12 +28,11 @@ pub struct K8sCluster {
     /// terminal time
     /// 终止时间
     pub terminal_block: Option<BlockNumber>,
-    /// name of the K8sCluster.
-    /// 集群名字
-    pub name: Vec<u8>,
+	// subnet ed25519 p2p
+	pub p2p_id: AccountId,
     /// ip of service
     /// 服务端口号
-    pub ip: Vec<Ip>,
+    pub ip: Ip,
     /// port of service
     /// 服务端口号
     pub port: u32,
@@ -46,9 +48,16 @@ pub struct K8sCluster {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct SecretNode {
+    /// name of the K8sCluster.
+    /// 集群名字
+    pub name: Vec<u8>,
     /// owner of K8sCluster
     /// 创建者
     pub owner: Address,
+    // subnet ed25519 validator
+	pub validator_id: AccountId,
+	// subnet ed25519 p2p
+	pub p2p_id: AccountId,
     /// The block that creates the K8sCluster
     /// App创建的区块
     pub start_block: BlockNumber,
@@ -58,12 +67,9 @@ pub struct SecretNode {
     /// terminal time
     /// 终止时间
     pub terminal_block: Option<BlockNumber>,
-    /// name of the K8sCluster.
-    /// 集群名字
-    pub name: Vec<u8>,
     /// ip of service
     /// 服务端口号
-    pub ip: Vec<Ip>,
+    pub ip: Ip,
     /// port of service
     /// 服务端口号
     pub port: u32,

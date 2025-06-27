@@ -1,25 +1,26 @@
 [package]
-name = "subnet"
-version = "0.1.0"
 authors = ["[your_name] <[your_email]>"]
 edition = "2021"
+name = "cloud"
+version = "0.1.0"
 
 [dependencies]
-ink = { workspace = true, default-features = false, features = ["unstable-hostfn"] }
+ink = {workspace = true, default-features = false, features = ["unstable-hostfn"]}
+scale = { workspace = true, default-features = false, features = ["derive"] }
 scale-info = { workspace = true, default-features = false }
 primitives = {path = "../../primitives", package = "primitives", default-features = false}
 
 [dev-dependencies]
-ink_e2e = { workspace = true }
+ink_e2e = {workspace = true}
 
 [lib]
 path = "src/lib.rs"
 
 [features]
 default = ["std"]
-std = [
-    "ink/std",
-    "primitives/std"
-]
-ink-as-dependency = []
 e2e-tests = []
+ink-as-dependency = []
+std = [
+  "ink/std",
+  "primitives/std",
+]

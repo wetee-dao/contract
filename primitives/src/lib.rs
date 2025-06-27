@@ -3,7 +3,10 @@
 use ink::prelude::vec::Vec;
 
 mod int;
+mod mapping;
+
 pub use int::*;
+pub use mapping::*;
 
 #[derive(Clone, Default)]
 #[cfg_attr(
@@ -43,3 +46,6 @@ macro_rules! ok_or_err {
         }
     };
 }
+
+#[cfg(test)]
+mod tests;

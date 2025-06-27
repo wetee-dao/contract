@@ -12,7 +12,7 @@ members = [
   # contracts
   "contracts/Dao",
   "contracts/Subnet",
-  # "contracts/Cloud",
+  "contracts/Cloud",
   # "contracts/Bridge",
 
   "primitives",
@@ -24,4 +24,6 @@ resolver = "2"
 # ink_e2e = { git = "https://github.com/use-ink/ink", branch = "master" }
 ink = { version = "6.0.0-alpha", default-features = false  }
 ink_e2e = { version = "6.0.0-alpha" }
+scale = { package = "parity-scale-codec", version = "3.7.4", default-features = false }
+scale-info = { version = "2.11", default-features = false }
 primitives = { path = "primitives" }

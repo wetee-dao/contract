@@ -14,7 +14,7 @@ mod subnet {
     #[ink(storage)]
     #[derive(Default)]
     pub struct Subnet {
-        /// parent contract ==> cloud contract
+        /// parent contract ==> Dao contract/user
         parent_contract: Address,
 
         /// workers
@@ -23,6 +23,13 @@ mod subnet {
         workers_helper: ListHelper<NodeID>,
         /// user off worker
         worker_of_user: Mapping<Address, NodeID>,
+
+        /// worker mortgage
+        worker_mortgages: Mapping<u128, AssetDeposit>,
+        /// mortgage list helper
+        worker_mortgage_helper: ListHelper<u128>,
+        /// node of worker
+        mortgage_of_worker: Mapping<NodeID, VecIndex<u128>>,
 
         /// secret validators
         secrets: Mapping<NodeID, SecretNode>,
@@ -37,25 +44,15 @@ mod subnet {
         epoch: u32,
         /// last epoch block
         last_epoch_block: BlockNumber,
-        /// next epoch validators
-        next_epoch_validators: U256,
-
         /// run secrets
         runing_secrets: Vec<(NodeID, u32)>,
         /// pending secrets
         pending_secrets: Vec<(NodeID, u32)>,
 
         /// worker node code TEE version (TEE Signer,TEE signature)
-        dworker_code: (Vec<u8>, Vec<u8>),
+        worker_code: (Vec<u8>, Vec<u8>),
         /// Secret node code TEE version (TEE Signer,TEE signature)
-        dsecret_code: (Vec<u8>, Vec<u8>),
-
-        /// worker mortgage
-        worker_mortgages: Mapping<u128, AssetDeposit>,
-        /// mortgage list helper
-        worker_mortgage_helper: ListHelper<u128>,
-        /// node of worker
-        mortgage_of_worker: Mapping<NodeID, VecIndex<u128>>,
+        secret_code: (Vec<u8>, Vec<u8>),
 
         /// USD of deposit Price
         deposit_prices: Mapping<u8, U256>,
@@ -98,7 +95,12 @@ mod subnet {
         #[ink(message)]
         pub fn set_boot_nodes(&mut self, nodes: Vec<NodeID>) -> Result<(), Error> {
             self.ensure_from_parent()?;
-            self.boot_nodes = nodes;
+
+            let mut lnodes = nodes;
+            lnodes.sort();
+            lnodes.dedup();
+            
+            self.boot_nodes = lnodes;
 
             Ok(())
         }
@@ -119,7 +121,6 @@ mod subnet {
         pub fn worker_register(
             &mut self,
             name: Vec<u8>,
-            validator_id: AccountId,
             p2p_id: AccountId,
             ip: Ip,
             port: u32,
@@ -130,7 +131,6 @@ mod subnet {
 
             let worker = K8sCluster {
                 name: name,
-                validator_id,
                 p2p_id,
                 ip: ip,
                 port: port,
@@ -385,6 +385,7 @@ mod subnet {
             Ok(())
         }
 
+        /// calaculate new validators
         fn calc_new_validators(&mut self) {
             let mut runings = self.runing_secrets.clone();
             let pendings = self.pending_secrets.clone();
@@ -396,8 +397,10 @@ mod subnet {
                     }
                 }
             }
+            
             runings.retain(|x| x.1 != 0);
             self.runing_secrets = runings;
+            self.pending_secrets = Vec::new();
         }
 
         /// Gov call only call from contract

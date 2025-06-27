@@ -1456,6 +1456,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
+name = "cloud"
+version = "0.1.0"
+dependencies = [
+ "ink",
+ "ink_e2e",
+ "parity-scale-codec",
+ "primitives",
+ "scale-info",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1812,6 +1823,7 @@ dependencies = [
  "ink",
  "ink_e2e",
  "primitives",
+ "scale-info",
 ]
 
 [[package]]
@@ -7532,6 +7544,7 @@ dependencies = [
  "ink",
  "ink_e2e",
  "primitives",
+ "scale-info",
 ]
 
 [[package]]

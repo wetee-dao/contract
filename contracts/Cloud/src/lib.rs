@@ -52,8 +52,8 @@ mod cloud {
         pub fn create_user_pod(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
 
-            let podid = self.pods.insert(Pod::default());
-            let _id = self.pod_of_user.set(caller, podid);
+            let podid = self.pods.insert(&Pod::default());
+            let _id = self.pod_of_user.insert(caller, &podid);
 
             Ok(())
         }

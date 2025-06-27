@@ -25,15 +25,13 @@ mod dao {
         storage::Mapping,
         H256, U256,
     };
-    use primitives::{ensure, ok_or_err, ListHelper};
+    use primitives::{ensure, ok_or_err};
 
     #[ink(storage)]
     #[derive(Default)]
     pub struct DAO {
         /// proposals
-        proposals: Mapping<CalllId, Call>,
-        /// proposals list helper
-        proposals_helper: ListHelper<CalllId>,
+        proposals: Proposals,
         /// track of proposal
         track_of_proposal: Mapping<CalllId, u16>,
         /// caller of proposal
@@ -43,37 +41,26 @@ mod dao {
         /// status of proposal
         status_of_proposal: Mapping<CalllId, PropStatus>,
         /// votes of proposal
-        votes_of_proposal: Mapping<CalllId, Vec<u128>>,
+        votes_of_proposal: VoteOfProposal,
         /// submit block number
         submit_block_of_proposal: Mapping<CalllId, BlockNumber>,
 
         /// tracks
-        tracks: Mapping<u16, Track>,
-        /// tracks list helper
-        tracks_helper: ListHelper<u16>,
-
+        tracks: Tracks,
         /// track rules (If selector == none, it means entire contract uses a single track)
         track_rules: Mapping<(Option<Address>, Option<Selector>), u16>,
-        /// track rules index
-        track_rule_index: Mapping<u16, (Option<Address>, Option<Selector>, u16)>,
-        /// track rules index helper
-        track_rule_index_helper: ListHelper<u16>,
         /// default track
         defalut_track: Option<u16>,
 
         /// vote of proposal
-        votes: Mapping<u128, VoteInfo>,
-        /// proposals list helper
-        votes_helper: ListHelper<u128>,
+        votes: Votes,
         /// votes of member
-        vote_of_member: Mapping<Address, Vec<u128>>,
+        vote_of_member: VoteOfMember,
         /// lock of votes
-        unlock_of_votes: Mapping<u128, ()>,
+        unlock_of_votes: Mapping<u64, ()>,
 
         /// sudo call history
-        sudo_calls: Mapping<CalllId, Call>,
-        /// next sudo call id
-        sudo_helper: ListHelper<CalllId>,
+        sudo_calls: SudoCalls,
         /// sudo account
         sudo_account: Option<Address>,
 
@@ -91,9 +78,9 @@ mod dao {
         transfer: bool,
 
         /// token info
-        tokens: Mapping<u32,TokenInfo>,
+        tokens: Mapping<u32, TokenInfo>,
         /// tokens of member
-        member_tokens: Mapping<(Address,u32), U256>,
+        member_tokens: Mapping<(Address, u32), U256>,
 
         /// next spend id
         next_spend_id: u64,
@@ -398,10 +385,7 @@ mod dao {
             }
 
             // Insert call into sudo history
-            let call_id = self.sudo_helper.next_id;
-            self.sudo_helper.next_id = call_id.checked_add(1).expect("call id overflow");
-            self.sudo_calls.insert(call_id, &call);
-
+            let call_id = self.sudo_calls.insert(&call.clone());
             let result = self.exec_call(call);
             self.env().emit_event(SudoExecution {
                 sudo_id: call_id,
@@ -472,25 +456,21 @@ mod dao {
         ) -> Result<(), Error> {
             self.ensure_from_gov()?;
 
-            let id = self.tracks_helper.next_id;
+            // let id = self.tracks_helper.next_id;
             let approval = arg_to_curve(min_approval);
             let support = arg_to_curve(min_support);
-            self.tracks.insert(
-                id,
-                &Track {
-                    name,
-                    prepare_period,
-                    decision_deposit,
-                    max_deciding,
-                    confirm_period,
-                    decision_period,
-                    min_enactment_period,
-                    max_balance,
-                    min_approval: approval,
-                    min_support: support,
-                },
-            );
-            self.tracks_helper.next_id = id.checked_add(1).expect("track id overflow");
+            self.tracks.insert(&Track {
+                name,
+                prepare_period,
+                decision_deposit,
+                max_deciding,
+                confirm_period,
+                decision_period,
+                min_enactment_period,
+                max_balance,
+                min_approval: approval,
+                min_support: support,
+            });
 
             Ok(())
         }
@@ -517,7 +497,7 @@ mod dao {
 
             let approval = arg_to_curve(min_approval);
             let support = arg_to_curve(min_support);
-            self.tracks.insert(
+            self.tracks.update(
                 id,
                 &Track {
                     name,
@@ -571,10 +551,7 @@ mod dao {
             ensure!(call.amount >= track.max_balance, Error::MaxBalanceOverflow);
 
             // save proposal
-            let call_id = self.proposals_helper.next_id;
-            self.proposals_helper.next_id = call_id.checked_add(1).expect("proposal id overflow");
-            // self.proposals_helper.list.push(call_id);
-            self.proposals.insert(call_id, &call);
+            let call_id = self.proposals.insert(&call);
 
             // set caller of proposal
             self.proposal_caller.insert(call_id, &caller);
@@ -626,12 +603,18 @@ mod dao {
             let payvalue = self.env().transferred_value();
 
             // check status
-            let status = self.status_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let status = self
+                .status_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             if status != PropStatus::Pending {
                 return Err(Error::InvalidProposalStatus);
             }
 
-            let deposit = self.deposit_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let deposit = self
+                .deposit_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
 
             // check track
             let track = self.get_track(proposal_id)?;
@@ -658,14 +641,24 @@ mod dao {
 
         #[ink(message)]
         fn vote_list(&self, proposal_id: CalllId) -> Vec<VoteInfo> {
-            let list = self.votes_of_proposal.get(proposal_id).unwrap_or_default();
-            list.into_iter()
-                .map(|id| self.votes.get(id).unwrap())
-                .collect()
+            let ids = self
+                .votes_of_proposal
+                .desc_list(proposal_id, 1, 10)
+                .unwrap();
+            let mut list = Vec::new();
+            for id in ids {
+                let info = self.votes.get(id.1);
+                if info.is_none() {
+                    continue;
+                }
+                list.push(info.unwrap());
+            }
+
+            list
         }
 
         #[ink(message)]
-        fn vote(&mut self, vote_id: u128) -> Option<VoteInfo> {
+        fn vote(&mut self, vote_id: u64) -> Option<VoteInfo> {
             self.votes.get(vote_id)
         }
 
@@ -676,7 +669,10 @@ mod dao {
 
             // check token
             let payvalue = self.env().transferred_value();
-            let total = self.member_balances.get(caller).ok_or(Error::MemberNotExisted)?;
+            let total = self
+                .member_balances
+                .get(caller)
+                .ok_or(Error::MemberNotExisted)?;
             let lock = self
                 .member_lock_balances
                 .get(caller)
@@ -686,20 +682,26 @@ mod dao {
             }
 
             // check status
-            let status = self.status_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let status = self
+                .status_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             if status != PropStatus::Ongoing {
                 return Err(Error::PropNotOngoing);
             }
 
             // check time
-            let deposit_block = self.submit_block_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let deposit_block = self
+                .submit_block_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             let track = self.get_track(proposal_id)?;
             let now = self.env().block_number();
             if now > deposit_block + track.max_deciding {
                 return Err(Error::InvalidVoteTime);
             }
 
-            let vid = self.votes_helper.next_id;
+            let vid = self.votes.next_id();
             let vote = VoteInfo {
                 pledge: payvalue,
                 opinion,
@@ -715,25 +717,17 @@ mod dao {
             self.member_lock_balances.insert(caller, &(lock + payvalue));
 
             // save vote
-            let mut votes = self.vote_of_member.get(caller).unwrap_or_default();
-            votes.push(vid);
-            self.vote_of_member.insert(caller, &votes);
+            self.vote_of_member.insert(caller, &vid);
+            self.votes_of_proposal.insert(proposal_id, &vid);
 
-            let mut votes_of_proposal = self.votes_of_proposal.get(proposal_id).unwrap_or_default();
-            votes_of_proposal.push(vid);
-            self.votes_of_proposal
-                .insert(proposal_id, &votes_of_proposal);
-
-            self.votes.insert(vid, &vote);
-            // self.votes_helper.list.push(vid);
-            self.votes_helper.next_id = vid + 1;
+            self.votes.insert(&vote);
 
             Ok(())
         }
 
         /// Cancel vote before proposal is executed or rejected
         #[ink(message)]
-        fn cancel_vote(&mut self, vote_id: u128) -> Result<(), Error> {
+        fn cancel_vote(&mut self, vote_id: u64) -> Result<(), Error> {
             let caller = self.env().caller();
 
             let mut vote = self.votes.get(vote_id).ok_or(Error::InvalidVote)?;
@@ -745,13 +739,16 @@ mod dao {
 
             // check proposal status
             let proposal_id = vote.call_id;
-            let status = self.status_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let status = self
+                .status_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             if status != PropStatus::Ongoing {
                 return Err(Error::PropNotOngoing);
             }
 
             vote.deleted = true;
-            self.votes.insert(vote_id, &vote);
+            self.votes.update(vote_id, &vote);
 
             // unlock token
             let lock = self
@@ -766,7 +763,7 @@ mod dao {
 
         /// Unlock tokens after proposal is executed or rejected
         #[ink(message)]
-        fn unlock(&mut self, vote_id: u128) -> Result<(), Error> {
+        fn unlock(&mut self, vote_id: u64) -> Result<(), Error> {
             let caller = self.env().caller();
 
             // check vote unlock status
@@ -810,10 +807,16 @@ mod dao {
         /// Execute proposal after vote is passed
         #[ink(message)]
         fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error> {
-            let call = self.proposals.get(proposal_id).ok_or(Error::InvalidProposal)?;
+            let call = self
+                .proposals
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposal)?;
 
             // check status
-            let status = self.status_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let status = self
+                .status_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             if status != PropStatus::Ongoing {
                 return Err(Error::PropNotOngoing);
             }
@@ -860,7 +863,10 @@ mod dao {
             }
 
             // check status
-            let status = self.status_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let status = self
+                .status_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             if status != PropStatus::Ongoing {
                 return Ok(status);
             }
@@ -957,8 +963,7 @@ mod dao {
             let mut members = Vec::new();
             let mut member_balances = Mapping::default();
             let mut total_issuance = U256::from(0);
-            let mut tracks = Mapping::default();
-            let mut tracks_helper = ListHelper::<u16>::default();
+            let mut tracks: Tracks = Default::default();
 
             // init members balances
             for (user, balance) in users.iter() {
@@ -978,11 +983,8 @@ mod dao {
 
             if track.is_some() {
                 // init vote track
-                tracks_helper.next_id = 1;
-                // tracks_helper.list.push(0);
-                tracks.insert(0, &track.unwrap());
+                tracks.insert(&track.unwrap());
                 dao.tracks = tracks;
-                dao.tracks_helper = tracks_helper;
                 dao.defalut_track = Some(0);
             }
 
@@ -1077,7 +1079,10 @@ mod dao {
 
         /// Get track of call
         fn get_track(&self, proposal_id: CalllId) -> Result<Track, Error> {
-            let track_id = self.track_of_proposal.get(proposal_id).ok_or(Error::NoTrack)?;
+            let track_id = self
+                .track_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::NoTrack)?;
             let track = self.tracks.get(track_id).ok_or(Error::NoTrack)?;
 
             Ok(track)
@@ -1089,10 +1094,13 @@ mod dao {
             proposal_id: CalllId,
         ) -> Result<(bool, BlockNumber, Track), Error> {
             // get votes
-            let vote_ids = self.votes_of_proposal.get(proposal_id).unwrap();
+            let vote_ids = self
+                .votes_of_proposal
+                .list(proposal_id, 1, 10000000)
+                .unwrap();
             let mut votes = Vec::new();
             for id in vote_ids {
-                let vote = self.votes.get(id).unwrap();
+                let vote = self.votes.get(id.1).unwrap();
                 votes.push(vote);
             }
 
@@ -1152,7 +1160,10 @@ mod dao {
 
         /// Calculate proposal end block
         fn calculate_proposal_end_block(&self, proposal_id: CalllId) -> Result<BlockNumber, Error> {
-            let status = self.status_of_proposal.get(proposal_id).ok_or(Error::InvalidProposalStatus)?;
+            let status = self
+                .status_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             match status {
                 PropStatus::Ongoing => {
                     let (is_confirm, end, _) = self.calculate_proposal_status(proposal_id)?;

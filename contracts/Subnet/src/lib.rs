@@ -7,7 +7,7 @@ mod events;
 #[ink::contract]
 mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
-    use primitives::{ensure, ok_or_err, ListHelper, VecIndex};
+    use primitives::{ensure, ok_or_err};
 
     use crate::{datas::*, errors::Error};
 
@@ -18,23 +18,15 @@ mod subnet {
         parent_contract: Address,
 
         /// workers
-        workers: Mapping<NodeID, K8sCluster>,
-        /// workers list helper
-        workers_helper: ListHelper<NodeID>,
+        workers: Workers,
         /// user off worker
         worker_of_user: Mapping<Address, NodeID>,
 
         /// worker mortgage
-        worker_mortgages: Mapping<u128, AssetDeposit>,
-        /// mortgage list helper
-        worker_mortgage_helper: ListHelper<u128>,
-        /// node of worker
-        mortgage_of_worker: Mapping<NodeID, VecIndex<u128>>,
+        worker_mortgages: WorkerMortgages,
 
         /// secret validators
-        secrets: Mapping<NodeID, SecretNode>,
-        /// secrets list helper
-        secrets_helper: ListHelper<NodeID>,
+        secrets: Secrets,
         /// user off secret
         secret_of_user: Mapping<Address, NodeID>,
         /// secret mortgages
@@ -99,21 +91,15 @@ mod subnet {
             let mut lnodes = nodes;
             lnodes.sort();
             lnodes.dedup();
-            
+
             self.boot_nodes = lnodes;
 
             Ok(())
         }
 
         #[ink(message)]
-        pub fn workers(&self) -> Result<Vec<K8sCluster>, Error> {
-            let id = self.workers_helper.next_id - 1;
-            let mut workers = Vec::new();
-            for i in 0..id {
-                let worker = self.workers.get(i).ok_or(Error::NodeNotExist)?;
-                workers.push(worker);
-            }
-
+        pub fn workers(&self) -> Result<Vec<(u128, K8sCluster)>, Error> {
+            let workers = self.workers.desc_list(1, 1000).unwrap_or_default();
             return Ok(workers);
         }
 
@@ -142,12 +128,8 @@ mod subnet {
                 status: 0,
             };
 
-            let id = self.workers_helper.next_id;
-            self.workers.insert(id, &worker);
-
+            let id = self.workers.insert(&worker);
             self.worker_of_user.insert(caller, &id);
-            // self.workers_helper.list.push(id);
-            self.workers_helper.next_id += 1;
 
             Ok(id)
         }
@@ -163,7 +145,7 @@ mod subnet {
             disk: u32,
             gpu: u32,
             deposit: U256,
-        ) -> Result<NodeID, Error> {
+        ) -> Result<u32, Error> {
             let caller = self.env().caller();
             let worker = self.workers.get(id).ok_or(Error::WorkerNotExist)?;
 
@@ -181,46 +163,34 @@ mod subnet {
                 deleted: None,
             };
 
-            let mid = self.worker_mortgage_helper.next_id;
-            self.worker_mortgages.insert(mid, &deposit);
-            self.worker_mortgage_helper.next_id += 1;
-            // self.worker_mortgage_helper.list.push(mid);
-
-            let mut index = self.mortgage_of_worker.get(id).unwrap_or_default();
-            index.list.push(mid);
-            self.mortgage_of_worker.insert(id, &index);
+            let mid = self.worker_mortgages.insert(id, &deposit).unwrap();
 
             Ok(mid)
         }
 
         #[ink(message)]
-        pub fn worker_unmortgage(
-            &mut self,
-            id: NodeID,
-            mortgage_id: u128,
-        ) -> Result<NodeID, Error> {
+        pub fn worker_unmortgage(&mut self, id: NodeID, mortgage_id: u32) -> Result<u32, Error> {
             let caller = self.env().caller();
             let worker = self.workers.get(id).ok_or(Error::WorkerNotExist)?;
 
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
 
-            let mut index = self.mortgage_of_worker.get(id).unwrap_or_default();
-            let i = index
-                .list
-                .iter()
-                .position(|t| t == &mortgage_id)
-                .ok_or(Error::WorkerMortgageNotExist)?;
-            index.list.swap_remove(i);
-
-            self.mortgage_of_worker.insert(id, &index);
-
-            let mut mortgage = self
+            let list = self
                 .worker_mortgages
-                .get(id)
+                .list(id, 1, 100000)
+                .unwrap_or_default();
+            let i = list
+                .iter()
+                .position(|t| t.0 == mortgage_id)
                 .ok_or(Error::WorkerMortgageNotExist)?;
-            mortgage.deleted = Some(self.env().block_number());
-            self.worker_mortgages.insert(id, &mortgage);
+
+            let now = self.env().block_number();
+            let mortgage_id = list[i].0;
+            let mut mortgage = list[i].1.clone();
+            mortgage.deleted = Some(now);
+
+            self.worker_mortgages.update(id, mortgage_id, &mortgage);
 
             ok_or_err!(
                 self.env().transfer(worker.owner, mortgage.amount),
@@ -238,29 +208,24 @@ mod subnet {
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
 
-            let worker = self
-                .mortgage_of_worker
-                .get(id)
+            let mut list = self
+                .worker_mortgages
+                .list(id, 0, 100)
                 .ok_or(Error::WorkerMortgageNotExist)?;
-            if worker.list.len() > 0 {
+
+            list.retain(|x| x.1.deleted == None);
+            if list.len() > 0 {
                 return Err(Error::WorkerIsUseByUser);
             }
-
-            self.mortgage_of_worker.remove(id);
 
             Ok(id)
         }
 
         #[ink(message)]
-        pub fn secrets(&self) -> Result<Vec<SecretNode>, Error> {
-            let id = self.secrets_helper.next_id - 1;
-            let mut secrets = Vec::new();
-            for i in 0..id {
-                let secret = self.secrets.get(i).ok_or(Error::NodeNotExist)?;
-                secrets.push(secret);
-            }
+        pub fn secrets(&self) -> Result<Vec<(u128, SecretNode)>, Error> {
+            let list = self.secrets.desc_list(1, 10000).unwrap();
 
-            return Ok(secrets);
+            return Ok(list);
         }
 
         #[ink(message)]
@@ -288,12 +253,8 @@ mod subnet {
                 status: 0,
             };
 
-            let id = self.secrets_helper.next_id;
-            self.secrets.insert(id, &node);
-
+            let id = self.secrets.insert(&node);
             self.secret_of_user.insert(caller, &id);
-            // self.secrets_helper.list.push(id);
-            self.secrets_helper.next_id += 1;
 
             Ok(id)
         }
@@ -397,7 +358,7 @@ mod subnet {
                     }
                 }
             }
-            
+
             runings.retain(|x| x.1 != 0);
             self.runing_secrets = runings;
             self.pending_secrets = Vec::new();

@@ -73,16 +73,16 @@ pub trait Gov {
     fn vote_list(&self, proposal_id: CalllId) -> Vec<VoteInfo>;
 
     #[ink(message)]
-    fn vote(&mut self, vote_id: u128) -> Option<VoteInfo>;
+    fn vote(&mut self, vote_id: u64) -> Option<VoteInfo>;
 
     #[ink(message)]
     fn submit_vote(&mut self, proposal_id: CalllId, opinion: Opinion) -> Result<(), Error>;
 
     #[ink(message)]
-    fn cancel_vote(&mut self, proposal_id: u128) -> Result<(), Error>;
+    fn cancel_vote(&mut self, proposal_id: u64) -> Result<(), Error>;
 
     #[ink(message)]
-    fn unlock(&mut self, vote_id: u128) -> Result<(), Error>;
+    fn unlock(&mut self, vote_id: u64) -> Result<(), Error>;
 
     #[ink(message)]
     fn exec_proposal(&mut self, proposal_id: CalllId) -> Result<Vec<u8>, Error>;

@@ -29,11 +29,15 @@ macro_rules! define_map {
                 self.next_id
             }
 
+            pub fn contains(&self, key: &$key_ty) -> bool {
+                self.store.contains(key)
+            }
+
             // insert value
-            pub fn insert(&mut self, value: $value_ty) -> $key_ty {
+            pub fn insert(&mut self, value: &$value_ty) -> $key_ty {
                 let key = self.next_id;
                 self.next_id += 1;
-                self.store.insert(key, &value);
+                self.store.insert(key, value);
 
                 key
             }
@@ -43,8 +47,8 @@ macro_rules! define_map {
                 self.store.get(key)
             }
 
-            pub fn update(&mut self, key: $key_ty, value: $value_ty) -> Option<u32> {
-                self.store.insert(key, &value)
+            pub fn update(&mut self, key: $key_ty, value: &$value_ty) -> Option<u32> {
+                self.store.insert(key, value)
             }
 
             // get list by k1 and page desc
@@ -152,8 +156,8 @@ macro_rules! define_double_map {
                 self.k2_next_id.get(id.unwrap()).unwrap_or_default()
             }
 
-            // set value with k1 require k2
-            pub fn set(&mut self, k: $k1_ty, v: $value_ty) -> Option<u32>{
+            // insert value with k1 require k2
+            pub fn insert(&mut self, k: $k1_ty, v: &$value_ty) -> Option<u32> {
                 // get id
                 let mut id = self.k1.get(&k);
                 if id.is_none() {
@@ -170,18 +174,18 @@ macro_rules! define_double_map {
                 self.k2_next_id.insert(id.unwrap(), &(next_id + 1));
 
                 let key = primitives::combine_u32_to_u64(id.unwrap(), next_id);
-                self.store.insert(key, &v)
+                self.store.insert(key, v)
             }
 
             // replace value for k1 and k2
-            pub fn replace(&mut self, k1: $k1_ty, k2: u32, v: $value_ty) -> Option<u32>{
+            pub fn update(&mut self, k1: $k1_ty, k2: u32, v: &$value_ty) -> Option<u32> {
                 let id = self.k1.get(&k1);
                 if id.is_none() {
                     return None;
                 }
 
                 let key = primitives::combine_u32_to_u64(id.unwrap(), k2);
-                self.store.insert(key, &v)
+                self.store.insert(key, v)
             }
 
             // get value by k1 and k2
@@ -196,7 +200,12 @@ macro_rules! define_double_map {
             }
 
             // get list by k1 and page desc
-            pub fn desc_list(&self, k1: $k1_ty, page: u32, size: u32) -> Option<ink::prelude::vec::Vec<(u32, $value_ty)>> {
+            pub fn desc_list(
+                &self,
+                k1: $k1_ty,
+                page: u32,
+                size: u32,
+            ) -> Option<ink::prelude::vec::Vec<(u32, $value_ty)>> {
                 let id = self.k1.get(&k1);
                 if id.is_none() {
                     return None;
@@ -215,10 +224,10 @@ macro_rules! define_double_map {
                 };
 
                 let mut list = ink::prelude::vec::Vec::new();
-                for i in 0..total+1 {
+                for i in 0..total + 1 {
                     let k = start - i as u64;
                     let v = self.store.get(k);
-                    let (_,k2) = primitives::split_u64_to_u32(k);
+                    let (_, k2) = primitives::split_u64_to_u32(k);
                     if v.is_some() {
                         list.push((k2, v.unwrap()));
                     }
@@ -228,7 +237,12 @@ macro_rules! define_double_map {
             }
 
             // get list by page and page asc
-            pub fn list(&self, k1: $k1_ty, page: u32, size: u32) -> Option<ink::prelude::vec::Vec<(u32, $value_ty)>> {
+            pub fn list(
+                &self,
+                k1: $k1_ty,
+                page: u32,
+                size: u32,
+            ) -> Option<ink::prelude::vec::Vec<(u32, $value_ty)>> {
                 let id = self.k1.get(&k1);
                 if id.is_none() {
                     return None;
@@ -248,9 +262,9 @@ macro_rules! define_double_map {
 
                 let mut list = ink::prelude::vec::Vec::new();
                 for i in 0..total {
-                    let k =start + i as u64;
+                    let k = start + i as u64;
                     let v = self.store.get(k);
-                    let (_,k2) = primitives::split_u64_to_u32(k);
+                    let (_, k2) = primitives::split_u64_to_u32(k);
                     if v.is_some() {
                         list.push((k2, v.unwrap()));
                     }
@@ -258,7 +272,7 @@ macro_rules! define_double_map {
 
                 return Some(list);
             }
-        }    
+        }
     };
 }
 

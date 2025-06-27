@@ -8,25 +8,25 @@ mod mapping;
 pub use int::*;
 pub use mapping::*;
 
-#[derive(Clone, Default)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct ListHelper<T> {
-    pub next_id: T,
-}
+// #[derive(Clone, Default)]
+// #[cfg_attr(
+//     feature = "std",
+//     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+// )]
+// #[ink::scale_derive(Encode, Decode, TypeInfo)]
+// pub struct ListHelper<T> {
+//     pub next_id: T,
+// }
 
-#[derive(Clone, Default)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct VecIndex<T> {
-    pub list: Vec<T>,
-}
+// #[derive(Clone, Default)]
+// #[cfg_attr(
+//     feature = "std",
+//     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+// )]
+// #[ink::scale_derive(Encode, Decode, TypeInfo)]
+// pub struct VecIndex<T> {
+//     pub list: Vec<T>,
+// }
 
 #[macro_export]
 macro_rules! ensure {

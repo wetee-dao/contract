@@ -139,3 +139,12 @@ pub struct DepositPrice {
     /// GPU price of one GPU
     pub gpu_per: u32,
 }
+
+primitives::define_map!(Workers, NodeID, K8sCluster);
+
+primitives::define_double_map!(WorkerMortgages, u128, AssetDeposit);
+
+primitives::define_map!(Secrets, NodeID, SecretNode);
+
+// mortgage_of_worker: Mapping<NodeID, Vec<u128>>,
+// primitives::define_double_map!(MortgageOfWorker, NodeID, u128);

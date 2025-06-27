@@ -165,7 +165,7 @@ impl ink::scale::Encode for CallInput<'_> {
     }
 }
 
-#[derive(Clone,Default)]
+#[derive(Clone, Default)]
 #[cfg_attr(
     feature = "std",
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
@@ -181,3 +181,15 @@ pub struct Spend {
     /// is payout
     pub payout: bool,
 }
+
+primitives::define_map!(Proposals, CalllId, Call);
+
+primitives::define_map!(Tracks, u16, Track);
+
+primitives::define_map!(Votes, u64, VoteInfo);
+
+primitives::define_map!(SudoCalls, CalllId, Call);
+
+primitives::define_double_map!(VoteOfProposal, CalllId, u64);
+
+primitives::define_double_map!(VoteOfMember, Address, u64);

@@ -5394,6 +5394,7 @@ name = "primitives"
 version = "0.1.0"
 dependencies = [
  "ink",
+ "scale-info",
 ]
 
 [[package]]

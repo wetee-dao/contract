@@ -59,9 +59,34 @@ mod cloud {
         }
 
         #[ink(message)]
+        pub fn pods(&self) -> Vec<(u64, Pod)> {
+           self.pods.list(1,100)
+        }
+
+        #[ink(message)]
+        pub fn desc_pods(&self) -> Vec<(u64, Pod)> {
+           self.pods.desc_list(1,100)
+        }
+
+        #[ink(message)]
         pub fn user_pods(&self) -> Vec<(u32, Pod)> {
             let caller = self.env().caller();
-            let ids = self.pod_of_user.list(caller, 1, 10).unwrap();
+            let ids = self.pod_of_user.list(caller, 1, 100);
+            let mut list = Vec::new();
+            for (id, podid) in ids {
+               let pod = self.pods.get(podid);
+               if pod.is_some() {
+                   list.push((id,pod.unwrap()));
+               }
+            }
+
+            return list;
+        }
+
+        #[ink(message)]
+        pub fn user_desc_pods(&self) -> Vec<(u32, Pod)> {
+            let caller = self.env().caller();
+            let ids = self.pod_of_user.desc_list(caller, 1, 100);
             let mut list = Vec::new();
             for (id, podid) in ids {
                let pod = self.pods.get(podid);

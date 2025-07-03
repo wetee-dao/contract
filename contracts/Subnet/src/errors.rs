@@ -25,4 +25,8 @@ pub enum Error {
     SetCodeFailed,
     /// Epoch not expired
     EpochNotExpired,
+    /// InvalidSideChainSignature
+    InvalidSideChainSignature,
+    /// Remove when Node is running
+    NodeIsRunning,
 }

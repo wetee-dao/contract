@@ -34,6 +34,10 @@ mod subnet {
 
         /// subnet epoch
         epoch: u32,
+        /// epoch solt block number
+        epoch_solt: u32,
+        /// sidechain public key
+        side_chain_pub: [u8; 32],
         /// last epoch block
         last_epoch_block: BlockNumber,
         /// run secrets
@@ -61,6 +65,7 @@ mod subnet {
             let caller = Self::env().caller();
             let mut net: Subnet = Default::default();
             net.parent_contract = caller;
+            net.epoch_solt = 72000;
 
             net
         }
@@ -98,9 +103,9 @@ mod subnet {
         }
 
         #[ink(message)]
-        pub fn workers(&self) -> Result<Vec<(u128, K8sCluster)>, Error> {
-            let workers = self.workers.desc_list(1, 1000).unwrap_or_default();
-            return Ok(workers);
+        pub fn workers(&self) -> Vec<(u64, K8sCluster)> {
+            let workers = self.workers.desc_list(1, 1000);
+            return workers;
         }
 
         #[ink(message)]
@@ -176,10 +181,7 @@ mod subnet {
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
 
-            let list = self
-                .worker_mortgages
-                .list(id, 1, 100000)
-                .unwrap_or_default();
+            let list = self.worker_mortgages.list(id, 1, 100000);
             let i = list
                 .iter()
                 .position(|t| t.0 == mortgage_id)
@@ -208,10 +210,7 @@ mod subnet {
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
 
-            let mut list = self
-                .worker_mortgages
-                .list(id, 0, 100)
-                .ok_or(Error::WorkerMortgageNotExist)?;
+            let mut list = self.worker_mortgages.list(id, 0, 100);
 
             list.retain(|x| x.1.deleted == None);
             if list.len() > 0 {
@@ -222,10 +221,10 @@ mod subnet {
         }
 
         #[ink(message)]
-        pub fn secrets(&self) -> Result<Vec<(u128, SecretNode)>, Error> {
-            let list = self.secrets.desc_list(1, 10000).unwrap();
+        pub fn secrets(&self) -> Vec<(u64, SecretNode)> {
+            let list = self.secrets.desc_list(1, 10000);
 
-            return Ok(list);
+            return list;
         }
 
         #[ink(message)]
@@ -248,13 +247,18 @@ mod subnet {
                 validator_id,
                 p2p_id,
                 start_block: now,
-                stop_block: None,
                 terminal_block: None,
                 status: 0,
             };
 
             let id = self.secrets.insert(&node);
             self.secret_of_user.insert(caller, &id);
+
+            if id == 0 {
+                let mut node = self.runing_secrets.clone();
+                node.push((id, 1));
+                self.runing_secrets = node;
+            }
 
             Ok(id)
         }
@@ -265,7 +269,6 @@ mod subnet {
             let node = self.secrets.get(id).ok_or(Error::NodeNotExist)?;
 
             ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
-            ensure!(node.status == 0, Error::WorkerStatusNotReady);
 
             let mut amount = self.secret_mortgages.get(id).unwrap_or_default();
             amount += deposit;
@@ -275,8 +278,34 @@ mod subnet {
         }
 
         #[ink(message)]
-        pub fn secret_join(&mut self, id: NodeID) -> Result<(), Error> {
+        pub fn secret_delete(&mut self, id: NodeID) -> Result<(), Error> {
+            let caller: ink::H160 = self.env().caller();
+            let mut node = self.secrets.get(id).ok_or(Error::NodeNotExist)?;
+
+            ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
+
+            let runing = self.runing_secrets.clone();
+            for i in runing.iter() {
+                if i.0 == id {
+                    return Err(Error::NodeIsRunning);
+                }
+            }
+
+            let m = self.secret_mortgages.get(id);
+            if m.is_some() {
+                return Err(Error::NodeIsRunning);
+            }
+
+            node.terminal_block = Some(self.env().block_number());
+            self.secrets.update(id, &node);
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn validator_join(&mut self, id: NodeID) -> Result<(), Error> {
             self.ensure_from_parent()?;
+            self.secrets.get(id).ok_or(Error::NodeNotExist)?;
 
             let mut nodes = self.pending_secrets.clone();
             let mut is_in = false;
@@ -291,11 +320,17 @@ mod subnet {
                 nodes.push((id, 1));
             }
 
+            self.pending_secrets = nodes;
             Ok(())
         }
 
         #[ink(message)]
-        pub fn secret_delete(&mut self, id: NodeID) -> Result<(), Error> {
+        pub fn get_pending_secrets(&self) -> Vec<(NodeID, u32)> {
+            self.pending_secrets.clone()
+        }
+
+        #[ink(message)]
+        pub fn validator_delete(&mut self, id: NodeID) -> Result<(), Error> {
             self.ensure_from_parent()?;
 
             let mut nodes = self.pending_secrets.clone();
@@ -315,47 +350,119 @@ mod subnet {
         }
 
         #[ink(message)]
-        pub fn epoch(&self) -> (u32, BlockNumber, BlockNumber) {
+        pub fn epoch_info(&self) -> EpochInfo {
             let now = self.env().block_number();
-            (self.epoch, self.last_epoch_block, now)
+
+            EpochInfo {
+                epoch: self.epoch,
+                epoch_solt: self.epoch_solt,
+                last_epoch_block: self.last_epoch_block,
+                now: now,
+                side_chain_pub: self.side_chain_pub,
+            }
         }
 
         #[ink(message)]
-        pub fn next_epoch(&mut self) -> Result<(), Error> {
+        pub fn validators(&self) -> Vec<(SecretNode, u32)> {
+            let nodes = self.runing_secrets.clone();
+            return nodes
+                .iter()
+                .map(|(id, power)| {
+                    let node = self.secrets.get(*id).unwrap();
+                    (node.clone(), *power)
+                })
+                .collect::<Vec<_>>();
+        }
+
+        #[ink(message)]
+        pub fn set_epoch_solt(&mut self, epoch_solt: u32) {
+            self.epoch_solt = epoch_solt;
+        }
+
+        #[ink(message)]
+        pub fn set_next_epoch(&mut self, new_key: [u8; 32], sig: [u8; 64]) -> Result<(), Error> {
             let now = self.env().block_number();
             let last_epoch = self.last_epoch_block;
 
-            ensure!(now - last_epoch >= 72000u32.into(), Error::EpochNotExpired);
+            // check with the current epoch pubkey
+            if self.side_chain_pub != [0u8; 32] {
+                let err = self
+                    .env()
+                    .sr25519_verify(&sig, &new_key, &self.side_chain_pub);
+                ensure!(err.is_ok(), Error::InvalidSideChainSignature);
+            }
+
+            // check epoch block time
+            ensure!(
+                now - last_epoch >= self.epoch_solt.into(),
+                Error::EpochNotExpired
+            );
 
             self.epoch += 1;
+            self.side_chain_pub = new_key;
             self.last_epoch_block = now;
             self.calc_new_validators();
-
             Ok(())
         }
 
         #[ink(message)]
-        pub fn next_epoch_with_gov(&mut self) -> Result<(), Error> {
-            self.ensure_from_parent()?;
-            let now = self.env().block_number();
-
-            self.epoch += 1;
-            self.last_epoch_block = now;
-            self.calc_new_validators();
-
+        pub fn reset_sidekey(&mut self) -> Result<(), Error> {
+            self.side_chain_pub = [0u8; 32];
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn next_epoch_validators(&self) -> Result<Vec<(SecretNode, u32)>, Error> {
+            let now = self.env().block_number();
+            let last_epoch = self.last_epoch_block;
+
+            // check epoch block time
+            ensure!(
+                now - last_epoch >= (self.epoch_solt - 5).into(),
+                Error::EpochNotExpired
+            );
+
+            let mut runings = self.runing_secrets.clone();
+            let pendings = self.pending_secrets.clone();
+            for (_, pending) in pendings.iter().enumerate() {
+                let mut is_in = false;
+                for (i, runing) in runings.iter().enumerate() {
+                    if runing.0 == pending.0 {
+                        is_in = true;
+                        runings[i] = (runing.0, pending.1);
+                        break;
+                    }
+                }
+                if !is_in {
+                    runings.push((pending.0, pending.1));
+                }
+            }
+            runings.retain(|x| x.1 != 0);
+
+            return Ok(runings
+                .iter()
+                .map(|(id, power)| {
+                    let node = self.secrets.get(*id).unwrap();
+                    (node.clone(), *power)
+                })
+                .collect::<Vec<_>>());
         }
 
         /// calaculate new validators
         fn calc_new_validators(&mut self) {
             let mut runings = self.runing_secrets.clone();
             let pendings = self.pending_secrets.clone();
-            for (_, runing) in runings.iter_mut().enumerate() {
-                for (_, pending) in pendings.iter().enumerate() {
+            for (_, pending) in pendings.iter().enumerate() {
+                let mut is_in = false;
+                for (i, runing) in runings.iter().enumerate() {
                     if runing.0 == pending.0 {
-                        *runing = (runing.0, pending.1);
+                        is_in = true;
+                        runings[i] = (runing.0, pending.1);
                         break;
                     }
+                }
+                if !is_in {
+                    runings.push((pending.0, pending.1));
                 }
             }
 
@@ -375,6 +482,9 @@ mod subnet {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 #[cfg(all(test, feature = "e2e-tests"))]
 mod e2e_tests;

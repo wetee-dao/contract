@@ -641,10 +641,7 @@ mod dao {
 
         #[ink(message)]
         fn vote_list(&self, proposal_id: CalllId) -> Vec<VoteInfo> {
-            let ids = self
-                .votes_of_proposal
-                .desc_list(proposal_id, 1, 10)
-                .unwrap();
+            let ids = self.votes_of_proposal.desc_list(proposal_id, 1, 10);
             let mut list = Vec::new();
             for id in ids {
                 let info = self.votes.get(id.1);
@@ -1094,10 +1091,7 @@ mod dao {
             proposal_id: CalllId,
         ) -> Result<(bool, BlockNumber, Track), Error> {
             // get votes
-            let vote_ids = self
-                .votes_of_proposal
-                .list(proposal_id, 1, 10000000)
-                .unwrap();
+            let vote_ids = self.votes_of_proposal.list(proposal_id, 1, 10000000);
             let mut votes = Vec::new();
             for id in vote_ids {
                 let vote = self.votes.get(id.1).unwrap();

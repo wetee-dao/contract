@@ -45,10 +45,6 @@ pub struct Pod {
     pub tee_version: TEEVersion,
 }
 
-primitives::define_map!(Pods, u64, Pod);
-
-primitives::define_double_map!(UserPods, Address, u64);
-
 /// 网络设置
 /// disk setting
 #[derive(Clone)]
@@ -267,3 +263,9 @@ pub enum TEEVersion {
     SGX,
     CVM,
 }
+
+primitives::define_map!(Pods, u64, Pod);
+
+primitives::define_double_map!(UserPods, Address, u64);
+
+primitives::define_double_map!(WorkerPods, Address, u64);

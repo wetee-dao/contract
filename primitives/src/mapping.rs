@@ -56,10 +56,11 @@ macro_rules! define_map {
                 &self,
                 page: $key_ty,
                 size: $key_ty,
-            ) -> Option<ink::prelude::vec::Vec<($key_ty, $value_ty)>> {
+            ) -> ink::prelude::vec::Vec<($key_ty, $value_ty)> {
                 let total_len = self.next_id;
+                let mut list = ink::prelude::vec::Vec::new();
                 if total_len == 0 || page == 0 || size == 0 {
-                    return None;
+                    return list;
                 }
 
                 let start = total_len;
@@ -69,15 +70,15 @@ macro_rules! define_map {
                     total_len
                 };
 
-                let mut list = ink::prelude::vec::Vec::new();
-                for i in total..0 {
-                    let v = self.store.get(start - i);
+                for i in 0..total + 1 {
+                    let k = start - i;
+                    let v = self.store.get(k);
                     if v.is_some() {
-                        list.push((i, v.unwrap()));
+                        list.push((k, v.unwrap()));
                     }
                 }
 
-                return Some(list);
+                return list;
             }
 
             // get list by page and page asc
@@ -85,10 +86,11 @@ macro_rules! define_map {
                 &self,
                 page: $key_ty,
                 size: $key_ty,
-            ) -> Option<ink::prelude::vec::Vec<($key_ty, $value_ty)>> {
+            ) -> ink::prelude::vec::Vec<($key_ty, $value_ty)> {
                 let total_len = self.next_id;
+                let mut list = ink::prelude::vec::Vec::new();
                 if total_len == 0 || page == 0 || size == 0 {
-                    return None;
+                    return list;
                 }
 
                 let start = 0;
@@ -98,14 +100,13 @@ macro_rules! define_map {
                     total_len
                 };
 
-                let mut list = ink::prelude::vec::Vec::new();
                 for i in 0..total {
                     let v = self.store.get(start + i);
                     if v.is_some() {
                         list.push((i, v.unwrap()));
                     }
                 }
-                return Some(list);
+                return list;
             }
         }
     };
@@ -205,15 +206,16 @@ macro_rules! define_double_map {
                 k1: $k1_ty,
                 page: u32,
                 size: u32,
-            ) -> Option<ink::prelude::vec::Vec<(u32, $value_ty)>> {
+            ) -> ink::prelude::vec::Vec<(u32, $value_ty)> {
                 let id = self.k1.get(&k1);
+                let mut list = ink::prelude::vec::Vec::new();
                 if id.is_none() {
-                    return None;
+                    return list;
                 }
 
                 let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
                 if total_len == 0 || page == 0 || size == 0 {
-                    return None;
+                    return list;
                 }
 
                 let start = primitives::combine_u32_to_u64(id.unwrap(), total_len);
@@ -223,7 +225,6 @@ macro_rules! define_double_map {
                     total_len
                 };
 
-                let mut list = ink::prelude::vec::Vec::new();
                 for i in 0..total + 1 {
                     let k = start - i as u64;
                     let v = self.store.get(k);
@@ -233,7 +234,7 @@ macro_rules! define_double_map {
                     }
                 }
 
-                return Some(list);
+                return list;
             }
 
             // get list by page and page asc
@@ -242,15 +243,16 @@ macro_rules! define_double_map {
                 k1: $k1_ty,
                 page: u32,
                 size: u32,
-            ) -> Option<ink::prelude::vec::Vec<(u32, $value_ty)>> {
+            ) -> ink::prelude::vec::Vec<(u32, $value_ty)> {
                 let id = self.k1.get(&k1);
+                let mut list = ink::prelude::vec::Vec::new();
                 if id.is_none() {
-                    return None;
+                    return list;
                 }
 
                 let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
                 if total_len == 0 || page == 0 || size == 0 {
-                    return None;
+                    return list;
                 }
 
                 let start = primitives::combine_u32_to_u64(id.unwrap(), 0);
@@ -270,7 +272,7 @@ macro_rules! define_double_map {
                     }
                 }
 
-                return Some(list);
+                return list;
             }
         }
     };

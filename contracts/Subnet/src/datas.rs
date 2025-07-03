@@ -1,6 +1,6 @@
 use ink::{env::BlockNumber, prelude::vec::Vec, primitives::AccountId, Address, U256};
 
-pub type NodeID = u128;
+pub type NodeID = u64;
 // pub type AssetId = u64;
 
 #[derive(Clone, PartialEq)]
@@ -28,8 +28,8 @@ pub struct K8sCluster {
     /// terminal time
     /// 终止时间
     pub terminal_block: Option<BlockNumber>,
-	// subnet ed25519 p2p
-	pub p2p_id: AccountId,
+    // subnet ed25519 p2p
+    pub p2p_id: AccountId,
     /// ip of service
     /// 服务端口号
     pub ip: Ip,
@@ -55,15 +55,12 @@ pub struct SecretNode {
     /// 创建者
     pub owner: Address,
     // subnet ed25519 validator
-	pub validator_id: AccountId,
-	// subnet ed25519 p2p
-	pub p2p_id: AccountId,
+    pub validator_id: AccountId,
+    // subnet ed25519 p2p
+    pub p2p_id: AccountId,
     /// The block that creates the K8sCluster
     /// App创建的区块
     pub start_block: BlockNumber,
-    /// Stop time
-    /// 停止时间
-    pub stop_block: Option<BlockNumber>,
     /// terminal time
     /// 终止时间
     pub terminal_block: Option<BlockNumber>,
@@ -140,9 +137,23 @@ pub struct DepositPrice {
     pub gpu_per: u32,
 }
 
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct EpochInfo {
+    /// current epoch
+    pub epoch: u32,
+    /// current epoch solt
+    pub epoch_solt: u32,
+    /// last epoch block
+    pub last_epoch_block: BlockNumber,
+    /// current block
+    pub now: BlockNumber,
+    /// side chain pubkey
+    pub side_chain_pub: [u8; 32],
+}
+
 primitives::define_map!(Workers, NodeID, K8sCluster);
 
-primitives::define_double_map!(WorkerMortgages, u128, AssetDeposit);
+primitives::define_double_map!(WorkerMortgages, NodeID, AssetDeposit);
 
 primitives::define_map!(Secrets, NodeID, SecretNode);
 

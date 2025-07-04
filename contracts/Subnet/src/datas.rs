@@ -148,7 +148,7 @@ pub struct EpochInfo {
     /// current block
     pub now: BlockNumber,
     /// side chain pubkey
-    pub side_chain_pub: [u8; 32],
+    pub side_chain_pub: Option<Address>,
 }
 
 primitives::define_map!(Workers, NodeID, K8sCluster);

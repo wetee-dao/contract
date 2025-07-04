@@ -29,4 +29,6 @@ pub enum Error {
     InvalidSideChainSignature,
     /// Remove when Node is running
     NodeIsRunning,
+    /// caller is not side chain multi-sig address
+    InvalidSideChainCaller,
 }

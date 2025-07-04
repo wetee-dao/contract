@@ -36,8 +36,8 @@ mod subnet {
         epoch: u32,
         /// epoch solt block number
         epoch_solt: u32,
-        /// sidechain public key
-        side_chain_pub: [u8; 32],
+        /// sidechain Multi-sig account
+        side_chain_multi_key: Option<Address>,
         /// last epoch block
         last_epoch_block: BlockNumber,
         /// run secrets
@@ -358,18 +358,18 @@ mod subnet {
                 epoch_solt: self.epoch_solt,
                 last_epoch_block: self.last_epoch_block,
                 now: now,
-                side_chain_pub: self.side_chain_pub,
+                side_chain_pub: self.side_chain_multi_key,
             }
         }
 
         #[ink(message)]
-        pub fn validators(&self) -> Vec<(SecretNode, u32)> {
+        pub fn validators(&self) -> Vec<(u64, SecretNode, u32)> {
             let nodes = self.runing_secrets.clone();
             return nodes
                 .iter()
                 .map(|(id, power)| {
                     let node = self.secrets.get(*id).unwrap();
-                    (node.clone(), *power)
+                    (id.clone(), node.clone(), *power)
                 })
                 .collect::<Vec<_>>();
         }
@@ -380,16 +380,20 @@ mod subnet {
         }
 
         #[ink(message)]
-        pub fn set_next_epoch(&mut self, new_key: [u8; 32], sig: [u8; 64]) -> Result<(), Error> {
+        pub fn set_next_epoch(&mut self, _node_id: u64) -> Result<(), Error> {
+            let caller = self.env().caller();
             let now = self.env().block_number();
             let last_epoch = self.last_epoch_block;
 
-            // check with the current epoch pubkey
-            if self.side_chain_pub != [0u8; 32] {
-                let err = self
-                    .env()
-                    .sr25519_verify(&sig, &new_key, &self.side_chain_pub);
-                ensure!(err.is_ok(), Error::InvalidSideChainSignature);
+            // check sidechain key
+            let key = self.side_chain_multi_key.clone();
+            if key.is_none() {
+                self.side_chain_multi_key = Some(caller);
+            } else {
+                ensure!(
+                    caller == key.unwrap(),
+                    Error::InvalidSideChainCaller
+                );
             }
 
             // check epoch block time
@@ -399,20 +403,13 @@ mod subnet {
             );
 
             self.epoch += 1;
-            self.side_chain_pub = new_key;
             self.last_epoch_block = now;
             self.calc_new_validators();
             Ok(())
         }
 
         #[ink(message)]
-        pub fn reset_sidekey(&mut self) -> Result<(), Error> {
-            self.side_chain_pub = [0u8; 32];
-            Ok(())
-        }
-
-        #[ink(message)]
-        pub fn next_epoch_validators(&self) -> Result<Vec<(SecretNode, u32)>, Error> {
+        pub fn next_epoch_validators(&self) -> Result<Vec<(u64, SecretNode, u32)>, Error> {
             let now = self.env().block_number();
             let last_epoch = self.last_epoch_block;
 
@@ -443,7 +440,7 @@ mod subnet {
                 .iter()
                 .map(|(id, power)| {
                     let node = self.secrets.get(*id).unwrap();
-                    (node.clone(), *power)
+                    (id.clone(), node.clone(), *power)
                 })
                 .collect::<Vec<_>>());
         }

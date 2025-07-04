@@ -13,6 +13,8 @@ pub enum Error {
     PublicJoinNotAllowed,
     /// Returned if balance is too low.
     LowBalance,
+    /// Returned if allowance is too low.
+    InsufficientAllowance,
     /// Returned if call failed.
     CallFailed,
     /// Returned if decision deposit is invalid.

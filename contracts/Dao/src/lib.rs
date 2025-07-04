@@ -74,6 +74,9 @@ mod dao {
         member_lock_balances: Mapping<Address, U256>,
         /// total issuance TOKEN
         total_issuance: U256,
+        /// Mapping of the token amount which an account is allowed to withdraw
+        /// from another account.
+        allowances: Mapping<(Address, Address), U256>,
         /// transfer enable
         transfer: bool,
 
@@ -223,8 +226,96 @@ mod dao {
         }
     }
 
-    impl PSP22 for DAO {
-        /// Enable transfer
+    impl Erc20 for DAO {
+        #[ink(message)]
+        fn name(&self) -> Vec<u8> {
+            return Vec::new();
+        }
+
+        #[ink(message)]
+        fn symbol(&self) -> Vec<u8> {
+            return Vec::new();
+        }
+
+        #[ink(message)]
+        fn decimals(&self) -> u8 {
+            12
+        }
+
+        #[ink(message)]
+        fn total_supply(&self) -> U256 {
+            self.total_issuance
+        }
+
+        #[ink(message)]
+        fn balance_of(&self, owner: Address) -> U256 {
+            self.free_balance(owner)
+        }
+
+        #[ink(message)]
+        fn transfer(&mut self, to: Address, value: U256) -> Result<(), Error> {
+            ensure!(self.transfer, Error::TransferDisable);
+
+            let caller = self.env().caller();
+
+            // check if user is an member
+            ensure!(
+                self.member_balances.contains(caller),
+                Error::MemberNotExisted
+            );
+            ensure!(self.member_balances.contains(to), Error::MemberNotExisted);
+
+            let free = self.free_balance(caller);
+            ensure!(free >= value, Error::LowBalance);
+
+            let total = self.member_balances.get(to).unwrap();
+            self.member_balances.insert(caller, &(total - value));
+            self.member_balances.insert(
+                to,
+                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + value),
+            );
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        fn transfer_from(&mut self, from: Address, to: Address, value: U256) -> Result<(), Error> {
+            ensure!(self.transfer, Error::TransferDisable);
+
+            let spender = self.env().caller();
+
+            let allowance = self.allowances.get((from, spender)).unwrap_or_default();
+            ensure!(allowance >= value, Error::InsufficientAllowance);
+
+            let free = self.free_balance(from);
+            ensure!(free >= value, Error::LowBalance);
+
+            let total = self.member_balances.get(to).unwrap();
+            self.member_balances.insert(from, &(total - value));
+            self.member_balances.insert(
+                to,
+                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + value),
+            );
+            self.allowances
+                .insert((from, spender), &(allowance - value));
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        fn approve(&mut self, spender: Address, value: U256) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            self.allowances.insert((caller, spender), &value);
+            Ok(())
+        }
+
+        #[ink(message)]
+        fn allowance(&mut self, owner: Address, spender: Address) -> U256 {
+            self.allowances.get((owner, spender)).unwrap_or_default()
+        }
+
+        // other methods
         #[ink(message)]
         fn enable_transfer(&mut self) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -242,134 +333,21 @@ mod dao {
         #[ink(message)]
         fn burn(&mut self, amount: U256) -> Result<(), Error> {
             let caller = self.env().caller();
+            let free = self.free_balance(caller);
 
-            // check if user is an member
-            ensure!(
-                self.member_balances.contains(caller),
-                Error::MemberNotExisted
-            );
+            ensure!(free >= amount, Error::LowBalance);
 
             let total = self.member_balances.get(caller).unwrap();
-            ensure!(total >= amount, Error::LowBalance);
-
             self.member_balances.insert(caller, &(total - amount));
-            self.total_issuance -= amount;
 
             Ok(())
         }
 
-        // Token info
-        #[ink(message, selector = 0x3d26)]
-        fn token_name(&self, asset_id: u32) -> Result<Vec<u8>, Error> {
-            let info = self.tokens.get(asset_id).ok_or(Error::TokenNotFound)?;
-            Ok(Vec::new())
-        }
-
-        #[ink(message, selector = 0x3420)]
-        fn token_symbol(&self, asset_id: u32) -> Result<Vec<u8>, Error> {
-            Ok(Vec::new())
-        }
-
-        #[ink(message, selector = 0x7271)]
-        fn token_decimals(&self, asset_id: u32) -> Result<u8, Error> {
-            Ok(0)
-        }
-
-        // PSP22 interface queries
-        #[ink(message, selector = 0x162d)]
-        fn total_supply(&self, asset_id: u32) -> Result<U256, Error> {
-            Ok(U256::from(0))
-        }
-
-        #[ink(message, selector = 0x6568)]
-        fn balance_of(&self, asset_id: u32, owner: Address) -> Result<U256, Error> {
-            let balance = self.member_balances.get(owner).unwrap_or(U256::from(0));
-            let lock = self
-                .member_lock_balances
+        #[ink(message)]
+        fn lock_balance_of(&self, owner: Address) -> U256 {
+            self.member_lock_balances
                 .get(owner)
-                .unwrap_or(U256::from(0));
-
-            Ok(balance - lock)
-        }
-
-        #[ink(message, selector = 0x4d47)]
-        fn allowance(
-            &self,
-            asset_id: u32,
-            owner: Address,
-            spender: Address,
-        ) -> Result<U256, Error> {
-            Ok(U256::from(0))
-        }
-
-        // PSP22 transfer
-        #[ink(message, selector = 0xdb20)]
-        fn transfer(&mut self, asset_id: u32, to: Address, value: U256) -> Result<(), Error> {
-            ensure!(self.transfer, Error::TransferDisable);
-
-            let caller = self.env().caller();
-
-            // check if user is an member
-            ensure!(
-                self.member_balances.contains(caller),
-                Error::MemberNotExisted
-            );
-            ensure!(self.member_balances.contains(to), Error::MemberNotExisted);
-
-            let total = self.member_balances.get(caller).unwrap_or(U256::from(0));
-            let lock = self
-                .member_lock_balances
-                .get(caller)
-                .unwrap_or(U256::from(0));
-            ensure!(total - lock >= value, Error::LowBalance);
-
-            self.member_balances.insert(caller, &(total - value));
-            self.member_balances.insert(
-                to,
-                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + value),
-            );
-
-            Ok(())
-        }
-
-        // PSP22 transfer_from
-        #[ink(message, selector = 0x54b3)]
-        fn transfer_from(
-            &mut self,
-            asset_id: u32,
-            from: Address,
-            to: Address,
-            value: U256,
-        ) -> Result<(), Error> {
-            Ok(())
-        }
-
-        // PSP22 approve
-        #[ink(message, selector = 0xb20f)]
-        fn approve(&mut self, asset_id: u32, spender: Address, value: U256) -> Result<(), Error> {
-            Ok(())
-        }
-
-        // PSP22 increase_allowance
-        #[ink(message, selector = 0x96d6)]
-        fn increase_allowance(
-            &mut self,
-            asset_id: u32,
-            spender: Address,
-            value: U256,
-        ) -> Result<(), Error> {
-            Ok(())
-        }
-
-        // PSP22 decrease_allowance
-        #[ink(message, selector = 0xfecb)]
-        fn decrease_allowance(
-            &mut self,
-            asset_id: u32,
-            spender: Address,
-            value: U256,
-        ) -> Result<(), Error> {
-            Ok(())
+                .unwrap_or(U256::from(0))
         }
     }
 
@@ -1204,6 +1182,17 @@ mod dao {
                 Ok(Ok(v)) => Ok(v),
                 _ => Err(Error::CallFailed),
             }
+        }
+
+        // get free balance
+        fn free_balance(&self, owner: Address) -> U256 {
+            let balance = self.member_balances.get(owner).unwrap_or(U256::from(0));
+            let lock = self
+                .member_lock_balances
+                .get(owner)
+                .unwrap_or(U256::from(0));
+
+            balance - lock
         }
     }
 }

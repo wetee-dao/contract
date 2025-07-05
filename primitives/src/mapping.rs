@@ -158,7 +158,7 @@ macro_rules! define_double_map {
             }
 
             // insert value with k1 require k2
-            pub fn insert(&mut self, k: $k1_ty, v: &$value_ty) -> Option<u32> {
+            pub fn insert(&mut self, k: $k1_ty, v: &$value_ty) -> u32 {
                 // get id
                 let mut id = self.k1.get(&k);
                 if id.is_none() {
@@ -175,7 +175,9 @@ macro_rules! define_double_map {
                 self.k2_next_id.insert(id.unwrap(), &(next_id + 1));
 
                 let key = primitives::combine_u32_to_u64(id.unwrap(), next_id);
-                self.store.insert(key, v)
+                self.store.insert(key, v);
+
+                next_id
             }
 
             // replace value for k1 and k2

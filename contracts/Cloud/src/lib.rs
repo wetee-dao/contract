@@ -6,7 +6,7 @@ mod errors;
 #[ink::contract]
 mod cloud {
     use crate::{datas::*, errors::Error};
-    use ink::{prelude::vec::Vec,H256};
+    use ink::{prelude::vec::Vec, H256};
     use primitives::{ensure, ok_or_err};
 
     #[ink(storage)]
@@ -32,70 +32,60 @@ mod cloud {
             ins
         }
 
-        /// Update contract with gov
+        /// create pod
+        #[ink(message)]
+        pub fn create_user_pod(&mut self) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            let podid = self.pods.insert(&Pod::default());
+            self.pod_of_user.insert(caller, &podid);
+
+            Ok(())
+        }
+
+        /// all pod length
+        #[ink(message)]
+        pub fn pod_len(&self) -> Result<u64, Error> {
+            Ok(self.pods.len())
+        }
+
+        /// List pods
+        #[ink(message)]
+        pub fn pods(&self, page: u32, size: u32) -> Vec<(u64, Pod)> {
+            self.pods.desc_list(page, size)
+        }
+
+        /// len of pods owned by user
+        #[ink(message)]
+        pub fn user_pod_len(&self) -> Result<u64, Error> {
+            let caller = self.env().caller();
+            Ok(self.pod_of_user.len(caller))
+        }
+
+        /// pods of user
+        #[ink(message)]
+        pub fn user_pods(&self, page: u32, size: u32) -> Vec<(u64, Pod)> {
+            let caller = self.env().caller();
+            let ids = self.pod_of_user.desc_list(caller, page, size);
+
+            let mut list = Vec::new();
+            for (_k2, podid) in ids {
+                let pod = self.pods.get(podid);
+                if pod.is_some() {
+                    list.push((podid, pod.unwrap()));
+                }
+            }
+
+            return list;
+        }
+
+        /// update contract with gov
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
             self.ensure_from_parent()?;
             ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
 
             Ok(())
-        }
-
-        #[ink(message)]
-        pub fn pod_len(&mut self) -> Result<u64, Error> {
-            // let caller = self.env().caller();
-
-            Ok(self.pods.len())
-        }
-
-        #[ink(message)]
-        pub fn create_user_pod(&mut self) -> Result<(), Error> {
-            let caller = self.env().caller();
-
-            let podid = self.pods.insert(&Pod::default());
-            let _id = self.pod_of_user.insert(caller, &podid);
-
-            Ok(())
-        }
-
-        #[ink(message)]
-        pub fn pods(&self) -> Vec<(u64, Pod)> {
-           self.pods.list(1,100)
-        }
-
-        #[ink(message)]
-        pub fn desc_pods(&self) -> Vec<(u64, Pod)> {
-           self.pods.desc_list(1,100)
-        }
-
-        #[ink(message)]
-        pub fn user_pods(&self) -> Vec<(u32, Pod)> {
-            let caller = self.env().caller();
-            let ids = self.pod_of_user.list(caller, 1, 100);
-            let mut list = Vec::new();
-            for (id, podid) in ids {
-               let pod = self.pods.get(podid);
-               if pod.is_some() {
-                   list.push((id,pod.unwrap()));
-               }
-            }
-
-            return list;
-        }
-
-        #[ink(message)]
-        pub fn user_desc_pods(&self) -> Vec<(u32, Pod)> {
-            let caller = self.env().caller();
-            let ids = self.pod_of_user.desc_list(caller, 1, 100);
-            let mut list = Vec::new();
-            for (id, podid) in ids {
-               let pod = self.pods.get(podid);
-               if pod.is_some() {
-                   list.push((id,pod.unwrap()));
-               }
-            }
-
-            return list;
         }
 
         /// Gov call only call from contract

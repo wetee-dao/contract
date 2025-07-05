@@ -71,14 +71,6 @@ mod subnet {
         }
 
         #[ink(message)]
-        pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
-            self.ensure_from_parent()?;
-            ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
-
-            Ok(())
-        }
-
-        #[ink(message)]
         pub fn boot_nodes(&self) -> Result<Vec<SecretNode>, Error> {
             let mut nodes = Vec::new();
             for id in self.boot_nodes.iter() {
@@ -168,7 +160,7 @@ mod subnet {
                 deleted: None,
             };
 
-            let mid = self.worker_mortgages.insert(id, &deposit).unwrap();
+            let mid = self.worker_mortgages.insert(id, &deposit);
 
             Ok(mid)
         }
@@ -303,6 +295,23 @@ mod subnet {
         }
 
         #[ink(message)]
+        pub fn validators(&self) -> Vec<(u64, SecretNode, u32)> {
+            let nodes = self.runing_secrets.clone();
+            return nodes
+                .iter()
+                .map(|(id, power)| {
+                    let node = self.secrets.get(*id).unwrap();
+                    (id.clone(), node.clone(), *power)
+                })
+                .collect::<Vec<_>>();
+        }
+
+        #[ink(message)]
+        pub fn get_pending_secrets(&self) -> Vec<(NodeID, u32)> {
+            self.pending_secrets.clone()
+        }
+
+        #[ink(message)]
         pub fn validator_join(&mut self, id: NodeID) -> Result<(), Error> {
             self.ensure_from_parent()?;
             self.secrets.get(id).ok_or(Error::NodeNotExist)?;
@@ -322,11 +331,6 @@ mod subnet {
 
             self.pending_secrets = nodes;
             Ok(())
-        }
-
-        #[ink(message)]
-        pub fn get_pending_secrets(&self) -> Vec<(NodeID, u32)> {
-            self.pending_secrets.clone()
         }
 
         #[ink(message)]
@@ -360,18 +364,6 @@ mod subnet {
                 now: now,
                 side_chain_pub: self.side_chain_multi_key,
             }
-        }
-
-        #[ink(message)]
-        pub fn validators(&self) -> Vec<(u64, SecretNode, u32)> {
-            let nodes = self.runing_secrets.clone();
-            return nodes
-                .iter()
-                .map(|(id, power)| {
-                    let node = self.secrets.get(*id).unwrap();
-                    (id.clone(), node.clone(), *power)
-                })
-                .collect::<Vec<_>>();
         }
 
         #[ink(message)]
@@ -443,6 +435,14 @@ mod subnet {
                     (id.clone(), node.clone(), *power)
                 })
                 .collect::<Vec<_>>());
+        }
+
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
+            self.ensure_from_parent()?;
+            ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
+
+            Ok(())
         }
 
         /// calaculate new validators

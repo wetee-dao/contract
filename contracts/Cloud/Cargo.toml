@@ -1,5 +1,5 @@
 [package]
-authors = ["[your_name] <[your_email]>"]
+authors = ["BaiL"]
 edition = "2021"
 name = "cloud"
 version = "0.1.0"
@@ -9,6 +9,9 @@ ink = {workspace = true, default-features = false, features = ["unstable-hostfn"
 scale = { workspace = true, default-features = false, features = ["derive"] }
 scale-info = { workspace = true, default-features = false }
 primitives = {path = "../../primitives", package = "primitives", default-features = false}
+
+# Runing pod 
+# pod = { path = "../Pod", default-features = false, features = ["ink-as-dependency"] }
 
 [dev-dependencies]
 ink_e2e = {workspace = true}

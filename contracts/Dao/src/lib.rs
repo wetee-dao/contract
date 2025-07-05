@@ -865,7 +865,7 @@ mod dao {
             &mut self,
             track_id: u16,
             to: Address,
-            assert_id: u32,
+            _assert_id: u32,
             amount: U256,
         ) -> Result<u64, Error> {
             let caller = self.env().caller();

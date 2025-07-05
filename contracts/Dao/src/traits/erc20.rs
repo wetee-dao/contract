@@ -33,13 +33,6 @@ pub trait Erc20 {
     #[ink(message)]
     fn allowance(&mut self, owner: Address, spender: Address) -> U256;
 
-    // other methods
-    #[ink(message)]
-    fn enable_transfer(&mut self) -> Result<(), Error>;
-
-    #[ink(message)]
-    fn can_transfer(&self) -> bool;
-
     #[ink(message)]
     fn burn(&mut self, amount: U256) -> Result<(), Error>;
 

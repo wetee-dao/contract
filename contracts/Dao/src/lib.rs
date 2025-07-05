@@ -98,11 +98,13 @@ mod dao {
             self.members.clone()
         }
 
+        /// Returns whether public join is enabled.
         #[ink(message)]
         fn get_public_join(&self) -> bool {
             self.public_join
         }
 
+        /// Pubblic join DAO.
         #[ink(message)]
         fn public_join(&mut self) -> Result<(), Error> {
             ensure!(self.public_join, Error::PublicJoinNotAllowed);
@@ -120,6 +122,7 @@ mod dao {
             Ok(())
         }
 
+        /// Set public join is enabled or not.
         #[ink(message)]
         fn set_public_join(&mut self, public_join: bool) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -128,7 +131,7 @@ mod dao {
             Ok(())
         }
 
-        /// Join to DAO
+        /// Join to DAO with gov.
         #[ink(message)]
         fn join(&mut self, new_user: Address, balance: U256) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -177,7 +180,7 @@ mod dao {
             Ok(())
         }
 
-        // levae DAO
+        // levae DAO and burn all balance
         #[ink(message)]
         fn levae_with_burn(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -313,21 +316,6 @@ mod dao {
         #[ink(message)]
         fn allowance(&mut self, owner: Address, spender: Address) -> U256 {
             self.allowances.get((owner, spender)).unwrap_or_default()
-        }
-
-        // other methods
-        #[ink(message)]
-        fn enable_transfer(&mut self) -> Result<(), Error> {
-            self.ensure_from_gov()?;
-            if !self.transfer {
-                self.transfer = true;
-            }
-            Ok(())
-        }
-
-        #[ink(message)]
-        fn can_transfer(&self) -> bool {
-            self.transfer
         }
 
         #[ink(message)]

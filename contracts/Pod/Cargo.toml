@@ -1,17 +1,13 @@
 [package]
 authors = ["BaiL"]
 edition = "2021"
-name = "cloud"
+name = "pod"
 version = "0.1.0"
 
 [dependencies]
 ink = {workspace = true, default-features = false, features = ["unstable-hostfn"]}
-scale = { workspace = true, default-features = false, features = ["derive"] }
 scale-info = { workspace = true, default-features = false }
 primitives = {path = "../../primitives", package = "primitives", default-features = false}
-
-# Runing pod 
-pod = { path = "../Pod", default-features = false, features = ["ink-as-dependency"] }
 
 [dev-dependencies]
 ink_e2e = {workspace = true}
@@ -26,5 +22,4 @@ ink-as-dependency = []
 std = [
   "ink/std",
   "primitives/std",
-  "pod/std"
 ]

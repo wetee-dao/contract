@@ -1,48 +1,48 @@
 use ink::{env::BlockNumber, prelude::vec::Vec, Address};
 
-#[derive(Clone,Default)]
+#[derive(Clone)]
 #[cfg_attr(
     feature = "std",
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Pod {
-    pub id: u64,
-    /// creator of app
+    /// Pod name
+    pub name: Vec<u8>,
+    /// Owner of pod
     /// 创建者
-    pub creator: Address,
-    /// contract id
+    pub owner: Address,
+    /// Contract id
     /// 合约账户
-    pub contract_id: Address,
+    pub contract: pod::PodRef,
+    /// Type of pod,Different pods will be called to different clusters.
+    pub ptype: PodType,
     /// The block that creates the App
     /// App创建的区块
     pub start_block: BlockNumber,
-    /// name of the app.
-    /// 程序名字
-    pub name: Vec<u8>,
-    /// app template id
-    pub template_id: Option<u128>,
-    /// img of the App.
-    /// image 目标宗旨
-    pub image: Vec<u8>,
-    /// meta of the App.
-    /// 应用元数据
-    pub meta: Vec<u8>,
-    /// command of service
-    /// 执行命令
-    pub command: Command,
-    /// port of service
-    /// 服务端口号
-    pub port: Vec<Service>,
-    /// cpu memory disk
-    /// cpu memory disk
-    pub cr: Cr,
-    /// side container
-    /// 附属容器
-    pub side_container: Vec<Container>,
     /// tee version
     /// tee 版本
-    pub tee_version: TEEVersion,
+    pub tee_type: TEEType,
+}
+
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub enum PodType {
+    // Only use CPU 
+    CpuService,
+    // Use GPU/CPU
+    GpuService,
+    // Script to execute one-time or as a scheduled task
+    Script,
+}
+impl Default for PodType {
+    fn default() -> Self {
+        PodType::CpuService
+    }
 }
 
 /// 网络设置
@@ -211,6 +211,7 @@ impl Default for Disk {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Container {
+    pub name: Vec<u8>,
     /// img of the App.
     /// image 目标宗旨
     pub image: Vec<u8>,
@@ -222,15 +223,16 @@ pub struct Container {
     pub port: Vec<Service>,
     /// cpu memory disk
     /// cpu memory disk
-    pub cr: Cr,
+    pub cr: CR,
 }
 impl Default for Container {
     fn default() -> Self {
         Container {
-            image: "".as_bytes().to_vec(),
+            name: Vec::new(),
+            image: Vec::new(),
             command: Command::NONE,
             port: Vec::new(),
-            cr: Cr::default(),
+            cr: CR::default(),
         }
     }
 }
@@ -243,14 +245,14 @@ impl Default for Container {
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct Cr {
+pub struct CR {
     pub cpu: u32,
     pub mem: u32,
     pub disk: Vec<Disk>,
     pub gpu: u32,
 }
 
-/// TEEVersion
+/// TEEType
 /// TEE 实现版本
 #[derive(Clone, Default)]
 #[cfg_attr(
@@ -258,7 +260,7 @@ pub struct Cr {
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub enum TEEVersion {
+pub enum TEEType {
     #[default]
     SGX,
     CVM,
@@ -269,3 +271,5 @@ primitives::define_map!(Pods, u64, Pod);
 primitives::define_double_map!(UserPods, Address, u64);
 
 primitives::define_double_map!(WorkerPods, Address, u64);
+
+primitives::define_double_map!(Containers, u64, Container);

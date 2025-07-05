@@ -13,6 +13,7 @@ members = [
   "contracts/Dao",
   "contracts/Subnet",
   "contracts/Cloud",
+  "contracts/Pod",
   # "contracts/Bridge",
 
   "primitives",

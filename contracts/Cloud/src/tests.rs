@@ -1,4 +1,5 @@
 use super::cloud::*;
+use crate::datas::{Command, Container, PodType, TEEType, CR};
 
 fn init() -> Cloud {
     Cloud::new()
@@ -8,31 +9,32 @@ fn init() -> Cloud {
 fn user_pod() {
     let mut c = init();
 
-    let p = c.create_user_pod();
-
+    let p = c.create_user_pod(
+        "pod1".as_bytes().to_vec(),
+        PodType::CpuService,
+        TEEType::SGX,
+        vec![Container {
+            name: "t1".as_bytes().to_vec(),
+            image: "nginx".as_bytes().to_vec(),
+            command: Command::NONE,
+            port: Vec::new(),
+            cr: CR {
+                cpu: 1,
+                mem: 1024,
+                disk: Vec::new(),
+                gpu: 0,
+            },
+        }],
+    );
     assert!(p.is_ok());
-    _ = c.create_user_pod();
 
-    let list = c.user_pods();
+    _ = c.create_user_pod(
+        "pod2".as_bytes().to_vec(),
+        PodType::CpuService,
+        TEEType::SGX,
+        Vec::new(),
+    );
+
+    let list = c.user_pods(1, 500);
     println!("list: {:?}", list);
-
-    let list2 = c.user_desc_pods();
-    println!("list2: {:?}", list2);
-}
-
-
-#[ink::test]
-fn pods() {
-    let mut c = init();
-
-    let p = c.create_user_pod();
-
-    assert!(p.is_ok());
-    _ = c.create_user_pod();
-
-    let list = c.pods();
-    println!("list: {:?}", list);
-
-    let list2 = c.desc_pods();
-    println!("list2: {:?}", list2);
 }

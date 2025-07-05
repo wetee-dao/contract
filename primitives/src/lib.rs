@@ -25,5 +25,14 @@ macro_rules! ok_or_err {
     };
 }
 
+
+pub fn u64_to_u8_32(value: u64) -> [u8; 32] {
+    let mut arr = [0u8; 32];
+    let bytes = value.to_be_bytes();
+
+    arr[24..32].copy_from_slice(&bytes);
+    arr
+}
+
 #[cfg(test)]
 mod tests;

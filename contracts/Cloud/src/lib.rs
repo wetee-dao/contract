@@ -9,12 +9,14 @@ mod cloud {
     use ink::{prelude::vec::Vec, H256};
     use pod::PodRef;
     use primitives::{ensure, ok_or_err, u64_to_u8_32};
+    use subnet::SubnetRef;
 
     #[ink(storage)]
-    #[derive(Default)]
     pub struct Cloud {
         /// parent contract ==> Dao contract/user
         gov_contract: Address,
+        /// subnet_contract
+        subnet: SubnetRef,
         /// pod contract code hash
         pod_contract_code_hash: H256,
 
@@ -33,12 +35,36 @@ mod cloud {
 
     impl Cloud {
         #[ink(constructor)]
-        pub fn new() -> Self {
+        pub fn new(subnet_contract_code_hash: H256, pod_contract_code_hash: H256) -> Self {
             let caller = Self::env().caller();
-            let mut ins: Cloud = Default::default();
+
+            let subnet = SubnetRef::new(Some(caller))
+                .endowment(0.into())
+                .code_hash(subnet_contract_code_hash)
+                .instantiate();
+
+            let mut ins = Cloud {
+                gov_contract: caller,
+                subnet,
+                pods: Default::default(),
+                pod_status: 0,
+                pod_of_user: Default::default(),
+                pod_of_worker: Default::default(),
+                containers: Default::default(),
+                pod_contract_code_hash: pod_contract_code_hash,
+            };
             ins.gov_contract = caller;
 
             ins
+        }
+
+        /// set new pod code hash
+        #[ink(message)]
+        pub fn set_pod_contract(&mut self, pod_contract: H256) -> Result<(), Error> {
+            self.ensure_from_gov()?;
+            self.pod_contract_code_hash = pod_contract;
+
+            Ok(())
         }
 
         /// Create pod
@@ -46,16 +72,23 @@ mod cloud {
         pub fn create_user_pod(
             &mut self,
             name: Vec<u8>,
-            pod_type: PodType, // Type of pod,Different pods will be called to different clusters.
-            tee_type: TEEType, // tee version
-            containers: Vec<Container>, // containers
+            pod_type: PodType,
+            tee_type: TEEType, 
+            containers: Vec<Container>,
+            region_id: u32,
+            level: u8,
+            worker_id: u64,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
             let pay_value = self.env().transferred_value();
 
+            let worker = self.subnet.worker(worker_id).ok_or(Error::WorkerNotFound)?;
+            ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
+            ensure!(worker.region_id == region_id, Error::RegionNotMatch);
+
             // init new pod contract
             let pod_id = self.pods.next_id();
-            let contract = PodRef::new(pod_id,caller)
+            let contract = PodRef::new(pod_id, caller)
                 .endowment(pay_value)
                 .code_hash(self.pod_contract_code_hash)
                 .salt_bytes(Some(u64_to_u8_32(pod_id)))
@@ -73,6 +106,7 @@ mod cloud {
                 tee_type: tee_type,
             });
             self.pod_of_user.insert(caller, &pod_id);
+            self.pod_of_worker.insert(worker_id, &pod_id);
 
             // save pod containers
             for i in 0..containers.len() {
@@ -139,7 +173,7 @@ mod cloud {
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
             self.ensure_from_gov()?;
-            
+
             ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
 
             Ok(())
@@ -149,7 +183,7 @@ mod cloud {
         fn ensure_from_gov(&self) -> Result<(), Error> {
             ensure!(
                 self.env().caller() == self.gov_contract,
-                Error::MustCallByMainContract
+                Error::MustCallByGovContract
             );
 
             Ok(())

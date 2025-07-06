@@ -3,5 +3,12 @@
 pub enum Error {
     /// Update: set code failed
     SetCodeFailed,
-    MustCallByMainContract,
+    /// must call by gov contract
+    MustCallByGovContract,
+    /// Worker not found
+    WorkerNotFound,
+    /// worker level not enough
+    WorkerLevelNotEnough,
+    /// region not match
+    RegionNotMatch,
 }

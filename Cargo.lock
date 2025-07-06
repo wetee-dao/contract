@@ -1465,6 +1465,7 @@ dependencies = [
  "pod",
  "primitives",
  "scale-info",
+ "subnet",
 ]
 
 [[package]]

@@ -1,8 +1,10 @@
+use ink::H256;
+
 use super::cloud::*;
 use crate::datas::{Command, Container, PodType, TEEType, CR};
 
 fn init() -> Cloud {
-    Cloud::new()
+    Cloud::new(H256::default(), H256::default())
 }
 
 #[ink::test]
@@ -25,6 +27,9 @@ fn user_pod() {
                 gpu: 0,
             },
         }],
+        1,
+        1,
+        1,
     );
     assert!(p.is_ok());
 
@@ -33,6 +38,9 @@ fn user_pod() {
         PodType::CpuService,
         TEEType::SGX,
         Vec::new(),
+        1,
+        1,
+        1,
     );
 
     let list = c.user_pods(1, 500);

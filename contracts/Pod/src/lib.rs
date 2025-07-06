@@ -48,6 +48,7 @@ mod pod {
             self.cloud_contract
         }
 
+        /// approve worker to pay computing power
         #[ink(message)]
         pub fn approve(&mut self, value: Option<U256>) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -58,6 +59,7 @@ mod pod {
             Ok(())
         }
 
+        /// pay for cloud
         #[ink(message)]
         pub fn pay_for_woker(&mut self, worker: Address, amount: U256) -> Result<(), Error> {
             self.ensure_from_cloud()?;
@@ -65,9 +67,9 @@ mod pod {
             let allowance = self.allowance;
             if allowance.is_some() {
                 ensure!(allowance.unwrap() >= amount, Error::NotEnoughAllowance);
-                self.allowance =  Some(allowance.unwrap() - amount);
+                self.allowance = Some(allowance.unwrap() - amount);
             }
-            
+
             ensure!(self.balance >= amount, Error::NotEnoughBalance);
             ok_or_err!(self.env().transfer(worker, amount), Error::TransferFailed);
 
@@ -77,11 +79,9 @@ mod pod {
 
         /// Charge balance
         #[ink(message, payable)]
-        pub fn charge(&mut self) -> Result<(), Error> {
+        pub fn charge(&mut self){
             let transferred = Self::env().transferred_value();
             self.balance += transferred;
-            
-            Ok(())
         }
 
         /// Withdraw balance

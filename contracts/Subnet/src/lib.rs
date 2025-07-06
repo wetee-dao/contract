@@ -4,6 +4,8 @@ mod datas;
 mod errors;
 mod events;
 
+pub use self::subnet::{Subnet, SubnetRef};
+
 #[ink::contract]
 mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
@@ -15,12 +17,16 @@ mod subnet {
     #[derive(Default)]
     pub struct Subnet {
         /// parent contract ==> Dao contract/user
-        parent_contract: Address,
+        gov_contract: Address,
 
+        /// Computing power is divided into different zones to ensure user experience.
+        regions: Mapping<u32, Vec<u8>>,
         /// workers
         workers: Workers,
         /// user off worker
-        worker_of_user: Mapping<Address, NodeID>,
+        owner_of_worker: Mapping<Address, NodeID>,
+        /// Workers of region
+        regions_workers: RegionWorkers,
 
         /// worker mortgage
         worker_mortgages: WorkerMortgages,
@@ -61,15 +67,20 @@ mod subnet {
 
     impl Subnet {
         #[ink(constructor)]
-        pub fn new() -> Self {
-            let caller = Self::env().caller();
+        pub fn new(gov: Option<Address>) -> Self {
             let mut net: Subnet = Default::default();
-            net.parent_contract = caller;
+
+            if gov.is_some() {
+                net.gov_contract = gov.unwrap();
+            } else {
+                net.gov_contract = Self::env().caller();
+            }
             net.epoch_solt = 72000;
 
             net
         }
 
+        /// boot nodes
         #[ink(message)]
         pub fn boot_nodes(&self) -> Result<Vec<SecretNode>, Error> {
             let mut nodes = Vec::new();
@@ -81,9 +92,10 @@ mod subnet {
             return Ok(nodes);
         }
 
+        /// set boot nodes
         #[ink(message)]
         pub fn set_boot_nodes(&mut self, nodes: Vec<NodeID>) -> Result<(), Error> {
-            self.ensure_from_parent()?;
+            self.ensure_from_gov()?;
 
             let mut lnodes = nodes;
             lnodes.sort();
@@ -95,11 +107,18 @@ mod subnet {
         }
 
         #[ink(message)]
+        pub fn worker(&self, id: NodeID) -> Option<K8sCluster> {
+            self.workers.get(id)
+        }
+
+        /// get all workers
+        #[ink(message)]
         pub fn workers(&self) -> Vec<(u64, K8sCluster)> {
             let workers = self.workers.desc_list(1, 1000);
             return workers;
         }
 
+        /// register worker
         #[ink(message)]
         pub fn worker_register(
             &mut self,
@@ -108,16 +127,22 @@ mod subnet {
             ip: Ip,
             port: u32,
             level: u8,
+            region_id: u32,
         ) -> Result<NodeID, Error> {
             let caller = self.env().caller();
-            let now = self.env().block_number();
 
+            ensure!(self.regions.contains(region_id), Error::RegionNotExist);
+
+            let worker_id = self.workers.next_id();
+
+            let now = self.env().block_number();
             let worker = K8sCluster {
-                name: name,
+                name,
                 p2p_id,
-                ip: ip,
-                port: port,
-                level: level,
+                ip,
+                port,
+                level,
+                region_id,
                 owner: caller,
                 start_block: now,
                 stop_block: None,
@@ -125,12 +150,14 @@ mod subnet {
                 status: 0,
             };
 
-            let id = self.workers.insert(&worker);
-            self.worker_of_user.insert(caller, &id);
+            self.workers.insert(&worker);
+            self.owner_of_worker.insert(caller, &worker_id);
+            self.regions_workers.insert(region_id, &Some(worker_id));
 
-            Ok(id)
+            Ok(worker_id)
         }
 
+        /// Mortgage worker
         #[ink(message)]
         pub fn worker_mortgage(
             &mut self,
@@ -150,13 +177,13 @@ mod subnet {
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
 
             let deposit = AssetDeposit {
-                amount: deposit,
                 cpu,
                 cvm_cpu,
                 mem,
                 cvm_mem,
                 disk,
                 gpu,
+                amount: deposit,
                 deleted: None,
             };
 
@@ -165,26 +192,27 @@ mod subnet {
             Ok(mid)
         }
 
+        /// Unmortgage worker
         #[ink(message)]
-        pub fn worker_unmortgage(&mut self, id: NodeID, mortgage_id: u32) -> Result<u32, Error> {
+        pub fn worker_unmortgage(
+            &mut self,
+            worker_id: NodeID,
+            mortgage_id: u32,
+        ) -> Result<u32, Error> {
             let caller = self.env().caller();
-            let worker = self.workers.get(id).ok_or(Error::WorkerNotExist)?;
+            let worker = self.workers.get(worker_id).ok_or(Error::WorkerNotExist)?;
 
             ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
             ensure!(worker.status == 0, Error::WorkerStatusNotReady);
 
-            let list = self.worker_mortgages.list(id, 1, 100000);
-            let i = list
-                .iter()
-                .position(|t| t.0 == mortgage_id)
+            let mut mortgage = self
+                .worker_mortgages
+                .get(worker_id, mortgage_id)
                 .ok_or(Error::WorkerMortgageNotExist)?;
-
             let now = self.env().block_number();
-            let mortgage_id = list[i].0;
-            let mut mortgage = list[i].1.clone();
             mortgage.deleted = Some(now);
-
-            self.worker_mortgages.update(id, mortgage_id, &mortgage);
+            self.worker_mortgages
+                .update(worker_id, mortgage_id, &mortgage);
 
             ok_or_err!(
                 self.env().transfer(worker.owner, mortgage.amount),
@@ -194,6 +222,7 @@ mod subnet {
             Ok(mortgage_id)
         }
 
+        /// Stop worker
         #[ink(message)]
         pub fn worker_stop(&mut self, id: NodeID) -> Result<NodeID, Error> {
             let caller = self.env().caller();
@@ -212,6 +241,7 @@ mod subnet {
             Ok(id)
         }
 
+        /// list secrets
         #[ink(message)]
         pub fn secrets(&self) -> Vec<(u64, SecretNode)> {
             let list = self.secrets.desc_list(1, 10000);
@@ -219,6 +249,7 @@ mod subnet {
             return list;
         }
 
+        /// register secret
         #[ink(message)]
         pub fn secret_register(
             &mut self,
@@ -255,6 +286,7 @@ mod subnet {
             Ok(id)
         }
 
+        /// deposit secret
         #[ink(message)]
         pub fn secret_deposit(&mut self, id: NodeID, deposit: U256) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -269,6 +301,7 @@ mod subnet {
             Ok(())
         }
 
+        /// Delete secret
         #[ink(message)]
         pub fn secret_delete(&mut self, id: NodeID) -> Result<(), Error> {
             let caller: ink::H160 = self.env().caller();
@@ -294,6 +327,7 @@ mod subnet {
             Ok(())
         }
 
+        /// Secret nodes that are currently acting as network validation nodes.
         #[ink(message)]
         pub fn validators(&self) -> Vec<(u64, SecretNode, u32)> {
             let nodes = self.runing_secrets.clone();
@@ -306,14 +340,16 @@ mod subnet {
                 .collect::<Vec<_>>();
         }
 
+        /// Modifications to the nodes that will be acting as validation nodes in the next epoch
         #[ink(message)]
         pub fn get_pending_secrets(&self) -> Vec<(NodeID, u32)> {
             self.pending_secrets.clone()
         }
 
+        /// Add nodes to the validation set through governance
         #[ink(message)]
         pub fn validator_join(&mut self, id: NodeID) -> Result<(), Error> {
-            self.ensure_from_parent()?;
+            self.ensure_from_gov()?;
             self.secrets.get(id).ok_or(Error::NodeNotExist)?;
 
             let mut nodes = self.pending_secrets.clone();
@@ -333,9 +369,10 @@ mod subnet {
             Ok(())
         }
 
+        /// delete secret node form pending and runing validator for next epoch
         #[ink(message)]
         pub fn validator_delete(&mut self, id: NodeID) -> Result<(), Error> {
-            self.ensure_from_parent()?;
+            self.ensure_from_gov()?;
 
             let mut nodes = self.pending_secrets.clone();
             let mut is_in = false;
@@ -382,10 +419,7 @@ mod subnet {
             if key.is_none() {
                 self.side_chain_multi_key = Some(caller);
             } else {
-                ensure!(
-                    caller == key.unwrap(),
-                    Error::InvalidSideChainCaller
-                );
+                ensure!(caller == key.unwrap(), Error::InvalidSideChainCaller);
             }
 
             // check epoch block time
@@ -439,7 +473,7 @@ mod subnet {
 
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
-            self.ensure_from_parent()?;
+            self.ensure_from_gov()?;
             ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
 
             Ok(())
@@ -469,9 +503,9 @@ mod subnet {
         }
 
         /// Gov call only call from contract
-        fn ensure_from_parent(&self) -> Result<(), Error> {
+        fn ensure_from_gov(&self) -> Result<(), Error> {
             ensure!(
-                self.env().caller() == self.parent_contract,
+                self.env().caller() == self.gov_contract,
                 Error::MustCallByMainContract
             );
 

@@ -19,6 +19,9 @@ pub struct K8sCluster {
     /// cluster hardware and security level
     /// 集群的硬件和安全等级
     pub level: u8,
+    /// region id
+    /// 集群所在区域
+    pub region_id: u32,
     /// The block that creates the K8sCluster
     /// App创建的区块
     pub start_block: BlockNumber,
@@ -157,5 +160,4 @@ primitives::define_double_map!(WorkerMortgages, NodeID, AssetDeposit);
 
 primitives::define_map!(Secrets, NodeID, SecretNode);
 
-// mortgage_of_worker: Mapping<NodeID, Vec<u128>>,
-// primitives::define_double_map!(MortgageOfWorker, NodeID, u128);
+primitives::define_double_map!(RegionWorkers, u32, Option<NodeID>);

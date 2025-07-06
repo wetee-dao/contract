@@ -1,7 +1,7 @@
 use super::subnet::*;
 
 fn init() -> Subnet {
-    Subnet::new()
+    Subnet::new(None)
 }
 
 #[ink::test]

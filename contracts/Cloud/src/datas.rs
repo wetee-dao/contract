@@ -270,6 +270,6 @@ primitives::define_map!(Pods, u64, Pod);
 
 primitives::define_double_map!(UserPods, Address, u64);
 
-primitives::define_double_map!(WorkerPods, Address, u64);
+primitives::define_double_map!(WorkerPods, u64, u64);
 
 primitives::define_double_map!(Containers, u64, Container);

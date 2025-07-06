@@ -31,4 +31,6 @@ pub enum Error {
     NodeIsRunning,
     /// caller is not side chain multi-sig address
     InvalidSideChainCaller,
+    /// region not exist
+    RegionNotExist,
 }

@@ -6,9 +6,9 @@ type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[ink_e2e::test]
 async fn test_member_list<Client: E2EBackend>(mut client: Client) -> E2EResult<()> {
-    let mut constructor = DAORef::new(Vec::new(), None);
+    let mut constructor = DAORef::new(Vec::new(), true, None, None);
     let contract = client
-        .instantiate("DAO", &ink_e2e::alice(), &mut constructor)
+        .instantiate("dao", &ink_e2e::alice(), &mut constructor)
         .submit()
         .await
         .expect("instantiate failed");

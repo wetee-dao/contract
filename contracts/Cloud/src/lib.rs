@@ -6,7 +6,7 @@ mod errors;
 #[ink::contract]
 mod cloud {
     use crate::{datas::*, errors::Error};
-    use ink::{prelude::vec::Vec, H256};
+    use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, H256};
     use pod::PodRef;
     use primitives::{ensure, ok_or_err, u64_to_u8_32};
     use subnet::SubnetRef;
@@ -23,7 +23,7 @@ mod cloud {
         /// pods
         pods: Pods,
         /// pod
-        pod_status: u8,
+        pod_status: Mapping<u64, u8>,
         /// pod of user
         pod_of_user: UserPods,
         /// worker of user
@@ -35,25 +35,23 @@ mod cloud {
 
     impl Cloud {
         #[ink(constructor)]
-        pub fn new(subnet_contract_code_hash: H256, pod_contract_code_hash: H256) -> Self {
+        pub fn new(subnet_addr: Address, pod_contract_code_hash: H256) -> Self {
             let caller = Self::env().caller();
 
-            let subnet = SubnetRef::new(Some(caller))
-                .endowment(0.into())
-                .code_hash(subnet_contract_code_hash)
-                .instantiate();
+            // init subnet contract
+            let subnet = SubnetRef::from_addr(subnet_addr);
 
-            let mut ins = Cloud {
+            // init cloud contract
+            let ins = Cloud {
                 gov_contract: caller,
                 subnet,
                 pods: Default::default(),
-                pod_status: 0,
+                pod_status: Default::default(),
                 pod_of_user: Default::default(),
                 pod_of_worker: Default::default(),
                 containers: Default::default(),
                 pod_contract_code_hash: pod_contract_code_hash,
             };
-            ins.gov_contract = caller;
 
             ins
         }
@@ -65,6 +63,11 @@ mod cloud {
             self.pod_contract_code_hash = pod_contract;
 
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn subnet_address(&self) -> Address { 
+            self.subnet.as_ref().clone()
         }
 
         /// Create pod
@@ -80,11 +83,14 @@ mod cloud {
             worker_id: u64,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
-            let pay_value = self.env().transferred_value();
 
+            // check worker status
             let worker = self.subnet.worker(worker_id).ok_or(Error::WorkerNotFound)?;
             ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
             ensure!(worker.region_id == region_id, Error::RegionNotMatch);
+            // ensure!(worker.status == 1, Error::WorkerNotOnline);
+
+            let pay_value = self.env().transferred_value();
 
             // init new pod contract
             let pod_id = self.pods.next_id();
@@ -94,15 +100,13 @@ mod cloud {
                 .salt_bytes(Some(u64_to_u8_32(pod_id)))
                 .instantiate();
 
-            let now = self.env().block_number();
-
             // save pod base config
             self.pods.insert(&Pod {
                 name: name,
                 owner: caller,
                 contract: contract,
                 ptype: pod_type,
-                start_block: now,
+                start_block: self.env().block_number(),
                 tee_type: tee_type,
             });
             self.pod_of_user.insert(caller, &pod_id);
@@ -191,5 +195,6 @@ mod cloud {
     }
 }
 
+// #[cfg(all(test, feature = "e2e-tests"))]
 #[cfg(test)]
-mod tests;
+mod e2e_tests;

@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 use ink::{prelude::vec::Vec, Address, U256};
 
 use crate::errors::Error;

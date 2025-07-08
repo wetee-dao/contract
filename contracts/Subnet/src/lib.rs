@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-mod datas;
+pub mod datas;
 mod errors;
 mod events;
 
@@ -23,6 +23,8 @@ mod subnet {
         regions: Mapping<u32, Vec<u8>>,
         /// workers
         workers: Workers,
+        /// worker status
+        worker_status: Mapping<NodeID, u8>,
         /// user off worker
         owner_of_worker: Mapping<Address, NodeID>,
         /// Workers of region
@@ -67,14 +69,10 @@ mod subnet {
 
     impl Subnet {
         #[ink(constructor)]
-        pub fn new(gov: Option<Address>) -> Self {
+        pub fn new() -> Self {
             let mut net: Subnet = Default::default();
 
-            if gov.is_some() {
-                net.gov_contract = gov.unwrap();
-            } else {
-                net.gov_contract = Self::env().caller();
-            }
+            net.gov_contract = Self::env().caller();  
             net.epoch_solt = 72000;
 
             net
@@ -107,8 +105,25 @@ mod subnet {
         }
 
         #[ink(message)]
+        pub fn set_region(&mut self, region_id: u32, name: Vec<u8>)-> Result<(), Error>{
+            self.ensure_from_gov()?;
+            self.regions.insert(region_id, &name);
+
+            Ok(())
+        }
+
+        #[ink(message)]
         pub fn worker(&self, id: NodeID) -> Option<K8sCluster> {
-            self.workers.get(id)
+            let worker_wrap = self.workers.get(id);
+            if worker_wrap.is_none() {
+                return None;
+            }
+
+            let mut worker = worker_wrap.unwrap();
+            let status = self.worker_status.get(id).unwrap_or(0);
+            worker.status = status;
+
+            Some(worker)
         }
 
         /// get all workers
@@ -517,5 +532,6 @@ mod subnet {
 #[cfg(test)]
 mod tests;
 
-#[cfg(all(test, feature = "e2e-tests"))]
+// #[cfg(all(test, feature = "e2e-tests"))]
+#[cfg(test)]
 mod e2e_tests;

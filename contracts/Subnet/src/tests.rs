@@ -1,11 +1,11 @@
 use super::subnet::*;
 
 fn init() -> Subnet {
-    Subnet::new(None)
+    Subnet::new()
 }
 
 #[ink::test]
-fn test_register() {
+fn test_secret_register() {
     use ink::env::DefaultEnvironment;
 
     let mut c = init();

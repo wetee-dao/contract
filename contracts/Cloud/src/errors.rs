@@ -11,4 +11,6 @@ pub enum Error {
     WorkerLevelNotEnough,
     /// region not match
     RegionNotMatch,
+    /// worker not online
+    WorkerNotOnline,
 }

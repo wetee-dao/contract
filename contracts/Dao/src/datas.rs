@@ -190,6 +190,6 @@ primitives::define_map!(Votes, u64, VoteInfo);
 
 primitives::define_map!(SudoCalls, CalllId, Call);
 
-primitives::define_double_map!(VoteOfProposal, CalllId, u64);
+primitives::double_u32_map!(VoteOfProposal, CalllId, u64);
 
-primitives::define_double_map!(VoteOfMember, Address, u64);
+primitives::double_u32_map!(VoteOfMember, Address, u64);

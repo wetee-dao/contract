@@ -156,8 +156,8 @@ pub struct EpochInfo {
 
 primitives::define_map!(Workers, NodeID, K8sCluster);
 
-primitives::define_double_map!(WorkerMortgages, NodeID, AssetDeposit);
+primitives::double_u32_map!(WorkerMortgages, NodeID, AssetDeposit);
 
 primitives::define_map!(Secrets, NodeID, SecretNode);
 
-primitives::define_double_map!(RegionWorkers, u32, Option<NodeID>);
+primitives::double_u32_map!(RegionWorkers, u32, Option<NodeID>);

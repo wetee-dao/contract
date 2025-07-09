@@ -122,6 +122,23 @@ impl Default for EditType {
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct Env {
+    /// container index
+    pub index: u16,
+    /// key
+    pub k: EnvKey,
+    /// value
+    pub v: Vec<u8>,
+}
+
+/// App setting
+/// 应用设置
+#[derive(Clone)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct EnvInput {
     /// edit type
     pub etype: EditType,
@@ -268,8 +285,8 @@ pub enum TEEType {
 
 primitives::define_map!(Pods, u64, Pod);
 
-primitives::define_double_map!(UserPods, Address, u64);
+primitives::double_u32_map!(UserPods, Address, u64);
 
-primitives::define_double_map!(WorkerPods, u64, u64);
+primitives::double_u32_map!(WorkerPods, u64, u64);
 
-primitives::define_double_map!(Containers, u64, Container);
+primitives::double_u32_map!(Containers, u64, Container);

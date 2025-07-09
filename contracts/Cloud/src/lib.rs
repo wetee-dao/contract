@@ -22,6 +22,10 @@ mod cloud {
 
         /// pods
         pods: Pods,
+        /// pod envs
+        pod_envs: Mapping<u64, Vec<Env>>,
+        /// pod last block number
+        pod_version: Mapping<u64, BlockNumber>,
         /// pod
         pod_status: Mapping<u64, u8>,
         /// pod of user
@@ -46,6 +50,8 @@ mod cloud {
                 gov_contract: caller,
                 subnet,
                 pods: Default::default(),
+                pod_envs: Default::default(),
+                pod_version: Default::default(),
                 pod_status: Default::default(),
                 pod_of_user: Default::default(),
                 pod_of_worker: Default::default(),
@@ -66,7 +72,7 @@ mod cloud {
         }
 
         #[ink(message)]
-        pub fn subnet_address(&self) -> Address { 
+        pub fn subnet_address(&self) -> Address {
             self.subnet.as_ref().clone()
         }
 
@@ -76,7 +82,7 @@ mod cloud {
             &mut self,
             name: Vec<u8>,
             pod_type: PodType,
-            tee_type: TEEType, 
+            tee_type: TEEType,
             containers: Vec<Container>,
             region_id: u32,
             level: u8,
@@ -170,7 +176,35 @@ mod cloud {
                 }
             }
 
-            return pods;
+            pods
+        }
+
+        #[ink(message)]
+        pub fn worker_pods(
+            &self,
+            worker_id: u64,
+        ) -> Vec<(u64, Pod, Vec<Container>)> {
+            let ids = self.pod_of_worker.desc_list(worker_id, 1, 50000);
+
+            let mut pods = Vec::new();
+            for (_k2, podid) in ids {
+                let pod = self.pods.get(podid);
+                if pod.is_some() {
+                    let containers = self.containers.desc_list(podid, 1, 20);
+                    pods.push((
+                        podid,
+                        pod.unwrap(),
+                        containers.iter().map(|(_, v)| v.clone()).collect(),
+                    ));
+                }
+            }
+
+            pods
+        }
+
+        #[ink(message)]
+        pub fn worker_pod_len(&self, worker_id: u64,) -> u32 {
+            self.pod_of_worker.next_id(worker_id)
         }
 
         /// Update contract with gov

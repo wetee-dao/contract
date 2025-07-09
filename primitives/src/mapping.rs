@@ -113,8 +113,8 @@ macro_rules! define_map {
 }
 
 #[macro_export]
-macro_rules! define_double_map {
-    ($name:ident, $k1_ty:ty, $value_ty:ty) => {
+macro_rules! define_double_map_base {
+    ($name:ident, $k1_ty:ty, $value_ty:ty, $mid_ty:ty, $realk_ty:ty) => {
         #[ink::storage_item(derive = false)]
         #[derive(
             ink::storage::traits::Storable,
@@ -128,19 +128,19 @@ macro_rules! define_double_map {
             derive(ink::scale_info::TypeInfo, ink::storage::traits::StorageLayout)
         )]
         pub struct $name {
-            // k1 to u32
-            k1: ink::storage::Mapping<$k1_ty, u32>,
+            // k1 to small
+            k1: ink::storage::Mapping<$k1_ty, $mid_ty>,
             // k1 length
-            k1_length: u32,
+            k1_length: $mid_ty,
             // k2 next id
-            k2_next_id: ink::storage::Mapping<u32, u32>,
+            k2_next_id: ink::storage::Mapping<$mid_ty, $mid_ty>,
             // relation k1 k2 to value
-            store: ink::storage::Mapping<u64, $value_ty>,
+            store: ink::storage::Mapping<$realk_ty, $value_ty>,
         }
 
         impl $name {
             // next id of k2 for k1
-            pub fn next_id(&self, k: $k1_ty) -> u32 {
+            pub fn next_id(&self, k: $k1_ty) -> $mid_ty {
                 let id = self.k1.get(&k);
                 if id.is_none() {
                     return 0;
@@ -149,7 +149,7 @@ macro_rules! define_double_map {
             }
 
             // next id of k2 for k1
-            pub fn len(&self, k: $k1_ty) -> u32 {
+            pub fn len(&self, k: $k1_ty) -> $mid_ty {
                 let id = self.k1.get(&k);
                 if id.is_none() {
                     return 0;
@@ -158,7 +158,7 @@ macro_rules! define_double_map {
             }
 
             // insert value with k1 require k2
-            pub fn insert(&mut self, k: $k1_ty, v: &$value_ty) -> u32 {
+            pub fn insert(&mut self, k: $k1_ty, v: &$value_ty) -> $mid_ty {
                 // get id
                 let mut id = self.k1.get(&k);
                 if id.is_none() {
@@ -174,31 +174,31 @@ macro_rules! define_double_map {
                 let next_id = self.k2_next_id.get(id.unwrap()).unwrap_or_default();
                 self.k2_next_id.insert(id.unwrap(), &(next_id + 1));
 
-                let key = primitives::combine_u32_to_u64(id.unwrap(), next_id);
+                let key = primitives::combine(id.unwrap(), next_id);
                 self.store.insert(key, v);
 
                 next_id
             }
 
             // replace value for k1 and k2
-            pub fn update(&mut self, k1: $k1_ty, k2: u32, v: &$value_ty) -> Option<u32> {
+            pub fn update(&mut self, k1: $k1_ty, k2: $mid_ty, v: &$value_ty) -> Option<u32> {
                 let id = self.k1.get(&k1);
                 if id.is_none() {
                     return None;
                 }
 
-                let key = primitives::combine_u32_to_u64(id.unwrap(), k2);
+                let key = primitives::combine(id.unwrap(), k2);
                 self.store.insert(key, v)
             }
 
             // get value by k1 and k2
-            pub fn get(&self, k1: $k1_ty, k2: u32) -> Option<$value_ty> {
+            pub fn get(&self, k1: $k1_ty, k2: $mid_ty) -> Option<$value_ty> {
                 let id = self.k1.get(&k1);
                 if id.is_none() {
                     return None;
                 }
 
-                let key = primitives::combine_u32_to_u64(id.unwrap(), k2);
+                let key = primitives::combine(id.unwrap(), k2);
                 self.store.get(key)
             }
 
@@ -206,9 +206,9 @@ macro_rules! define_double_map {
             pub fn desc_list(
                 &self,
                 k1: $k1_ty,
-                page: u32,
-                size: u32,
-            ) -> ink::prelude::vec::Vec<(u32, $value_ty)> {
+                page: $mid_ty,
+                size: $mid_ty,
+            ) -> ink::prelude::vec::Vec<($mid_ty, $value_ty)> {
                 let id = self.k1.get(&k1);
                 let mut list = ink::prelude::vec::Vec::new();
                 if id.is_none() {
@@ -220,7 +220,7 @@ macro_rules! define_double_map {
                     return list;
                 }
 
-                let start = primitives::combine_u32_to_u64(id.unwrap(), total_len);
+                let start = primitives::combine(id.unwrap(), total_len);
                 let total = if total_len > page * size {
                     page * size
                 } else {
@@ -228,9 +228,9 @@ macro_rules! define_double_map {
                 };
 
                 for i in 0..total + 1 {
-                    let k = start - i as u64;
+                    let k = start - i as $realk_ty;
                     let v = self.store.get(k);
-                    let (_, k2) = primitives::split_u64_to_u32(k);
+                    let (_, k2) = primitives::split(k);
                     if v.is_some() {
                         list.push((k2, v.unwrap()));
                     }
@@ -243,9 +243,9 @@ macro_rules! define_double_map {
             pub fn list(
                 &self,
                 k1: $k1_ty,
-                page: u32,
-                size: u32,
-            ) -> ink::prelude::vec::Vec<(u32, $value_ty)> {
+                page: $mid_ty,
+                size: $mid_ty,
+            ) -> ink::prelude::vec::Vec<($mid_ty, $value_ty)> {
                 let id = self.k1.get(&k1);
                 let mut list = ink::prelude::vec::Vec::new();
                 if id.is_none() {
@@ -257,7 +257,7 @@ macro_rules! define_double_map {
                     return list;
                 }
 
-                let start = primitives::combine_u32_to_u64(id.unwrap(), 0);
+                let start = primitives::combine(id.unwrap(), 0);
                 let total = if total_len > page * size {
                     page * size
                 } else {
@@ -266,9 +266,9 @@ macro_rules! define_double_map {
 
                 let mut list = ink::prelude::vec::Vec::new();
                 for i in 0..total {
-                    let k = start + i as u64;
+                    let k = start + i as $realk_ty;
                     let v = self.store.get(k);
-                    let (_, k2) = primitives::split_u64_to_u32(k);
+                    let (_, k2) = primitives::split(k);
                     if v.is_some() {
                         list.push((k2, v.unwrap()));
                     }
@@ -280,14 +280,124 @@ macro_rules! define_double_map {
     };
 }
 
-/// combine u32 to u64
-pub fn combine_u32_to_u64(k1: u32, k2: u32) -> u64 {
-    ((k1 as u64) << 32) | (k2 as u64)
+#[macro_export]
+macro_rules! double_u8_map {
+    ($name:ident, $k1_ty:ty, $value_ty:ty) => {
+        primitives::define_double_map_base!($name, $k1_ty, $value_ty, u8, u16);
+    };
 }
 
-/// split u64 to u32
-pub fn split_u64_to_u32(key: u64) -> (u32, u32) {
-    let k1 = (key >> 32) as u32;
-    let k2 = key as u32;
-    (k1, k2)
+#[macro_export]
+macro_rules! double_u16_map {
+    ($name:ident, $k1_ty:ty, $value_ty:ty) => {
+        primitives::define_double_map_base!($name, $k1_ty, $value_ty, u16, u32);
+    };
+}
+
+#[macro_export]
+macro_rules! double_u32_map {
+    ($name:ident, $k1_ty:ty, $value_ty:ty) => {
+        primitives::define_double_map_base!($name, $k1_ty, $value_ty, u32, u64);
+    };
+}
+
+#[macro_export]
+macro_rules! double_u64_map {
+    ($name:ident, $k1_ty:ty, $value_ty:ty) => {
+        primitives::define_double_map_base!($name, $k1_ty, $value_ty, u64, u128);
+    };
+}
+
+/// combine two type to one
+pub trait CombineKey {
+    type Output;
+    fn combine(high: Self, low: Self) -> Self::Output;
+}
+
+/// split one type to two
+pub trait SplitKey {
+    type Small;
+    fn split(self) -> (Self::Small, Self::Small);
+}
+
+impl CombineKey for u32 {
+    type Output = u64;
+
+    fn combine(high: u32, low: u32) -> u64 {
+        ((high as u64) << 32) | (low as u64)
+    }
+}
+
+impl SplitKey for u64 {
+    type Small = u32;
+
+    fn split(self) -> (u32, u32) {
+        let k1 = (self >> 32) as u32;
+        let k2 = self as u32;
+        (k1, k2)
+    }
+}
+
+impl CombineKey for u64 {
+    type Output = u128;
+
+    fn combine(high: u64, low: u64) -> u128 {
+        ((high as u128) << 64) | (low as u128)
+    }
+}
+
+impl SplitKey for u128 {
+    type Small = u64;
+
+    fn split(self) -> (u64, u64) {
+        let k1 = (self >> 64) as u64;
+        let k2 = self as u64;
+        (k1, k2)
+    }
+}
+
+impl CombineKey for u8 {
+    type Output = u16;
+
+    fn combine(high: u8, low: u8) -> u16 {
+        ((high as u16) << 8) | (low as u16)
+    }
+}
+
+impl SplitKey for u16 {
+    type Small = u8;
+
+    fn split(self) -> (u8, u8) {
+        let k1 = (self >> 8) as u8;
+        let k2 = self as u8;
+        (k1, k2)
+    }
+}
+
+impl CombineKey for u16 {
+    type Output = u32;
+
+    fn combine(high: u16, low: u16) -> u32 {
+        ((high as u32) << 16) | (low as u32)
+    }
+}
+
+impl SplitKey for u32 {
+    type Small = u16;
+
+    fn split(self) -> (u16, u16) {
+        let k1 = (self >> 16) as u16;
+        let k2 = self as u16;
+        (k1, k2)
+    }
+}
+
+// combine two key to one
+pub fn combine<T: CombineKey>(high: T, low: T) -> T::Output {
+    T::combine(high, low)
+}
+
+// split one key to two
+pub fn split<T: SplitKey>(val: T) -> (T::Small, T::Small) {
+    val.split()
 }

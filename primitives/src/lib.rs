@@ -2,6 +2,7 @@
 
 mod int;
 mod mapping;
+mod mapping_key;
 
 pub use int::*;
 pub use mapping::*;

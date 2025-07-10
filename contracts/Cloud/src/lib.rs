@@ -179,31 +179,70 @@ mod cloud {
             pods
         }
 
+        /// Pods version of worker
         #[ink(message)]
-        pub fn worker_pods(
-            &self,
-            worker_id: u64,
-        ) -> Vec<(u64, Pod, Vec<Container>)> {
+        pub fn worker_pods_version(&self, worker_id: u64) -> Vec<(u64, BlockNumber, u8)> {
             let ids = self.pod_of_worker.desc_list(worker_id, 1, 50000);
 
             let mut pods = Vec::new();
             for (_k2, podid) in ids {
-                let pod = self.pods.get(podid);
+                let version = self.pod_version.get(podid).unwrap_or_default();
+                let status = self.pod_status.get(podid).unwrap_or_default();
+
+                pods.push((podid, version, status));
+            }
+
+            pods
+        }
+
+        /// Pods of worker
+        #[ink(message)]
+        pub fn worker_pods(
+            &self,
+            worker_id: u64,
+            page: u32,
+            size: u32,
+        ) -> Vec<(u64, Pod, Vec<Container>)> {
+            let ids = self.pod_of_worker.desc_list(worker_id, page, size);
+            let mut pods = Vec::new();
+            for (_k2, pod_id) in ids {
+                let pod = self.pods.get(pod_id);
                 if pod.is_some() {
-                    let containers = self.containers.desc_list(podid, 1, 20);
+                    let containers = self.containers.desc_list(pod_id, 1, 20);
                     pods.push((
-                        podid,
+                        pod_id,
                         pod.unwrap(),
                         containers.iter().map(|(_, v)| v.clone()).collect(),
-                    ));
+                    ))
                 }
             }
 
             pods
         }
 
+        /// Get pod info
         #[ink(message)]
-        pub fn worker_pod_len(&self, worker_id: u64,) -> u32 {
+        pub fn pod(&self, pod_id: u64) -> Option<(Pod, Vec<Container>, BlockNumber, u8)> {
+            let pod_wrap = self.pods.get(pod_id);
+            if pod_wrap.is_none() {
+                return None;
+            }
+            let pod = pod_wrap.unwrap();
+            let containers = self.containers.desc_list(pod_id, 1, 20);
+            let version = self.pod_version.get(pod_id).unwrap_or_default();
+            let status = self.pod_status.get(pod_id).unwrap_or_default();
+
+            Some((
+                pod,
+                containers.iter().map(|(_, v)| v.clone()).collect(),
+                version,
+                status,
+            ))
+        }
+
+        /// Len of pods by worker
+        #[ink(message)]
+        pub fn worker_pod_len(&self, worker_id: u64) -> u32 {
             self.pod_of_worker.next_id(worker_id)
         }
 

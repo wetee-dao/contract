@@ -160,4 +160,4 @@ primitives::double_u32_map!(WorkerMortgages, NodeID, AssetDeposit);
 
 primitives::define_map!(Secrets, NodeID, SecretNode);
 
-primitives::double_u32_map!(RegionWorkers, u32, Option<NodeID>);
+primitives::double_u32_map!(RegionWorkers, u32, NodeID);

@@ -27,6 +27,8 @@ mod subnet {
         worker_status: Mapping<NodeID, u8>,
         /// user off worker
         owner_of_worker: Mapping<Address, NodeID>,
+        /// user off worker
+        mint_of_worker: Mapping<AccountId, NodeID>,
         /// Workers of region
         regions_workers: RegionWorkers,
 
@@ -133,6 +135,17 @@ mod subnet {
             return workers;
         }
 
+        /// get user worker
+        #[ink(message)]
+        pub fn user_worker(&self, user: Address) -> Option<u64> {
+            self.owner_of_worker.get(user)
+        }
+
+        #[ink(message)]
+        pub fn mint_worker(&self, id: AccountId) -> Option<u64> {
+            self.mint_of_worker.get(id)
+        }
+
         /// register worker
         #[ink(message)]
         pub fn worker_register(
@@ -167,7 +180,8 @@ mod subnet {
 
             self.workers.insert(&worker);
             self.owner_of_worker.insert(caller, &worker_id);
-            self.regions_workers.insert(region_id, &Some(worker_id));
+            self.mint_of_worker.insert(p2p_id, &worker_id);
+            self.regions_workers.insert(region_id, &worker_id);
 
             Ok(worker_id)
         }

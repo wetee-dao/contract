@@ -30,8 +30,10 @@ mod cloud {
         pod_status: Mapping<u64, u8>,
         /// pod of user
         pod_of_user: UserPods,
-        /// worker of user
+        /// pods of worker
         pod_of_worker: WorkerPods,
+        /// pod id to worker
+        worker_of_pod: Mapping<u64, (u64, u32)>,
 
         /// pod's containers
         containers: Containers,
@@ -55,6 +57,7 @@ mod cloud {
                 pod_status: Default::default(),
                 pod_of_user: Default::default(),
                 pod_of_worker: Default::default(),
+                worker_of_pod: Default::default(),
                 containers: Default::default(),
                 pod_contract_code_hash: pod_contract_code_hash,
             };
@@ -116,7 +119,8 @@ mod cloud {
                 tee_type: tee_type,
             });
             self.pod_of_user.insert(caller, &pod_id);
-            self.pod_of_worker.insert(worker_id, &pod_id);
+            let index = self.pod_of_worker.insert(worker_id, &pod_id);
+            self.worker_of_pod.insert(pod_id, &(worker_id, index));
 
             // save pod containers
             for i in 0..containers.len() {
@@ -238,6 +242,35 @@ mod cloud {
                 version,
                 status,
             ))
+        }
+
+        /// Get pods info
+        #[ink(message)]
+        pub fn pods_by_ids(
+            &self,
+            pod_ids: Vec<u64>,
+        ) -> Vec<(u64, Pod, Vec<Container>, BlockNumber, u8)> {
+            let mut pods = Vec::new();
+            for pod_id in pod_ids {
+                let pod_wrap = self.pods.get(pod_id);
+                if pod_wrap.is_none() {
+                    continue;
+                }
+                let pod = pod_wrap.unwrap();
+                let containers = self.containers.desc_list(pod_id, 1, 20);
+                let version = self.pod_version.get(pod_id).unwrap_or_default();
+                let status = self.pod_status.get(pod_id).unwrap_or_default();
+
+                pods.push((
+                    pod_id,
+                    pod,
+                    containers.iter().map(|(_, v)| v.clone()).collect(),
+                    version,
+                    status,
+                ));
+            }
+
+            pods
         }
 
         /// Len of pods by worker

@@ -278,6 +278,36 @@ macro_rules! define_double_map_base {
 
                 return list;
             }
+
+            // replace deleted item with last item, delete last item
+            pub fn delete_and_replace_last_key(&mut self, k1: $k1_ty, k2: $mid_ty) -> bool {
+                let id_wrap = self.k1.get(&k1);
+                if id_wrap.is_none() {
+                    return false;
+                }
+                let id = id_wrap.unwrap();
+
+                let next_id = self.k2_next_id.get(id).unwrap_or_default();
+                if next_id == 0 {
+                    return false;
+                }
+
+                if k2 == next_id - 1 {
+                    let fill_key = primitives::combine(id,k2);
+                    self.store.remove(&fill_key);
+                    self.k2_next_id.insert(id, &(next_id - 1));
+                    return true;
+                }
+
+                let fill_key = primitives::combine(id,next_id - 1);
+                let delete_key = primitives::combine(id,k2);
+                let fill = self.store.get(fill_key).unwrap();
+                self.store.remove(fill_key);
+                self.store.insert(delete_key,&fill);
+                self.k2_next_id.insert(id, &(next_id - 1));
+
+                return true;
+            }
         }
     };
 }

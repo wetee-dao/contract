@@ -74,7 +74,7 @@ mod subnet {
         pub fn new() -> Self {
             let mut net: Subnet = Default::default();
 
-            net.gov_contract = Self::env().caller();  
+            net.gov_contract = Self::env().caller();
             net.epoch_solt = 72000;
 
             net
@@ -107,7 +107,7 @@ mod subnet {
         }
 
         #[ink(message)]
-        pub fn set_region(&mut self, region_id: u32, name: Vec<u8>)-> Result<(), Error>{
+        pub fn set_region(&mut self, region_id: u32, name: Vec<u8>) -> Result<(), Error> {
             self.ensure_from_gov()?;
             self.regions.insert(region_id, &name);
 
@@ -130,20 +130,41 @@ mod subnet {
 
         /// get all workers
         #[ink(message)]
-        pub fn workers(&self) -> Vec<(u64, K8sCluster)> {
-            let workers = self.workers.desc_list(1, 1000);
+        pub fn workers(&self, page: u64, size: u64) -> Vec<(u64, K8sCluster)> {
+            let workers = self.workers.desc_list(page, size);
             return workers;
         }
 
         /// get user worker
         #[ink(message)]
-        pub fn user_worker(&self, user: Address) -> Option<u64> {
-            self.owner_of_worker.get(user)
+        pub fn user_worker(&self, user: Address) -> Option<(u64, K8sCluster)> {
+            let id = self.owner_of_worker.get(user);
+            if id.is_none() {
+                return None;
+            }
+
+            let worker = self.workers.get(id.unwrap());
+            if worker.is_none() {
+                return None;
+            }
+
+            return Some((id.unwrap(), worker.unwrap()));
         }
 
+        /// get mint worker
         #[ink(message)]
-        pub fn mint_worker(&self, id: AccountId) -> Option<u64> {
-            self.mint_of_worker.get(id)
+        pub fn mint_worker(&self, id: AccountId) -> Option<(u64, K8sCluster)> {
+            let id = self.mint_of_worker.get(id);
+            if id.is_none() {
+                return None;
+            }
+
+            let worker = self.workers.get(id.unwrap());
+            if worker.is_none() {
+                return None;
+            }
+
+            return Some((id.unwrap(), worker.unwrap()));
         }
 
         /// register worker
@@ -340,6 +361,13 @@ mod subnet {
 
             let runing = self.runing_secrets.clone();
             for i in runing.iter() {
+                if i.0 == id {
+                    return Err(Error::NodeIsRunning);
+                }
+            }
+
+            let peending = self.pending_secrets.clone();
+            for i in peending.iter() {
                 if i.0 == id {
                     return Err(Error::NodeIsRunning);
                 }

@@ -33,7 +33,7 @@ mod cloud {
         /// pods of worker
         pod_of_worker: WorkerPods,
         /// pod id to worker
-        worker_of_pod: Mapping<u64, (u64, u32)>,
+        worker_of_pod: Mapping<u64, (u64, u64)>,
 
         /// pod's containers
         containers: Containers,
@@ -81,7 +81,7 @@ mod cloud {
 
         /// Create pod
         #[ink(message, payable)]
-        pub fn create_user_pod(
+        pub fn create_pod(
             &mut self,
             name: Vec<u8>,
             pod_type: PodType,
@@ -130,6 +130,99 @@ mod cloud {
             Ok(())
         }
 
+        /// stop pod
+        #[ink(message)]
+        pub fn stop_pod(&mut self, pod_id: u64) -> Result<bool, Error> {
+            let caller = self.env().caller();
+
+            // check pod owner
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            ensure!(pod.owner == caller, Error::NotPodOwner);
+
+            // stop pod
+            self.pod_status.insert(pod_id, &3);
+            let (worker_id, index) = self.worker_of_pod.get(pod_id).ok_or(Error::PodNotFound)?;
+            let ok = self
+                .pod_of_worker
+                .delete_and_replace_last_key(worker_id, index);
+
+            Ok(ok)
+        }
+
+        /// restart pod
+        #[ink(message)]
+        pub fn restart_pod(&mut self, pod_id: u64) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            // check pod owner
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            ensure!(pod.owner == caller, Error::NotPodOwner);
+
+            // check pod status
+            let status = self.pod_status.get(pod_id).unwrap_or_default();
+            if status != 1 && status != 3 {
+                return Err(Error::PodStatusError);
+            }
+
+            if status == 3 {
+                let (worker_id, _) = self.worker_of_pod.get(pod_id).ok_or(Error::PodNotFound)?;
+                // restart pod
+                self.pod_status.insert(pod_id, &0);
+                let index = self.pod_of_worker.insert(worker_id, &pod_id);
+                self.worker_of_pod.insert(pod_id, &(worker_id, index));
+            }
+            self.pod_version.insert(pod_id, &self.env().block_number());
+
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn add_container(&mut self, pod_id: u64, container: Container) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            ensure!(pod.owner == caller, Error::NotPodOwner);
+
+            self.containers.insert(pod_id, &container);
+            self.pod_version.insert(pod_id, &self.env().block_number());
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn update_container(
+            &mut self,
+            pod_id: u64,
+            container_id: u64,
+            container: Container,
+        ) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            ensure!(pod.owner == caller, Error::NotPodOwner);
+
+            self.containers.update(pod_id, container_id, &container);
+            self.pod_version.insert(pod_id, &self.env().block_number());
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn del_container(&mut self, pod_id: u64, container_id: u64) -> Result<bool, Error> {
+            let caller = self.env().caller();
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            ensure!(pod.owner == caller, Error::NotPodOwner);
+
+            let ok = self
+                .containers
+                .delete_and_replace_last_key(pod_id, container_id);
+
+            if ok {
+                self.pod_version.insert(pod_id, &self.env().block_number());
+            }
+
+            Ok(ok)
+        }
+
         /// All pod length
         #[ink(message)]
         pub fn pod_len(&self) -> u64 {
@@ -138,17 +231,13 @@ mod cloud {
 
         /// List pods
         #[ink(message)]
-        pub fn pods(&self, page: u64, size: u64) -> Vec<(u64, Pod, Vec<Container>)> {
+        pub fn pods(&self, page: u64, size: u64) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
             let list = self.pods.desc_list(page, size);
 
             let mut pods = Vec::new();
             for (k, v) in list.iter() {
                 let containers = self.containers.desc_list(*k, 1, 20);
-                pods.push((
-                    *k,
-                    v.clone(),
-                    containers.iter().map(|(_, v)| v.clone()).collect(),
-                ));
+                pods.push((*k, v.clone(), containers));
             }
 
             pods
@@ -163,7 +252,7 @@ mod cloud {
 
         /// Pods of user
         #[ink(message)]
-        pub fn user_pods(&self, page: u32, size: u32) -> Vec<(u64, Pod, Vec<Container>)> {
+        pub fn user_pods(&self, page: u32, size: u32) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
             let caller = self.env().caller();
             let ids = self.pod_of_user.desc_list(caller, page, size);
 
@@ -172,11 +261,7 @@ mod cloud {
                 let pod = self.pods.get(podid);
                 if pod.is_some() {
                     let containers = self.containers.desc_list(podid, 1, 20);
-                    pods.push((
-                        podid,
-                        pod.unwrap(),
-                        containers.iter().map(|(_, v)| v.clone()).collect(),
-                    ));
+                    pods.push((podid, pod.unwrap(), containers));
                 }
             }
 
@@ -204,20 +289,16 @@ mod cloud {
         pub fn worker_pods(
             &self,
             worker_id: u64,
-            page: u32,
-            size: u32,
-        ) -> Vec<(u64, Pod, Vec<Container>)> {
+            page: u64,
+            size: u64,
+        ) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
             let ids = self.pod_of_worker.desc_list(worker_id, page, size);
             let mut pods = Vec::new();
             for (_k2, pod_id) in ids {
                 let pod = self.pods.get(pod_id);
                 if pod.is_some() {
                     let containers = self.containers.desc_list(pod_id, 1, 20);
-                    pods.push((
-                        pod_id,
-                        pod.unwrap(),
-                        containers.iter().map(|(_, v)| v.clone()).collect(),
-                    ))
+                    pods.push((pod_id, pod.unwrap(), containers))
                 }
             }
 
@@ -226,7 +307,7 @@ mod cloud {
 
         /// Get pod info
         #[ink(message)]
-        pub fn pod(&self, pod_id: u64) -> Option<(Pod, Vec<Container>, BlockNumber, u8)> {
+        pub fn pod(&self, pod_id: u64) -> Option<(Pod, Vec<(u64, Container)>, BlockNumber, u8)> {
             let pod_wrap = self.pods.get(pod_id);
             if pod_wrap.is_none() {
                 return None;
@@ -236,12 +317,7 @@ mod cloud {
             let version = self.pod_version.get(pod_id).unwrap_or_default();
             let status = self.pod_status.get(pod_id).unwrap_or_default();
 
-            Some((
-                pod,
-                containers.iter().map(|(_, v)| v.clone()).collect(),
-                version,
-                status,
-            ))
+            Some((pod, containers, version, status))
         }
 
         /// Get pods info
@@ -249,7 +325,7 @@ mod cloud {
         pub fn pods_by_ids(
             &self,
             pod_ids: Vec<u64>,
-        ) -> Vec<(u64, Pod, Vec<Container>, BlockNumber, u8)> {
+        ) -> Vec<(u64, Pod, Vec<(u64, Container)>, BlockNumber, u8)> {
             let mut pods = Vec::new();
             for pod_id in pod_ids {
                 let pod_wrap = self.pods.get(pod_id);
@@ -261,13 +337,7 @@ mod cloud {
                 let version = self.pod_version.get(pod_id).unwrap_or_default();
                 let status = self.pod_status.get(pod_id).unwrap_or_default();
 
-                pods.push((
-                    pod_id,
-                    pod,
-                    containers.iter().map(|(_, v)| v.clone()).collect(),
-                    version,
-                    status,
-                ));
+                pods.push((pod_id, pod, containers, version, status));
             }
 
             pods
@@ -275,7 +345,7 @@ mod cloud {
 
         /// Len of pods by worker
         #[ink(message)]
-        pub fn worker_pod_len(&self, worker_id: u64) -> u32 {
+        pub fn worker_pod_len(&self, worker_id: u64) -> u64 {
             self.pod_of_worker.next_id(worker_id)
         }
 

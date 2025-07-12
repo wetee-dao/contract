@@ -68,12 +68,11 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
     let _ = client
         .call(
             &ink_e2e::alice(),
-            &cloud_call_builder.create_user_pod(
+            &cloud_call_builder.create_pod(
                 "pod1".as_bytes().to_vec(),
                 PodType::CpuService,
                 TEEType::SGX,
                 vec![Container {
-                    name: "t1".as_bytes().to_vec(),
                     image: "nginx".as_bytes().to_vec(),
                     command: Command::NONE,
                     port: Vec::new(),
@@ -97,12 +96,11 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
     let _ = client
         .call(
             &ink_e2e::alice(),
-            &cloud_call_builder.create_user_pod(
+            &cloud_call_builder.create_pod(
                 "pod2".as_bytes().to_vec(),
                 PodType::CpuService,
                 TEEType::SGX,
                 vec![Container {
-                    name: "t1".as_bytes().to_vec(),
                     image: "nginx".as_bytes().to_vec(),
                     command: Command::NONE,
                     port: Vec::new(),

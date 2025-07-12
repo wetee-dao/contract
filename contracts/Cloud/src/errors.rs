@@ -13,4 +13,10 @@ pub enum Error {
     RegionNotMatch,
     /// worker not online
     WorkerNotOnline,
+    /// pod not found
+    PodNotFound,
+    /// not pod owner
+    NotPodOwner,
+    /// pod status error
+    PodStatusError,
 }

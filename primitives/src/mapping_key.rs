@@ -11,6 +11,7 @@ pub trait SplitKey {
     fn split(self) -> (Self::Small, Self::Small);
 }
 
+// implements for u32
 impl CombineKey for u32 {
     type Output = u64;
 
@@ -18,7 +19,6 @@ impl CombineKey for u32 {
         ((high as u64) << 32) | (low as u64)
     }
 }
-
 impl SplitKey for u64 {
     type Small = u32;
 
@@ -29,6 +29,7 @@ impl SplitKey for u64 {
     }
 }
 
+// implements for u64
 impl CombineKey for u64 {
     type Output = u128;
 
@@ -36,7 +37,6 @@ impl CombineKey for u64 {
         ((high as u128) << 64) | (low as u128)
     }
 }
-
 impl SplitKey for u128 {
     type Small = u64;
 
@@ -47,6 +47,7 @@ impl SplitKey for u128 {
     }
 }
 
+// implements for u8
 impl CombineKey for u8 {
     type Output = u16;
 
@@ -54,7 +55,6 @@ impl CombineKey for u8 {
         ((high as u16) << 8) | (low as u16)
     }
 }
-
 impl SplitKey for u16 {
     type Small = u8;
 
@@ -65,6 +65,7 @@ impl SplitKey for u16 {
     }
 }
 
+// implements for u16
 impl CombineKey for u16 {
     type Output = u32;
 
@@ -72,7 +73,6 @@ impl CombineKey for u16 {
         ((high as u32) << 16) | (low as u32)
     }
 }
-
 impl SplitKey for u32 {
     type Small = u16;
 

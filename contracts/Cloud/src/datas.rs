@@ -228,7 +228,6 @@ impl Default for Disk {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Container {
-    pub name: Vec<u8>,
     /// img of the App.
     /// image 目标宗旨
     pub image: Vec<u8>,
@@ -245,7 +244,6 @@ pub struct Container {
 impl Default for Container {
     fn default() -> Self {
         Container {
-            name: Vec::new(),
             image: Vec::new(),
             command: Command::NONE,
             port: Vec::new(),
@@ -287,6 +285,6 @@ primitives::define_map!(Pods, u64, Pod);
 
 primitives::double_u32_map!(UserPods, Address, u64);
 
-primitives::double_u32_map!(WorkerPods, u64, u64);
+primitives::double_u64_map!(WorkerPods, u64, u64);
 
-primitives::double_u32_map!(Containers, u64, Container);
+primitives::double_u64_map!(Containers, u64, Container);

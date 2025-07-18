@@ -11,7 +11,7 @@ mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
     use primitives::{ensure, ok_or_err};
 
-    use crate::{datas::*, errors::Error};
+    use crate::{datas::{NodeID, *}, errors::Error};
 
     #[ink(storage)]
     #[derive(Default)]
@@ -47,7 +47,7 @@ mod subnet {
         /// epoch solt block number
         epoch_solt: u32,
         /// sidechain Multi-sig account
-        side_chain_multi_key: Option<Address>,
+        side_chain_multi_key: Address,
         /// last epoch block
         last_epoch_block: BlockNumber,
         /// run secrets
@@ -183,7 +183,6 @@ mod subnet {
             ensure!(self.regions.contains(region_id), Error::RegionNotExist);
 
             let worker_id = self.workers.next_id();
-
             let now = self.env().block_number();
             let worker = K8sCluster {
                 name,
@@ -270,6 +269,17 @@ mod subnet {
             );
 
             Ok(mortgage_id)
+        }
+
+        /// Start worker
+        #[ink(message)]
+        pub fn worker_start(&mut self, id: NodeID) -> Result<(),Error>{
+            self.ensure_from_side_chain()?;
+
+            // update worker status
+            self.worker_status.insert(id, &1);
+            
+            Ok(())
         }
 
         /// Stop worker
@@ -447,6 +457,7 @@ mod subnet {
             Ok(())
         }
 
+        /// get current epoch info
         #[ink(message)]
         pub fn epoch_info(&self) -> EpochInfo {
             let now = self.env().block_number();
@@ -460,11 +471,13 @@ mod subnet {
             }
         }
 
+        /// set epoch solt
         #[ink(message)]
         pub fn set_epoch_solt(&mut self, epoch_solt: u32) {
             self.epoch_solt = epoch_solt;
         }
 
+        /// goto next epoch
         #[ink(message)]
         pub fn set_next_epoch(&mut self, _node_id: u64) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -473,10 +486,10 @@ mod subnet {
 
             // check sidechain key
             let key = self.side_chain_multi_key.clone();
-            if key.is_none() {
-                self.side_chain_multi_key = Some(caller);
+            if key == Default::default() {
+                self.side_chain_multi_key = caller;
             } else {
-                ensure!(caller == key.unwrap(), Error::InvalidSideChainCaller);
+                ensure!(caller == key, Error::InvalidSideChainCaller);
             }
 
             // check epoch block time
@@ -491,6 +504,7 @@ mod subnet {
             Ok(())
         }
 
+        /// get next epoch validators
         #[ink(message)]
         pub fn next_epoch_validators(&self) -> Result<Vec<(u64, SecretNode, u32)>, Error> {
             let now = self.env().block_number();
@@ -528,12 +542,19 @@ mod subnet {
                 .collect::<Vec<_>>());
         }
 
+        /// update contract
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
             self.ensure_from_gov()?;
             ok_or_err!(self.env().set_code_hash(&code_hash), Error::SetCodeFailed);
 
             Ok(())
+        }
+
+        // get side chain key (H160)
+        #[ink(message)]
+        pub fn side_chain_key(&self) -> Address {
+            self.side_chain_multi_key
         }
 
         /// calaculate new validators
@@ -559,6 +580,16 @@ mod subnet {
             self.pending_secrets = Vec::new();
         }
 
+        /// ensure the caller is from side chain
+        fn ensure_from_side_chain(&self) -> Result<(), Error> {
+            let caller = self.env().caller();
+            ensure!(
+                caller == self.side_chain_multi_key,
+                Error::InvalidSideChainCaller
+            );
+
+            Ok(())
+        }
         /// Gov call only call from contract
         fn ensure_from_gov(&self) -> Result<(), Error> {
             ensure!(

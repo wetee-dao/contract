@@ -19,4 +19,8 @@ pub enum Error {
     NotPodOwner,
     /// pod status error
     PodStatusError,
+    /// invalid side chain caller
+    InvalidSideChainCaller,
+    /// delete pod failed
+    DelFailed,
 }

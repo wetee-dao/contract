@@ -276,37 +276,66 @@ macro_rules! define_double_map_base {
                     }
                 }
 
-                return list;
+                list
+            }
+
+            pub fn list_all(
+                &self,
+                k1: $k1_ty,
+            ) -> ink::prelude::vec::Vec<($mid_ty, $value_ty)> {
+                let id = self.k1.get(&k1);
+                let mut list = ink::prelude::vec::Vec::new();
+                if id.is_none() {
+                    return list;
+                }
+
+                let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
+                for i in 0..total_len {
+                    let k = i as $realk_ty;
+                    let v = self.store.get(k);
+                    let (_, k2) = primitives::split(k);
+                    if v.is_some() {
+                        list.push((k2, v.unwrap()));
+                    }
+                }
+
+                list
             }
 
             // replace deleted item with last item, delete last item
-            pub fn delete_and_replace_last_key(&mut self, k1: $k1_ty, k2: $mid_ty) -> bool {
+            pub fn delete_replace_by_last_key(&mut self, k1: $k1_ty, k2: $mid_ty) -> bool {
                 let id_wrap = self.k1.get(&k1);
                 if id_wrap.is_none() {
                     return false;
                 }
                 let id = id_wrap.unwrap();
 
+                // get next id
                 let next_id = self.k2_next_id.get(id).unwrap_or_default();
-                if next_id == 0 {
+                if next_id == 0 || k2 >= next_id {
                     return false;
                 }
 
+                // if key is equal to next_id - 1, then delete it
                 if k2 == next_id - 1 {
-                    let fill_key = primitives::combine(id,k2);
+                    let fill_key = primitives::combine(id, k2);
                     self.store.remove(&fill_key);
                     self.k2_next_id.insert(id, &(next_id - 1));
                     return true;
                 }
 
-                let fill_key = primitives::combine(id,next_id - 1);
-                let delete_key = primitives::combine(id,k2);
-                let fill = self.store.get(fill_key).unwrap();
-                self.store.remove(fill_key);
-                self.store.insert(delete_key,&fill);
+                // remove the last one
+                let last_key = primitives::combine(id, next_id - 1);
+                let last = self.store.get(last_key).unwrap();
+                self.store.remove(last_key);
+
+                // insert the last one to k2
+                let delete_key = primitives::combine(id, k2);
+                self.store.insert(delete_key, &last);
+
                 self.k2_next_id.insert(id, &(next_id - 1));
 
-                return true;
+                true
             }
         }
     };

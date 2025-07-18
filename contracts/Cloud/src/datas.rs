@@ -32,16 +32,16 @@ pub struct Pod {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum PodType {
-    // Only use CPU 
-    CpuService,
+    // Only use CPU
+    CPU,
     // Use GPU/CPU
-    GpuService,
+    GPU,
     // Script to execute one-time or as a scheduled task
-    Script,
+    SCRIPT,
 }
 impl Default for PodType {
     fn default() -> Self {
-        PodType::CpuService
+        PodType::CPU
     }
 }
 
@@ -95,20 +95,16 @@ impl Default for Command {
 }
 
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub enum EditType {
+pub enum EditType<T> {
     /// INSERT
     INSERT,
     /// UPDATE
-    UPDATE(u16),
+    UPDATE(T),
     /// REMOVE
-    REMOVE(u16),
+    REMOVE(T),
 }
-impl Default for EditType {
+impl Default for EditType<u16> {
     fn default() -> Self {
         EditType::INSERT
     }
@@ -134,14 +130,10 @@ pub struct Env {
 /// App setting
 /// 应用设置
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct EnvInput {
     /// edit type
-    pub etype: EditType,
+    pub etype: EditType<u16>,
     /// container index
     pub index: u16,
     /// key
@@ -167,10 +159,12 @@ impl Default for EnvInput {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum EnvKey {
-    /// Env 环境变量
+    /// pub env
     Env(Vec<u8>),
-    /// UPDATE
+    /// file env
     File(Vec<u8>),
+    /// encrypt env
+    Encrypt(Vec<u8>)
 }
 impl Default for EnvKey {
     fn default() -> Self {
@@ -217,6 +211,15 @@ impl Default for Disk {
             size: 1,
         }
     }
+}
+
+#[derive(Clone)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct ContainerInput {
+    /// edit type
+    pub etype: EditType<u64>,
+    /// container
+    pub container: Container,
 }
 
 /// App specific information

@@ -7858,6 +7858,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "test"
+version = "0.1.0"
+dependencies = [
+ "ink",
+ "ink_e2e",
+ "primitives",
+ "scale-info",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"

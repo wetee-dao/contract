@@ -17,6 +17,8 @@ pub enum Error {
     PodNotFound,
     /// not pod owner
     NotPodOwner,
+    /// pod not exist when start pod
+    PodKeyNotExist,
     /// pod status error
     PodStatusError,
     /// invalid side chain caller

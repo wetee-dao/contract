@@ -26,12 +26,16 @@ mod cloud {
         pod_envs: Mapping<u64, Vec<Env>>,
         /// pod last block number
         pod_version: Mapping<u64, BlockNumber>,
-        /// pod status 0: created, 1: deploying, 2: stop, 3: deoloyed
+        /// pod status 0=>created  1=>deoloying 2=>error  3=>stop
         pod_status: Mapping<u64, u8>,
-        /// last report block number of pod
-        last_report_block: Mapping<u64, BlockNumber>,
-        /// tee report hash of pod
+        /// last mint block number of pod
+        last_mint_block: Mapping<u64, BlockNumber>,
+        /// tee mint interval
+        mint_interval: BlockNumber,
+        /// tee mint hash of pod
         pod_report: Mapping<u64, H256>,
+        /// pod deployed ed25519 key,Generate within the TEE for each deployment
+        pod_key: Mapping<u64, AccountId>,
         /// pod of user
         pod_of_user: UserPods,
         /// pods of worker
@@ -63,8 +67,10 @@ mod cloud {
                 pods_of_worker: Default::default(),
                 worker_of_pod: Default::default(),
                 containers: Default::default(),
-                last_report_block: Default::default(),
+                last_mint_block: Default::default(),
                 pod_report: Default::default(),
+                pod_key: Default::default(),
+                mint_interval: 14400u32.into(),
                 pod_contract_code_hash: pod_contract_code_hash,
             };
 
@@ -78,6 +84,17 @@ mod cloud {
             self.pod_contract_code_hash = pod_contract;
 
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn set_mint_interval(&mut self, t: BlockNumber) -> Result<(), Error> {
+            self.mint_interval = t;
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn mint_interval(&self) -> BlockNumber {
+            self.mint_interval
         }
 
         #[ink(message)]
@@ -116,17 +133,19 @@ mod cloud {
                 .instantiate();
 
             // save pod base config
+            let now = self.env().block_number();
             self.pods.insert(&Pod {
                 name: name,
                 owner: caller,
                 contract: contract,
                 ptype: pod_type,
-                start_block: self.env().block_number(),
+                start_block: now,
                 tee_type: tee_type,
             });
             self.pod_of_user.insert(caller, &pod_id);
             self.pods_of_worker.insert(worker_id, &pod_id);
             self.worker_of_pod.insert(pod_id, &worker_id);
+            self.last_mint_block.insert(pod_id, &now);
 
             // save pod containers
             for i in 0..containers.len() {
@@ -138,7 +157,12 @@ mod cloud {
 
         /// start pod
         #[ink(message)]
-        pub fn start_pod(&mut self, pod_id: u64, hash: H256) -> Result<(), Error> {
+        pub fn start_pod(
+            &mut self,
+            pod_id: u64,
+            pod_key: Option<AccountId>,
+            report: H256,
+        ) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
 
             let status = self.pod_status.get(pod_id).unwrap_or_default();
@@ -146,14 +170,28 @@ mod cloud {
                 return Err(Error::PodStatusError);
             }
 
-            if status == 0 {
-                self.pod_status.insert(pod_id, &1);
-            }
-            self.pod_report.insert(pod_id, &hash);
-            self.last_report_block
-                .insert(pod_id, &self.env().block_number());
+            self.pod_report.insert(pod_id, &report);
+            let now = self.env().block_number();
+            let last_mint = self.last_mint_block.get(pod_id).unwrap_or_default();
 
-            // pay for pod
+            // check pod key
+            if status == 0 {
+                ensure!(pod_key.is_some(), Error::PodKeyNotExist);
+                self.pod_status.insert(pod_id, &1);
+                self.last_mint_block.insert(pod_id, &now);
+                return Ok(());
+            }
+
+            // check mint
+            if now < last_mint + self.mint_interval {
+                return Ok(());
+            }
+
+            // mint pod
+            self.last_mint_block
+                .insert(pod_id, &(last_mint + self.mint_interval));
+
+            // pay for pod to worker
 
             Ok(())
         }
@@ -184,6 +222,8 @@ mod cloud {
                 return Err(Error::DelFailed);
             }
 
+            // pay for pod to worker
+
             Ok(())
         }
 
@@ -208,6 +248,8 @@ mod cloud {
                 // restart pod
                 self.pod_status.insert(pod_id, &0);
                 self.pods_of_worker.insert(worker_id, &pod_id);
+                let now = self.env().block_number();
+                self.last_mint_block.insert(pod_id, &now);
             }
 
             // update pod version
@@ -278,11 +320,11 @@ mod cloud {
             let ids = self.pod_of_user.desc_list(caller, page, size);
 
             let mut pods = Vec::new();
-            for (_k2, podid) in ids {
-                let pod = self.pods.get(podid);
+            for (_k2, pod_id) in ids {
+                let pod = self.pods.get(pod_id);
                 if pod.is_some() {
-                    let containers = self.containers.desc_list(podid, 1, 20);
-                    pods.push((podid, pod.unwrap(), containers));
+                    let containers = self.containers.desc_list(pod_id, 1, 20);
+                    pods.push((pod_id, pod.unwrap(), containers));
                 }
             }
 
@@ -291,15 +333,18 @@ mod cloud {
 
         /// Pods version of worker
         #[ink(message)]
-        pub fn worker_pods_version(&self, worker_id: u64) -> Vec<(u64, BlockNumber, u8)> {
+        pub fn worker_pods_version(
+            &self,
+            worker_id: u64,
+        ) -> Vec<(u64, BlockNumber, BlockNumber, u8)> {
             let ids = self.pods_of_worker.desc_list(worker_id, 1, 10000);
 
             let mut pods = Vec::new();
-            for (_k2, podid) in ids {
-                let version = self.pod_version.get(podid).unwrap_or_default();
-                let status = self.pod_status.get(podid).unwrap_or_default();
-
-                pods.push((podid, version, status));
+            for (_k2, pod_id) in ids {
+                let version = self.pod_version.get(pod_id).unwrap_or_default();
+                let status = self.pod_status.get(pod_id).unwrap_or_default();
+                let last_mint = self.last_mint_block.get(pod_id).unwrap_or_default();
+                pods.push((pod_id, version, last_mint, status));
             }
 
             pods
@@ -364,9 +409,9 @@ mod cloud {
                 let containers = self.containers.desc_list(pod_id, 1, 20);
                 let version = self.pod_version.get(pod_id).unwrap_or_default();
                 let status = self.pod_status.get(pod_id).unwrap_or_default();
-                let last_report = self.last_report_block.get(pod_id).unwrap_or_default();
+                let last_mint = self.last_mint_block.get(pod_id).unwrap_or_default();
 
-                pods.push((pod_id, pod, containers, version, last_report, status));
+                pods.push((pod_id, pod, containers, version, last_mint, status));
             }
 
             pods

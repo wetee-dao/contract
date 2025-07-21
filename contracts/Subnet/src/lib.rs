@@ -106,6 +106,7 @@ mod subnet {
             Ok(())
         }
 
+        /// add or update region
         #[ink(message)]
         pub fn set_region(&mut self, region_id: u32, name: Vec<u8>) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -114,6 +115,7 @@ mod subnet {
             Ok(())
         }
 
+        /// worker info
         #[ink(message)]
         pub fn worker(&self, id: NodeID) -> Option<K8sCluster> {
             let worker_wrap = self.workers.get(id);

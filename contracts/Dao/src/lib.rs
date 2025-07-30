@@ -607,7 +607,7 @@ mod dao {
 
         #[ink(message)]
         fn vote_list(&self, proposal_id: CalllId) -> Vec<VoteInfo> {
-            let ids = self.votes_of_proposal.desc_list(proposal_id, 1, 10);
+            let ids = self.votes_of_proposal.desc_list(proposal_id, None, 1000);
             let mut list = Vec::new();
             for id in ids {
                 let info = self.votes.get(id.1);

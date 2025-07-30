@@ -11,7 +11,10 @@ mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
     use primitives::{ensure, ok_or_err};
 
-    use crate::{datas::{NodeID, *}, errors::Error};
+    use crate::{
+        datas::{NodeID, *},
+        errors::Error,
+    };
 
     #[ink(storage)]
     #[derive(Default)]
@@ -132,8 +135,8 @@ mod subnet {
 
         /// get all workers
         #[ink(message)]
-        pub fn workers(&self, page: u64, size: u64) -> Vec<(u64, K8sCluster)> {
-            let workers = self.workers.desc_list(page, size);
+        pub fn workers(&self, start: Option<u64>, size: u64) -> Vec<(u64, K8sCluster)> {
+            let workers = self.workers.desc_list(start, size);
             return workers;
         }
 
@@ -208,6 +211,28 @@ mod subnet {
             Ok(worker_id)
         }
 
+        #[ink(message)]
+        pub fn worker_update(
+            &mut self,
+            id: NodeID,
+            name: Vec<u8>,
+            ip: Ip,
+            port: u32,
+        ) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let mut worker = self.workers.get(id).ok_or(Error::WorkerNotExist)?;
+
+            ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
+
+            worker.name = name;
+            worker.ip = ip;
+            worker.port = port;
+
+            self.workers.update(id, &worker);
+
+            Ok(())
+        }
+
         /// Mortgage worker
         #[ink(message)]
         pub fn worker_mortgage(
@@ -275,12 +300,12 @@ mod subnet {
 
         /// Start worker
         #[ink(message)]
-        pub fn worker_start(&mut self, id: NodeID) -> Result<(),Error>{
+        pub fn worker_start(&mut self, id: NodeID) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
 
             // update worker status
             self.worker_status.insert(id, &1);
-            
+
             Ok(())
         }
 
@@ -306,7 +331,7 @@ mod subnet {
         /// list secrets
         #[ink(message)]
         pub fn secrets(&self) -> Vec<(u64, SecretNode)> {
-            let list = self.secrets.desc_list(1, 10000);
+            let list = self.secrets.desc_list(None, 10000);
 
             return list;
         }
@@ -346,6 +371,27 @@ mod subnet {
             }
 
             Ok(id)
+        }
+
+        #[ink(message)]
+        pub fn secret_update(
+            &mut self,
+            id: NodeID,
+            name: Vec<u8>,
+            ip: Ip,
+            port: u32,
+        ) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let mut node = self.secrets.get(id).ok_or(Error::NodeNotExist)?;
+
+            ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
+
+            node.name = name;
+            node.ip = ip;
+            node.port = port;
+            self.secrets.update(id, &node);
+
+            Ok(())
         }
 
         /// deposit secret

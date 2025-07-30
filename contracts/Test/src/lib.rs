@@ -39,8 +39,8 @@ mod test {
         }
 
         #[ink(message)]
-        pub fn list(&self, t: u64) -> Vec<(u64, TestItem)> {
-            let ids = self.tests_of_worker.desc_list(t, 1, 1000);
+        pub fn list(&self, t: u64, start: Option<u64>, size: u64) -> Vec<(u64, TestItem)> {
+            let ids = self.tests_of_worker.desc_list(t, start, size);
             let mut lists = Vec::new();
             for id in ids.iter(){
                 let t = self.tests.get(id.1).unwrap();
@@ -59,7 +59,7 @@ mod test {
             if let Some(&index) = all.iter().find(|&&x| x.1 == id) {
                 ok = self
                     .tests_of_worker
-                    .delete_replace_by_last_key(worker_id, index.0);
+                    .delete_by_key(worker_id, index.0);
             }
 
             if !ok {

@@ -44,7 +44,10 @@ mod cloud {
         worker_of_pod: Mapping<u64, u64>,
 
         /// pod's containers
-        containers: Containers,
+        pod_containers: PodContainers,
+
+        /// secret value
+        secrets: UserSecrets,
     }
 
     impl Cloud {
@@ -66,10 +69,11 @@ mod cloud {
                 pod_of_user: Default::default(),
                 pods_of_worker: Default::default(),
                 worker_of_pod: Default::default(),
-                containers: Default::default(),
+                pod_containers: Default::default(),
                 last_mint_block: Default::default(),
                 pod_report: Default::default(),
                 pod_key: Default::default(),
+                secrets: Default::default(),
                 mint_interval: 14400u32.into(),
                 pod_contract_code_hash: pod_contract_code_hash,
             };
@@ -149,7 +153,7 @@ mod cloud {
 
             // save pod containers
             for i in 0..containers.len() {
-                self.containers.insert(pod_id, &containers[i]);
+                self.pod_containers.insert(pod_id, &containers[i]);
             }
 
             Ok(())
@@ -157,12 +161,7 @@ mod cloud {
 
         /// start pod
         #[ink(message)]
-        pub fn start_pod(
-            &mut self,
-            pod_id: u64,
-            pod_key: Option<AccountId>,
-            report: H256,
-        ) -> Result<(), Error> {
+        pub fn start_pod(&mut self, pod_id: u64, pod_key: AccountId) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
 
             let status = self.pod_status.get(pod_id).unwrap_or_default();
@@ -170,22 +169,33 @@ mod cloud {
                 return Err(Error::PodStatusError);
             }
 
-            self.pod_report.insert(pod_id, &report);
+            let now = self.env().block_number();
+
+            self.pod_status.insert(pod_id, &1);
+            self.last_mint_block.insert(pod_id, &now);
+            self.pod_key.insert(pod_id, &pod_key);
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn mint_pod(&mut self, pod_id: u64, report: H256) -> Result<(), Error> {
+            self.ensure_from_side_chain()?;
+
+            let status = self.pod_status.get(pod_id).unwrap_or_default();
+            if status != 1 {
+                return Err(Error::PodStatusError);
+            }
+
             let now = self.env().block_number();
             let last_mint = self.last_mint_block.get(pod_id).unwrap_or_default();
-
-            // check pod key
-            if status == 0 {
-                ensure!(pod_key.is_some(), Error::PodKeyNotExist);
-                self.pod_status.insert(pod_id, &1);
-                self.last_mint_block.insert(pod_id, &now);
-                return Ok(());
-            }
 
             // check mint
             if now < last_mint + self.mint_interval {
                 return Ok(());
             }
+
+            self.pod_report.insert(pod_id, &report);
 
             // mint pod
             self.last_mint_block
@@ -213,9 +223,7 @@ mod cloud {
             let all_pod = self.pods_of_worker.list_all(worker_id);
             let mut ok: bool = false;
             if let Some(&index) = all_pod.iter().find(|&&x| x.1 == pod_id) {
-                ok = self
-                    .pods_of_worker
-                    .delete_replace_by_last_key(worker_id, index.0);
+                ok = self.pods_of_worker.delete_by_key(worker_id, index.0);
             }
 
             if !ok {
@@ -294,12 +302,16 @@ mod cloud {
 
         /// List pods
         #[ink(message)]
-        pub fn pods(&self, page: u64, size: u64) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
-            let list = self.pods.desc_list(page, size);
+        pub fn pods(
+            &self,
+            start: Option<u64>,
+            size: u64,
+        ) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
+            let list = self.pods.desc_list(start, size);
 
             let mut pods = Vec::new();
             for (k, v) in list.iter() {
-                let containers = self.containers.desc_list(*k, 1, 20);
+                let containers = self.pod_containers.desc_list(*k, None, 20);
                 pods.push((*k, v.clone(), containers));
             }
 
@@ -315,15 +327,19 @@ mod cloud {
 
         /// Pods of user
         #[ink(message)]
-        pub fn user_pods(&self, page: u32, size: u32) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
+        pub fn user_pods(
+            &self,
+            start: Option<u32>,
+            size: u32,
+        ) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
             let caller = self.env().caller();
-            let ids = self.pod_of_user.desc_list(caller, page, size);
+            let ids = self.pod_of_user.desc_list(caller, start, size);
 
             let mut pods = Vec::new();
             for (_k2, pod_id) in ids {
                 let pod = self.pods.get(pod_id);
                 if pod.is_some() {
-                    let containers = self.containers.desc_list(pod_id, 1, 20);
+                    let containers = self.pod_containers.desc_list(pod_id, None, 20);
                     pods.push((pod_id, pod.unwrap(), containers));
                 }
             }
@@ -337,7 +353,7 @@ mod cloud {
             &self,
             worker_id: u64,
         ) -> Vec<(u64, BlockNumber, BlockNumber, u8)> {
-            let ids = self.pods_of_worker.desc_list(worker_id, 1, 10000);
+            let ids = self.pods_of_worker.desc_list(worker_id, None, 10000);
 
             let mut pods = Vec::new();
             for (_k2, pod_id) in ids {
@@ -355,15 +371,15 @@ mod cloud {
         pub fn worker_pods(
             &self,
             worker_id: u64,
-            page: u64,
+            start: Option<u64>,
             size: u64,
         ) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
-            let ids = self.pods_of_worker.desc_list(worker_id, page, size);
+            let ids = self.pods_of_worker.desc_list(worker_id, start, size);
             let mut pods = Vec::new();
             for (_k2, pod_id) in ids {
                 let pod = self.pods.get(pod_id);
                 if pod.is_some() {
-                    let containers = self.containers.desc_list(pod_id, 1, 20);
+                    let containers = self.pod_containers.desc_list(pod_id, None, 20);
                     pods.push((pod_id, pod.unwrap(), containers))
                 }
             }
@@ -379,7 +395,7 @@ mod cloud {
                 return None;
             }
             let pod = pod_wrap.unwrap();
-            let containers = self.containers.desc_list(pod_id, 1, 20);
+            let containers = self.pod_containers.desc_list(pod_id, None, 20);
             let version = self.pod_version.get(pod_id).unwrap_or_default();
             let status = self.pod_status.get(pod_id).unwrap_or_default();
 
@@ -406,7 +422,7 @@ mod cloud {
                     continue;
                 }
                 let pod = pod_wrap.unwrap();
-                let containers = self.containers.desc_list(pod_id, 1, 20);
+                let containers = self.pod_containers.desc_list(pod_id, None, 20);
                 let version = self.pod_version.get(pod_id).unwrap_or_default();
                 let status = self.pod_status.get(pod_id).unwrap_or_default();
                 let last_mint = self.last_mint_block.get(pod_id).unwrap_or_default();
@@ -423,6 +439,62 @@ mod cloud {
             self.pods_of_worker.next_id(worker_id)
         }
 
+        /// Get secret
+        #[ink(message)]
+        pub fn user_secrets(
+            &self,
+            user: Address,
+            start: Option<u64>,
+            size: u64,
+        ) -> Vec<(u64, Option<H256>)> {
+            self.secrets.desc_list(user, start, size)
+        }
+
+        /// Get secret
+        #[ink(message)]
+        pub fn secret(&self, user: Address, index: u64) -> Option<H256> {
+            let s = self.secrets.get(user, index);
+            if s.is_some() {
+                s.unwrap().clone()
+            } else {
+                None
+            }
+        }
+
+        /// Create secret
+        #[ink(message)]
+        pub fn init_secret(&mut self) -> Result<u64, Error> {
+            let caller = self.env().caller();
+
+            Ok(self.secrets.insert(caller, &None))
+        }
+
+        /// Update secret
+        #[ink(message)]
+        pub fn update_secret(
+            &mut self,
+            user: Address,
+            index: u64,
+            hash: H256,
+        ) -> Result<(), Error> {
+            self.ensure_from_side_chain()?;
+
+            self.secrets.update(user, index, &Some(hash));
+            Ok(())
+        }
+
+        /// Delete secret
+        #[ink(message)]
+        pub fn del_secret(&mut self, index: u64) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let delete = self.secrets.delete_by_key(caller, index);
+            if !delete {
+                return Err(Error::DelFailed);
+            }
+
+            Ok(())
+        }
+
         /// Update contract with gov
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
@@ -433,15 +505,17 @@ mod cloud {
             Ok(())
         }
 
+        /// Add container
         pub fn add_container(&mut self, pod_id: u64, container: Container) -> Result<(), Error> {
             let caller = self.env().caller();
             let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
-            self.containers.insert(pod_id, &container);
+            self.pod_containers.insert(pod_id, &container);
             Ok(())
         }
 
+        /// Update container
         pub fn update_container(
             &mut self,
             pod_id: u64,
@@ -452,18 +526,17 @@ mod cloud {
             let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
-            self.containers.update(pod_id, container_id, &container);
+            self.pod_containers.update(pod_id, container_id, &container);
             Ok(())
         }
 
+        /// Delete container
         pub fn del_container(&mut self, pod_id: u64, container_id: u64) -> Result<bool, Error> {
             let caller = self.env().caller();
             let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
-            let ok = self
-                .containers
-                .delete_replace_by_last_key(pod_id, container_id);
+            let ok = self.pod_containers.delete_by_key(pod_id, container_id);
 
             if !ok {
                 return Err(Error::DelFailed);
@@ -471,7 +544,7 @@ mod cloud {
             Ok(ok)
         }
 
-        /// ensure the caller is from side chain
+        /// Ensure the caller is from side chain
         fn ensure_from_side_chain(&self) -> Result<(), Error> {
             let caller = self.env().caller();
             ensure!(

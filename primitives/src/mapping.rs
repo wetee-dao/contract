@@ -53,26 +53,23 @@ macro_rules! define_map {
                 self.store.insert(key, value)
             }
 
-            // get list by k1 and page desc
+            // get list by k1 desc
             pub fn desc_list(
                 &self,
-                page: $key_ty,
+                start_key_: Option<$key_ty>,
                 size: $key_ty,
             ) -> ink::prelude::vec::Vec<($key_ty, $value_ty)> {
                 let total_len = self.next_id;
                 let mut list = ink::prelude::vec::Vec::new();
-                if total_len == 0 || page == 0 || size == 0 {
+                if total_len == 0 || size == 0 {
                     return list;
                 }
 
-                let start = total_len;
-                let total = if total_len > page * size {
-                    page * size
-                } else {
-                    total_len
-                };
-
-                for i in 0..total + 1 {
+                let start = start_key_.unwrap_or(total_len);
+                for i in 1..size + 1 {
+                    if start < i {
+                        break;
+                    }
                     let k = start - i;
                     let v = self.store.get(k);
                     if v.is_some() {
@@ -86,28 +83,24 @@ macro_rules! define_map {
             // get list by page and page asc
             pub fn list(
                 &self,
-                page: $key_ty,
+                start_key: $key_ty,
                 size: $key_ty,
             ) -> ink::prelude::vec::Vec<($key_ty, $value_ty)> {
                 let total_len = self.next_id;
                 let mut list = ink::prelude::vec::Vec::new();
-                if total_len == 0 || page == 0 || size == 0 {
+                if total_len == 0 || size == 0 {
                     return list;
                 }
 
-                let start = 0;
-                let total = if total_len > page * size {
-                    page * size
-                } else {
-                    total_len
-                };
-
-                for i in 0..total {
-                    let v = self.store.get(start + i);
+                let start = start_key;
+                for i in 0..size + 1 {
+                    let k = start + i;
+                    let v = self.store.get(k);
                     if v.is_some() {
-                        list.push((i, v.unwrap()));
+                        list.push((k, v.unwrap()));
                     }
                 }
+
                 return list;
             }
         }
@@ -208,7 +201,7 @@ macro_rules! define_double_map_base {
             pub fn desc_list(
                 &self,
                 k1: $k1_ty,
-                page: $mid_ty,
+                start_key_: Option<$mid_ty>,
                 size: $mid_ty,
             ) -> ink::prelude::vec::Vec<($mid_ty, $value_ty)> {
                 let id = self.k1.get(&k1);
@@ -218,18 +211,16 @@ macro_rules! define_double_map_base {
                 }
 
                 let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
-                if total_len == 0 || page == 0 || size == 0 {
+                if total_len == 0 || size == 0 {
                     return list;
                 }
 
-                let start = primitives::combine(id.unwrap(), total_len);
-                let total = if total_len > page * size {
-                    page * size
-                } else {
-                    total_len
-                };
-
-                for i in 0..total + 1 {
+                let start_key = start_key_.unwrap_or(total_len);
+                let start = primitives::combine(id.unwrap(), start_key);
+                for i in 0..size + 1 {
+                    if start < i as $realk_ty {
+                        break;
+                    }
                     let k = start - i as $realk_ty;
                     let v = self.store.get(k);
                     let (_, k2) = primitives::split(k);
@@ -245,7 +236,7 @@ macro_rules! define_double_map_base {
             pub fn list(
                 &self,
                 k1: $k1_ty,
-                page: $mid_ty,
+                start_key: $mid_ty,
                 size: $mid_ty,
             ) -> ink::prelude::vec::Vec<($mid_ty, $value_ty)> {
                 let id = self.k1.get(&k1);
@@ -255,19 +246,13 @@ macro_rules! define_double_map_base {
                 }
 
                 let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
-                if total_len == 0 || page == 0 || size == 0 {
+                if total_len == 0 || size == 0 || start_key > total_len {
                     return list;
                 }
 
-                let start = primitives::combine(id.unwrap(), 0);
-                let total = if total_len > page * size {
-                    page * size
-                } else {
-                    total_len
-                };
-
+                let start = primitives::combine(id.unwrap(), start_key);
                 let mut list = ink::prelude::vec::Vec::new();
-                for i in 0..total {
+                for i in 0..size + 1 {
                     let k = start + i as $realk_ty;
                     let v = self.store.get(k);
                     let (_, k2) = primitives::split(k);
@@ -279,10 +264,7 @@ macro_rules! define_double_map_base {
                 list
             }
 
-            pub fn list_all(
-                &self,
-                k1: $k1_ty,
-            ) -> ink::prelude::vec::Vec<($mid_ty, $value_ty)> {
+            pub fn list_all(&self, k1: $k1_ty) -> ink::prelude::vec::Vec<($mid_ty, $value_ty)> {
                 let id = self.k1.get(&k1);
                 let mut list = ink::prelude::vec::Vec::new();
                 if id.is_none() {
@@ -303,38 +285,15 @@ macro_rules! define_double_map_base {
             }
 
             // replace deleted item with last item, delete last item
-            pub fn delete_replace_by_last_key(&mut self, k1: $k1_ty, k2: $mid_ty) -> bool {
+            pub fn delete_by_key(&mut self, k1: $k1_ty, k2: $mid_ty) -> bool {
                 let id_wrap = self.k1.get(&k1);
                 if id_wrap.is_none() {
                     return false;
                 }
                 let id = id_wrap.unwrap();
 
-                // get next id
-                let next_id = self.k2_next_id.get(id).unwrap_or_default();
-                if next_id == 0 || k2 >= next_id {
-                    return false;
-                }
-
-                // if key is equal to next_id - 1, then delete it
-                if k2 == next_id - 1 {
-                    let fill_key = primitives::combine(id, k2);
-                    self.store.remove(&fill_key);
-                    self.k2_next_id.insert(id, &(next_id - 1));
-                    return true;
-                }
-
-                // remove the last one
-                let last_key = primitives::combine(id, next_id - 1);
-                let last = self.store.get(last_key).unwrap();
-                self.store.remove(last_key);
-
-                // insert the last one to k2
-                let delete_key = primitives::combine(id, k2);
-                self.store.insert(delete_key, &last);
-
-                self.k2_next_id.insert(id, &(next_id - 1));
-
+                let key = primitives::combine(id, k2);
+                self.store.remove(key);
                 true
             }
         }

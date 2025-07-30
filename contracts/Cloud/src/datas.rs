@@ -1,4 +1,4 @@
-use ink::{env::BlockNumber, prelude::vec::Vec, Address};
+use ink::{env::BlockNumber, prelude::vec::Vec, Address, H256};
 
 #[derive(Clone)]
 #[cfg_attr(
@@ -110,65 +110,23 @@ impl Default for EditType<u16> {
     }
 }
 
-/// App setting
-/// 应用设置
 #[derive(Clone)]
 #[cfg_attr(
     feature = "std",
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct Env {
-    /// container index
-    pub index: u16,
-    /// key
-    pub k: EnvKey,
-    /// value
-    pub v: Vec<u8>,
-}
-
-/// App setting
-/// 应用设置
-#[derive(Clone)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct EnvInput {
-    /// edit type
-    pub etype: EditType<u16>,
-    /// container index
-    pub index: u16,
-    /// key
-    pub k: EnvKey,
-    /// value
-    pub v: Vec<u8>,
-}
-impl Default for EnvInput {
-    fn default() -> Self {
-        EnvInput {
-            etype: EditType::INSERT,
-            index: 1,
-            k: EnvKey::Env(Vec::new()),
-            v: Vec::new(),
-        }
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub enum EnvKey {
+pub enum Env {
     /// pub env
-    Env(Vec<u8>),
+    Env(Vec<u8>,Vec<u8>),
     /// file env
-    File(Vec<u8>),
+    File(Vec<u8>,Vec<u8>),
     /// encrypt env
-    Encrypt(Vec<u8>)
+    Encrypt(Vec<u8>,Vec<u8>)
 }
-impl Default for EnvKey {
+impl Default for Env {
     fn default() -> Self {
-        EnvKey::Env("".as_bytes().to_vec()) // 默认为TCP协议，端口为0
+        Env::Env("".as_bytes().to_vec(),"".as_bytes().to_vec())
     }
 }
 
@@ -243,6 +201,9 @@ pub struct Container {
     /// cpu memory disk
     /// cpu memory disk
     pub cr: CR,
+    /// env
+    /// 环境变量
+    pub env: Vec<Env>,
 }
 impl Default for Container {
     fn default() -> Self {
@@ -251,6 +212,7 @@ impl Default for Container {
             command: Command::NONE,
             port: Vec::new(),
             cr: CR::default(),
+            env: Vec::new(),
         }
     }
 }
@@ -290,4 +252,6 @@ primitives::double_u32_map!(UserPods, Address, u64);
 
 primitives::double_u64_map!(WorkerPods, u64, u64);
 
-primitives::double_u64_map!(Containers, u64, Container);
+primitives::double_u64_map!(PodContainers, u64, Container);
+
+primitives::double_u64_map!(UserSecrets, Address, Option<H256>);

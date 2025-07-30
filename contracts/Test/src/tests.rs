@@ -30,11 +30,15 @@ fn test_add() {
         },
     );
 
-    let mut list = t.list(0);
+    let mut list = t.list(0, None, 2);
     println!("{:?}", list);
+    
+    list = t.list(0, Some(0), 2);
+    println!("{:?}", list);
+    
 
     _ = t.del(1);
 
-    list = t.list(0);
+    list = t.list(0, None, 3);
     println!("{:?}", list);
 }

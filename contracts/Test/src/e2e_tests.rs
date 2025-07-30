@@ -64,7 +64,7 @@ async fn test_add<Client: E2EBackend>() -> E2EResult<()> {
         .return_value();
 
     let list = client
-        .call(&ink_e2e::alice(), &call_builder.list(1))
+        .call(&ink_e2e::alice(), &call_builder.list(1, None, 100))
         .dry_run()
         .await?
         .return_value();
@@ -78,7 +78,7 @@ async fn test_add<Client: E2EBackend>() -> E2EResult<()> {
         .return_value();
 
     let list = client
-        .call(&ink_e2e::alice(), &call_builder.list(1))
+        .call(&ink_e2e::alice(), &call_builder.list(1, None, 100))
         .dry_run()
         .await?
         .return_value();

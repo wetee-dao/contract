@@ -82,6 +82,7 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
                         disk: Vec::new(),
                         gpu: 0,
                     },
+                    env: Vec::new(),
                 }],
                 1,
                 1,
@@ -110,6 +111,7 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
                         disk: Vec::new(),
                         gpu: 0,
                     },
+                    env: Vec::new(),
                 }],
                 1,
                 1,
@@ -121,7 +123,7 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
         .expect("Calling `create_user_pod` failed")
         .return_value();
 
-    let list = client.call(&ink_e2e::alice(),&cloud_call_builder.pods(1, 100)).dry_run().await?.return_value();
+    let list = client.call(&ink_e2e::alice(),&cloud_call_builder.pods(None, 100)).dry_run().await?.return_value();
     println!("list: {:?}", list);
 
     Ok(())

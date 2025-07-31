@@ -121,7 +121,7 @@ mod cloud {
             let caller = self.env().caller();
 
             // check worker status
-            let worker = self.subnet.worker(worker_id).ok_or(Error::WorkerNotFound)?;
+            let worker = self.subnet.worker(worker_id).ok_or(Error::NotFound)?;
             ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
             ensure!(worker.region_id == region_id, Error::RegionNotMatch);
             // ensure!(worker.status == 1, Error::WorkerNotOnline);
@@ -212,12 +212,12 @@ mod cloud {
             let caller = self.env().caller();
 
             // check pod owner
-            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             // stop pod
             self.pod_status.insert(pod_id, &3);
-            let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::PodNotFound)?;
+            let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::NotFound)?;
 
             // delete pod in worker
             let all_pod = self.pods_of_worker.list_all(worker_id);
@@ -241,7 +241,7 @@ mod cloud {
             let caller = self.env().caller();
 
             // check pod owner
-            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             // check pod status
@@ -252,7 +252,7 @@ mod cloud {
 
             // if status == 3, restart pod
             if status == 3 {
-                let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::PodNotFound)?;
+                let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::NotFound)?;
                 // restart pod
                 self.pod_status.insert(pod_id, &0);
                 self.pods_of_worker.insert(worker_id, &pod_id);
@@ -273,7 +273,7 @@ mod cloud {
             containers: Vec<ContainerInput>,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             for container in containers.iter() {
@@ -446,27 +446,28 @@ mod cloud {
             user: Address,
             start: Option<u64>,
             size: u64,
-        ) -> Vec<(u64, Option<H256>)> {
+        ) -> Vec<(u64, Secret)> {
             self.secrets.desc_list(user, start, size)
         }
 
         /// Get secret
         #[ink(message)]
-        pub fn secret(&self, user: Address, index: u64) -> Option<H256> {
-            let s = self.secrets.get(user, index);
-            if s.is_some() {
-                s.unwrap().clone()
-            } else {
-                None
-            }
+        pub fn secret(&self, user: Address, index: u64) -> Option<Secret> {
+            self.secrets.get(user, index)
         }
 
         /// Create secret
         #[ink(message)]
-        pub fn init_secret(&mut self) -> Result<u64, Error> {
+        pub fn init_secret(&mut self, name: Vec<u8>) -> Result<u64, Error> {
             let caller = self.env().caller();
 
-            Ok(self.secrets.insert(caller, &None))
+            Ok(self.secrets.insert(
+                caller,
+                &Secret {
+                    name: name,
+                    hash: None,
+                },
+            ))
         }
 
         /// Update secret
@@ -479,7 +480,13 @@ mod cloud {
         ) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
 
-            self.secrets.update(user, index, &Some(hash));
+            let s = self.secrets.get(user, index);
+            ensure!(s.is_some(),Error::NotFound);
+
+            let mut secret = s.unwrap();
+            secret.hash = Some(hash);
+
+            self.secrets.update(user, index, &secret);
             Ok(())
         }
 
@@ -508,7 +515,7 @@ mod cloud {
         /// Add container
         pub fn add_container(&mut self, pod_id: u64, container: Container) -> Result<(), Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             self.pod_containers.insert(pod_id, &container);
@@ -523,7 +530,7 @@ mod cloud {
             container: Container,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             self.pod_containers.update(pod_id, container_id, &container);
@@ -533,7 +540,7 @@ mod cloud {
         /// Delete container
         pub fn del_container(&mut self, pod_id: u64, container_id: u64) -> Result<bool, Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             let ok = self.pod_containers.delete_by_key(pod_id, container_id);

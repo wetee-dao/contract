@@ -246,6 +246,18 @@ pub enum TEEType {
     CVM,
 }
 
+/// secret data
+#[derive(Clone, Default)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct Secret{
+    pub name: Vec<u8>,
+    pub hash: Option<H256>,
+}
+
 primitives::define_map!(Pods, u64, Pod);
 
 primitives::double_u32_map!(UserPods, Address, u64);
@@ -254,4 +266,4 @@ primitives::double_u64_map!(WorkerPods, u64, u64);
 
 primitives::double_u64_map!(PodContainers, u64, Container);
 
-primitives::double_u64_map!(UserSecrets, Address, Option<H256>);
+primitives::double_u64_map!(UserSecrets, Address, Secret);

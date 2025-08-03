@@ -118,15 +118,15 @@ impl Default for EditType<u16> {
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Env {
     /// pub env
-    Env(Vec<u8>,Vec<u8>),
+    Env(Vec<u8>, Vec<u8>),
     /// file env
-    File(Vec<u8>,Vec<u8>),
+    File(Vec<u8>, Vec<u8>),
     /// encrypt env
-    Encrypt(Vec<u8>,Vec<u8>)
+    Encrypt(Vec<u8>, u64),
 }
 impl Default for Env {
     fn default() -> Self {
-        Env::Env("".as_bytes().to_vec(),"".as_bytes().to_vec())
+        Env::Env("".as_bytes().to_vec(), "".as_bytes().to_vec())
     }
 }
 
@@ -253,7 +253,7 @@ pub enum TEEType {
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct Secret{
+pub struct Secret {
     pub name: Vec<u8>,
     pub hash: Option<H256>,
 }

@@ -22,8 +22,6 @@ mod cloud {
 
         /// pods
         pods: Pods,
-        /// pod envs
-        pod_envs: Mapping<u64, Vec<Env>>,
         /// pod last block number
         pod_version: Mapping<u64, BlockNumber>,
         /// pod status 0=>created  1=>deoloying 2=>error  3=>stop
@@ -63,7 +61,6 @@ mod cloud {
                 gov_contract: caller,
                 subnet,
                 pods: Default::default(),
-                pod_envs: Default::default(),
                 pod_version: Default::default(),
                 pod_status: Default::default(),
                 pod_of_user: Default::default(),
@@ -481,7 +478,7 @@ mod cloud {
             self.ensure_from_side_chain()?;
 
             let s = self.secrets.get(user, index);
-            ensure!(s.is_some(),Error::NotFound);
+            ensure!(s.is_some(), Error::NotFound);
 
             let mut secret = s.unwrap();
             secret.hash = Some(hash);

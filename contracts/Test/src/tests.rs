@@ -15,6 +15,10 @@ fn test_add() {
             name: "test".as_bytes().to_vec(),
         },
     );
+
+    let mut list = t.list(0, None, 2);
+    println!("{:?}", list);
+
     _ = t.add(
         0,
         TestItem {
@@ -30,7 +34,7 @@ fn test_add() {
         },
     );
 
-    let mut list = t.list(0, None, 2);
+    list = t.list(0, None, 2);
     println!("{:?}", list);
     
     list = t.list(0, Some(0), 2);

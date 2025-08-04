@@ -3,7 +3,7 @@ use ink::{env::BlockNumber, prelude::vec::Vec, Address, H256};
 #[derive(Clone)]
 #[cfg_attr(
     feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
+    derive(Debug, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Pod {

@@ -303,13 +303,14 @@ mod cloud {
             &self,
             start: Option<u64>,
             size: u64,
-        ) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
+        ) -> Vec<(u64, Pod, Vec<(u64, Container)>,u8)> {
             let list = self.pods.desc_list(start, size);
 
             let mut pods = Vec::new();
             for (k, v) in list.iter() {
                 let containers = self.pod_containers.desc_list(*k, None, 20);
-                pods.push((*k, v.clone(), containers));
+                let status = self.pod_status.get(pod_id).unwrap_or_default();
+                pods.push((*k, v.clone(), containers, status));
             }
 
             pods
@@ -328,7 +329,7 @@ mod cloud {
             &self,
             start: Option<u32>,
             size: u32,
-        ) -> Vec<(u64, Pod, Vec<(u64, Container)>)> {
+        ) -> Vec<(u64, Pod, Vec<(u64, Container)>,u8)> {
             let caller = self.env().caller();
             let ids = self.pod_of_user.desc_list(caller, start, size);
 
@@ -337,7 +338,8 @@ mod cloud {
                 let pod = self.pods.get(pod_id);
                 if pod.is_some() {
                     let containers = self.pod_containers.desc_list(pod_id, None, 20);
-                    pods.push((pod_id, pod.unwrap(), containers));
+                    let status = self.pod_status.get(pod_id).unwrap_or_default();
+                    pods.push((pod_id, pod.unwrap(), containers, status));
                 }
             }
 

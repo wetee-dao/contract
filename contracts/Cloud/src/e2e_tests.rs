@@ -2,7 +2,7 @@ use ink_e2e::ContractsBackend;
 use subnet::{Subnet, SubnetRef};
 
 use super::cloud::*;
-use crate::datas::{Command, Container, PodType, TEEType, CR};
+use crate::datas::{Command, Container, PodType, TEEType};
 
 type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -52,7 +52,6 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
         .expect("Calling `worker_register` failed")
         .return_value();
 
-
     let cloud_contract = client
         .instantiate(
             "cloud",
@@ -76,12 +75,10 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
                     image: "nginx".as_bytes().to_vec(),
                     command: Command::NONE,
                     port: Vec::new(),
-                    cr: CR {
-                        cpu: 1,
-                        mem: 1024,
-                        disk: Vec::new(),
-                        gpu: 0,
-                    },
+                    cpu: 1,
+                    mem: 1024,
+                    disk: Vec::new(),
+                    gpu: 0,
                     env: Vec::new(),
                 }],
                 1,
@@ -105,12 +102,10 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
                     image: "nginx".as_bytes().to_vec(),
                     command: Command::NONE,
                     port: Vec::new(),
-                    cr: CR {
-                        cpu: 1,
-                        mem: 1024,
-                        disk: Vec::new(),
-                        gpu: 0,
-                    },
+                    cpu: 1,
+                    mem: 1024,
+                    disk: Vec::new(),
+                    gpu: 0,
                     env: Vec::new(),
                 }],
                 1,
@@ -123,7 +118,11 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
         .expect("Calling `create_user_pod` failed")
         .return_value();
 
-    let list = client.call(&ink_e2e::alice(),&cloud_call_builder.pods(None, 100)).dry_run().await?.return_value();
+    let list = client
+        .call(&ink_e2e::alice(), &cloud_call_builder.pods(None, 100))
+        .dry_run()
+        .await?
+        .return_value();
     println!("list: {:?}", list);
 
     Ok(())

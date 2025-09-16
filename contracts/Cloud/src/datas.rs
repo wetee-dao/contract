@@ -1,10 +1,7 @@
 use ink::{env::BlockNumber, prelude::vec::Vec, Address, H256};
 
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, ink::storage::traits::StorageLayout)
-)]
+#[cfg_attr(feature = "std", derive(Debug, ink::storage::traits::StorageLayout))]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Pod {
     /// Pod name
@@ -138,13 +135,15 @@ impl Default for Env {
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub enum DiskClass {
-    /// TCP
-    SSD(Vec<u8>),
+pub enum Disk {
+    /// SDD disk
+    SSD(u32),
+    /// Secret disk (secret_id: Secret id,disk_size:GB)
+    SecretSSD(u64, u32),
 }
-impl Default for DiskClass {
+impl Default for Disk {
     fn default() -> Self {
-        DiskClass::SSD("".as_bytes().to_vec()) // 默认为TCP协议，端口为0
+        Disk::SSD(1) // 1G SSD
     }
 }
 
@@ -156,17 +155,17 @@ impl Default for DiskClass {
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct Disk {
-    /// key
-    pub path: DiskClass,
+pub struct ContainerDisk {
     /// value
-    pub size: u32,
+    pub id: u32,
+    /// path
+    pub path: Vec<u8>,
 }
-impl Default for Disk {
+impl Default for ContainerDisk {
     fn default() -> Self {
-        Disk {
-            path: DiskClass::SSD("".as_bytes().to_vec()),
-            size: 1,
+        ContainerDisk {
+            path: "".as_bytes().to_vec(),
+            id: 0,
         }
     }
 }
@@ -198,9 +197,14 @@ pub struct Container {
     /// port of service
     /// 服务端口号
     pub port: Vec<Service>,
-    /// cpu memory disk
-    /// cpu memory disk
-    pub cr: CR,
+    /// cpu 
+    pub cpu: u32,
+    /// mem 
+    pub mem: u32,
+    /// disk 
+    pub disk: Vec<ContainerDisk>,
+    /// gpu 
+    pub gpu: u32,
     /// env
     /// 环境变量
     pub env: Vec<Env>,
@@ -211,26 +215,15 @@ impl Default for Container {
             image: Vec::new(),
             command: Command::NONE,
             port: Vec::new(),
-            cr: CR::default(),
             env: Vec::new(),
+            cpu: 1,
+            mem: 1,
+            disk: Vec::new(),
+            gpu: 0,
         }
     }
 }
 
-/// 计算资源
-/// computing resource
-#[derive(Clone, Default)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct CR {
-    pub cpu: u32,
-    pub mem: u32,
-    pub disk: Vec<Disk>,
-    pub gpu: u32,
-}
 
 /// TEEType
 /// TEE 实现版本
@@ -254,7 +247,11 @@ pub enum TEEType {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct Secret {
-    pub name: Vec<u8>,
+    // secret key
+    pub k: Vec<u8>,
+    /// secret type (0=>Env 1=>SSD key)
+    pub t: u8,
+    /// secret hash
     pub hash: Option<H256>,
 }
 
@@ -267,3 +264,5 @@ primitives::double_u64_map!(WorkerPods, u64, u64);
 primitives::double_u64_map!(PodContainers, u64, Container);
 
 primitives::double_u64_map!(UserSecrets, Address, Secret);
+
+primitives::double_u64_map!(UserDisks, Address, Disk);

@@ -46,6 +46,9 @@ mod cloud {
 
         /// secret value
         secrets: UserSecrets,
+
+        /// users disks
+        disks: UserDisks,
     }
 
     impl Cloud {
@@ -71,6 +74,7 @@ mod cloud {
                 pod_report: Default::default(),
                 pod_key: Default::default(),
                 secrets: Default::default(),
+                disks: Default::default(),
                 mint_interval: 14400u32.into(),
                 pod_contract_code_hash: pod_contract_code_hash,
             };
@@ -87,6 +91,7 @@ mod cloud {
             Ok(())
         }
 
+        /// set mint interval
         #[ink(message)]
         pub fn set_mint_interval(&mut self, t: BlockNumber) -> Result<(), Error> {
             self.mint_interval = t;
@@ -458,13 +463,14 @@ mod cloud {
 
         /// Create secret
         #[ink(message)]
-        pub fn init_secret(&mut self, name: Vec<u8>) -> Result<u64, Error> {
+        pub fn init_secret(&mut self, key: Vec<u8>, t: u8) -> Result<u64, Error> {
             let caller = self.env().caller();
 
             Ok(self.secrets.insert(
                 caller,
                 &Secret {
-                    name: name,
+                    k: key,
+                    t: t,
                     hash: None,
                 },
             ))

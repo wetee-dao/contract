@@ -13,5 +13,10 @@ cd "$DIR/../../"
 # cargo contract build --release --manifest-path contracts/Subnet/Cargo.toml
 # cargo contract build --release --manifest-path contracts/Cloud/Cargo.toml
 
+cd $DIR/contracts
+
+go-ink-gen -json ../../../target/ink/cloud/cloud.json
+go-ink-gen -json ../../../target/ink/subnet/subnet.json
+
 cd $DIR
 go test -run ^TestContractInit$

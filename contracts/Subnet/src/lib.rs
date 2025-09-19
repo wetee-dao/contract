@@ -23,7 +23,7 @@ mod subnet {
         gov_contract: Address,
 
         /// Computing power is divided into different zones to ensure user experience.
-        regions: Mapping<u32, Vec<u8>>,
+        regions: Regions,
         /// workers
         workers: Workers,
         /// worker status
@@ -111,11 +111,22 @@ mod subnet {
 
         /// add or update region
         #[ink(message)]
-        pub fn set_region(&mut self, region_id: u32, name: Vec<u8>) -> Result<(), Error> {
+        pub fn set_region(&mut self, name: Vec<u8>) -> Result<(), Error> {
             self.ensure_from_gov()?;
-            self.regions.insert(region_id, &name);
+            self.regions.insert(&name);
 
             Ok(())
+        }
+
+        /// get region name
+        #[ink(message)]
+        pub fn region(&self, id: u32) -> Option<Vec<u8>> {
+            self.regions.get(id)
+        }
+
+        /// list regions
+        pub fn regions(&self) -> Vec<(u32,Vec<u8>)> {
+           self.regions.desc_list(None, 1000)
         }
 
         /// worker info
@@ -185,7 +196,7 @@ mod subnet {
         ) -> Result<NodeID, Error> {
             let caller = self.env().caller();
 
-            ensure!(self.regions.contains(region_id), Error::RegionNotExist);
+            self.regions.get(region_id).ok_or(Error::RegionNotExist)?;
 
             let worker_id = self.workers.next_id();
             let now = self.env().block_number();

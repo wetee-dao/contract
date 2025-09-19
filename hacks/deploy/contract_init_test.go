@@ -7,11 +7,12 @@ import (
 	"os"
 	"testing"
 
+	"wetee/test/contracts/cloud"
+	"wetee/test/contracts/subnet"
+
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	chain "github.com/wetee-dao/ink.go"
 	"github.com/wetee-dao/ink.go/util"
-	"github.com/wetee-dao/tee-dsecret/pkg/chains/contracts/cloud"
-	"github.com/wetee-dao/tee-dsecret/pkg/chains/contracts/subnet"
 	"github.com/wetee-dao/tee-dsecret/pkg/model"
 )
 
@@ -68,6 +69,105 @@ func TestContractInit(t *testing.T) {
 	InitWorker(client, pk, subnetAddress.Hex())
 	fmt.Println("subnet address ======> ", subnetAddress.Hex())
 	fmt.Println("cloud  address ======> ", cloudAddress.Hex())
+}
+
+func TestInitWorker(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	InitWorker(client, pk, SubnetAddress)
+}
+
+func TestCloudUpdate(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	/// init pod
+	cloudData, err := os.ReadFile("../../target/ink/cloud/cloud.polkavm")
+	if err != nil {
+		util.LogWithPurple("read file error", err)
+		panic(err)
+	}
+
+	code, err := client.UploadInkCode(cloudData, &pk)
+	if err != nil {
+		util.LogWithPurple("UploadInkCode", err)
+		panic(err)
+	}
+
+	cloudIns, err := cloud.InitCloudContract(client, CloudAddress)
+	if err != nil {
+		util.LogWithPurple("InitCloudContract", err)
+		panic(err)
+	}
+
+	err = cloudIns.ExecSetCode(*code, chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+
+	if err != nil {
+		util.LogWithPurple("ExecSetCode", err)
+	}
+}
+
+func TestSubnetUpdate(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	/// init pod
+	netData, err := os.ReadFile("../../target/ink/subnet/subnet.polkavm")
+	if err != nil {
+		util.LogWithPurple("read file error", err)
+		panic(err)
+	}
+
+	netCode, err := client.UploadInkCode(netData, &pk)
+	if err != nil {
+		util.LogWithPurple("UploadInkCode", err)
+		panic(err)
+	}
+
+	fmt.Println("cloudAddress: ", CloudAddress)
+
+	subnetIns, err := subnet.InitSubnetContract(client, SubnetAddress)
+	if err != nil {
+		util.LogWithPurple("InitCloudContract", err)
+		panic(err)
+	}
+
+	err = subnetIns.ExecSetCode(*netCode, chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+
+	if err != nil {
+		util.LogWithPurple("subnet ExecSetCode", err)
+	}
 }
 
 func DeploySubnetContract(client *chain.ChainClient, pk chain.Signer) *types.H160 {
@@ -166,24 +266,41 @@ func InitWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		panic(err)
 	}
 
-	subnetContract.ExecSetRegion(0, []byte("defalut"), _call)
+	err = subnetContract.ExecSetRegion([]byte("defalut"), _call)
+	if err != nil {
+		panic(err)
+	}
 
 	pubkey, _ := model.PubKeyFromSS58("5GSBfdb3PxME3XM4JrkFKAgHH77ADDWXUx6o8KGVmavLnZ44")
-	subnetContract.ExecWorkerRegister([]byte("worker0"), pubkey.AccountID(), subnet.Ip{
-		Ipv4:   util.NewNone[uint32](),
-		Ipv6:   util.NewNone[types.U128](),
-		Domain: util.NewSome([]byte("xiaobai.asyou.me")),
-	}, 10000, 1, 0, _call)
+	err = subnetContract.ExecWorkerRegister(
+		[]byte("worker0"),
+		pubkey.AccountID(),
+		subnet.Ip{
+			Ipv4:   util.NewNone[uint32](),
+			Ipv6:   util.NewNone[types.U128](),
+			Domain: util.NewSome([]byte("xiaobai.asyou.me")),
+		},
+		10000,
+		1,
+		0,
+		_call,
+	)
+	if err != nil {
+		panic(err)
+	}
 
-	// subnetContract.CallWorkerMortgage(
-	// 	0,
-	// 	10000, 10000,
-	// 	0, 0,
-	// 	1000000,
-	// 	0,
-	// 	types.NewU256(*big.NewInt(10000000)),
-	// 	_call,
-	// )
+	err = subnetContract.ExecWorkerMortgage(
+		0,
+		10000, 10000,
+		0, 0,
+		1000000,
+		0,
+		types.NewU256(*big.NewInt(10000000)),
+		_call,
+	)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func genSalt() [32]byte {

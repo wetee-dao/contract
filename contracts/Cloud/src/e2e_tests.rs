@@ -24,7 +24,7 @@ async fn test_create_user_pod<Client: E2EBackend>() -> E2EResult<()> {
     let _ = client
         .call(
             &ink_e2e::alice(),
-            &subnet_call_builder.set_region(1, "defalut".as_bytes().to_vec()),
+            &subnet_call_builder.set_region("defalut".as_bytes().to_vec()),
         )
         .submit()
         .await

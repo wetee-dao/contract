@@ -136,14 +136,12 @@ impl Default for Env {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Disk {
-    /// SDD disk
-    SSD(u32),
     /// Secret disk (secret_id: Secret id,disk_size:GB)
-    SecretSSD(u64, u32),
+    SecretSSD(Vec<u8>, u32),
 }
 impl Default for Disk {
     fn default() -> Self {
-        Disk::SSD(1) // 1G SSD
+        Disk::SecretSSD(Vec::new(), 1) // 1G SSD
     }
 }
 
@@ -249,8 +247,6 @@ pub enum TEEType {
 pub struct Secret {
     // secret key
     pub k: Vec<u8>,
-    /// secret type (0=>Env 1=>SSD key)
-    pub t: u8,
     /// secret hash
     pub hash: Option<H256>,
 }

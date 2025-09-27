@@ -7,7 +7,6 @@ edition = "2021"
 [dependencies]
 ink = { workspace = true, default-features = false, features = ["unstable-hostfn"] }
 scale-info = { workspace = true, default-features = false }
-# ink = { git = "https://github.com/use-ink/ink", branch = "master", default-features = false, features = ["unstable-hostfn"] }
 
 [features]
 default = ["std"]

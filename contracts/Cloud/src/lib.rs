@@ -463,16 +463,10 @@ mod cloud {
 
         /// Create secret
         #[ink(message)]
-        pub fn init_secret(&mut self, key: Vec<u8>, t: u8) -> Result<u64, Error> {
+        pub fn init_secret(&mut self, key: Vec<u8>) -> Result<u64, Error> {
             let caller = self.env().caller();
 
-            Ok(self.secrets.insert(
-                caller,
-                &Secret {
-                    k: key,
-                    hash: None,
-                },
-            ))
+            Ok(self.secrets.insert(caller, &Secret { k: key, hash: None }))
         }
 
         /// Update secret
@@ -507,34 +501,52 @@ mod cloud {
             Ok(())
         }
 
+        /// Create disk
         #[ink(message)]
-        pub fn init_disk(&mut self, size: u32) -> Result<(), Error> {
+        pub fn init_disk(&mut self, key: Vec<u8>, size: u32) -> Result<(), Error> {
             let caller = self.env().caller();
 
-            self.disks.insert(caller, &Disk::SecretSSD(Vec::new(), size));
+            self.disks
+                .insert(caller, &Disk::SecretSSD(key, Vec::new(), size));
             Ok(())
         }
 
-        #[ink(message)]
-        pub fn disk(&self, user: Address, disk_id: u64) -> Option<Disk> {
-            self.disks.get(user, disk_id)
-        }
-
+        /// Update disk encryption key
         #[ink(message)]
         pub fn update_disk_key(&mut self, user: Address, id: u64, hash: H256) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
             let disk = self.disks.get(user, id).ok_or(Error::NotFound)?;
             match disk {
-                Disk::SecretSSD(_, size) => {
-                    self.disks.update(user, id, &Disk::SecretSSD(hash.as_bytes().to_vec(), size));
+                Disk::SecretSSD(k,_, size) => {
+                    self.disks
+                        .update(user, id, &Disk::SecretSSD(k.clone(), hash.as_bytes().to_vec(), size));
                     Ok(())
                 }
             }
         }
 
+        /// Get disk info
+        #[ink(message)]
+        pub fn disk(&self, user: Address, disk_id: u64) -> Option<Disk> {
+            self.disks.get(user, disk_id)
+        }
+
+        /// Get user disk list
         #[ink(message)]
         pub fn user_disks(&self, user: Address, start: Option<u64>, size: u64) -> Vec<(u64, Disk)> {
             self.disks.desc_list(user, start, size)
+        }
+
+        /// Delete disk
+        #[ink(message)]
+        pub fn del_disk(&mut self, disk_id: u64) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let delete = self.disks.delete_by_key(caller, disk_id);
+            if !delete {
+                return Err(Error::DelFailed);
+            }
+
+            Ok(())
         }
 
         /// Update contract with gov

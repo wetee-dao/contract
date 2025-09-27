@@ -121,7 +121,6 @@ func TestCloudUpdate(t *testing.T) {
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	})
-
 	if err != nil {
 		util.LogWithPurple("ExecSetCode", err)
 	}
@@ -261,6 +260,7 @@ func InitWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	}
+
 	subnetContract, err := subnet.InitSubnetContract(client, subnetAddress)
 	if err != nil {
 		panic(err)
@@ -313,4 +313,58 @@ func genSalt() [32]byte {
 	copy(randomBytes[:], bytes)
 
 	return randomBytes
+}
+
+func TestCloudQuerySecret(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	cloudContract, err := cloud.InitCloudContract(client, CloudAddress)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(pk.SS58Address(42))
+	fmt.Println(pk.H160Address().Hex())
+
+	_call := chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	}
+	err = cloudContract.ExecDelDisk(0, _call)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("del disk:", err)
+
+	// err = cloudContract.ExecInitDisk([]byte("node0"), 10, _call)
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	disk, _, err := cloudContract.QueryDisk(pk.H160Address(), 0, chain.DryRunParams{
+		Origin:    pk.AccountID(),
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("disk", disk)
+
+	disks, _, err := cloudContract.QueryUserDisks(pk.H160Address(), util.NewNone[uint64](), 1000, chain.DryRunParams{
+		Origin:    pk.AccountID(),
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("disks:", disks)
 }

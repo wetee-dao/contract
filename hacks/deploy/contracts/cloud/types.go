@@ -11,10 +11,16 @@ import (
 type Pod struct { // Composite
 	Name       []byte
 	Owner      types.H160
-	Contract   types.H160
+	Contract   PodRef
 	Ptype      PodType
 	StartBlock uint32
 	TeeType    TEEType
+}
+type PodRef struct { // Composite
+	Inner CallBuilder
+}
+type CallBuilder struct { // Composite
+	Addr types.H160
 }
 type PodType struct { // Enum
 	CPU    *bool // 0
@@ -495,9 +501,77 @@ func (ty *Command) Decode(decoder scale.Decoder) (err error) {
 
 type Secret struct { // Composite
 	K    []byte
-	T    byte
 	Hash util.Option[types.H256]
 }
+type Disk struct { // Enum
+	SecretSSD *struct { // 0
+		F0 []byte
+		F1 []byte
+		F2 uint32
+	}
+}
+
+func (ty Disk) Encode(encoder scale.Encoder) (err error) {
+	if ty.SecretSSD != nil {
+		err = encoder.PushByte(0)
+		if err != nil {
+			return err
+		}
+
+		err = encoder.Encode(ty.SecretSSD.F0)
+		if err != nil {
+			return err
+		}
+
+		err = encoder.Encode(ty.SecretSSD.F1)
+		if err != nil {
+			return err
+		}
+
+		err = encoder.Encode(ty.SecretSSD.F2)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+	return fmt.Errorf("unrecognized enum")
+}
+
+func (ty *Disk) Decode(decoder scale.Decoder) (err error) {
+	variant, err := decoder.ReadOneByte()
+	if err != nil {
+		return err
+	}
+	switch variant {
+	case 0: // Tuple
+		ty.SecretSSD = &struct {
+			F0 []byte
+			F1 []byte
+			F2 uint32
+		}{}
+
+		err = decoder.Decode(&ty.SecretSSD.F0)
+		if err != nil {
+			return err
+		}
+
+		err = decoder.Decode(&ty.SecretSSD.F1)
+		if err != nil {
+			return err
+		}
+
+		err = decoder.Decode(&ty.SecretSSD.F2)
+		if err != nil {
+			return err
+		}
+
+		return
+	default:
+		return fmt.Errorf("unrecognized enum")
+	}
+}
+
 type Error struct { // Enum
 	SetCodeFailed          *bool // 0
 	MustCallByGovContract  *bool // 1
@@ -778,37 +852,41 @@ func (ty *EditType) Decode(decoder scale.Decoder) (err error) {
 	}
 }
 
-type Tuple_115 struct { // Tuple
+type Tuple_119 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_117
+	F2 []Tuple_121
 	F3 byte
 }
-type Tuple_117 struct { // Tuple
+type Tuple_121 struct { // Tuple
 	F0 uint64
 	F1 Container
 }
-type Tuple_121 struct { // Tuple
+type Tuple_125 struct { // Tuple
 	F0 uint64
 	F1 uint32
 	F2 uint32
 	F3 byte
 }
-type Tuple_124 struct { // Tuple
+type Tuple_128 struct { // Tuple
 	F0 Pod
-	F1 []Tuple_117
+	F1 []Tuple_121
 	F2 uint32
 	F3 byte
 }
-type Tuple_128 struct { // Tuple
+type Tuple_132 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_117
+	F2 []Tuple_121
 	F3 uint32
 	F4 uint32
 	F5 byte
 }
-type Tuple_131 struct { // Tuple
+type Tuple_135 struct { // Tuple
 	F0 uint64
 	F1 Secret
+}
+type Tuple_144 struct { // Tuple
+	F0 uint64
+	F1 Disk
 }

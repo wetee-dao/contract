@@ -136,12 +136,12 @@ impl Default for Env {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Disk {
-    /// Secret disk (secret_id: Secret id,disk_size:GB)
-    SecretSSD(Vec<u8>, u32),
+    /// Secret disk (name, secret_hash: Secret hash,disk_size:GB)
+    SecretSSD(Vec<u8>, Vec<u8>, u32),
 }
 impl Default for Disk {
     fn default() -> Self {
-        Disk::SecretSSD(Vec::new(), 1) // 1G SSD
+        Disk::SecretSSD(Vec::new(), Vec::new(), 1) // 1G SSD
     }
 }
 
@@ -195,13 +195,13 @@ pub struct Container {
     /// port of service
     /// 服务端口号
     pub port: Vec<Service>,
-    /// cpu 
+    /// cpu
     pub cpu: u32,
-    /// mem 
+    /// mem
     pub mem: u32,
-    /// disk 
+    /// disk
     pub disk: Vec<ContainerDisk>,
-    /// gpu 
+    /// gpu
     pub gpu: u32,
     /// env
     /// 环境变量
@@ -221,7 +221,6 @@ impl Default for Container {
         }
     }
 }
-
 
 /// TEEType
 /// TEE 实现版本

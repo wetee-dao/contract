@@ -22,8 +22,8 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-ink = { git = "https://github.com/use-ink/ink", branch = "master", default-features = false }
-ink_e2e = { git = "https://github.com/use-ink/ink", branch = "master" }
+ink = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-alpha", default-features = false }
+ink_e2e = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-alpha" }
 # ink = { version = "6.0.0-alpha", default-features = false  }
 # ink_e2e = { version = "6.0.0-alpha" }
 scale = { package = "parity-scale-codec", version = "3.7.4", default-features = false }

@@ -463,19 +463,18 @@ mod cloud {
 
         /// Create secret
         #[ink(message)]
-        pub fn init_secret(&mut self, key: Vec<u8>) -> Result<u64, Error> {
+        pub fn create_secret(&mut self, key: Vec<u8>, hash: H256) -> Result<u64, Error> {
             let caller = self.env().caller();
 
-            Ok(self.secrets.insert(caller, &Secret { k: key, hash: None }))
+            Ok(self.secrets.insert(caller, &Secret { k: key, hash: hash, minted: false }))
         }
 
         /// Update secret
         #[ink(message)]
-        pub fn update_secret(
+        pub fn mint_secret(
             &mut self,
             user: Address,
             index: u64,
-            hash: H256,
         ) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
 
@@ -483,7 +482,7 @@ mod cloud {
             ensure!(s.is_some(), Error::NotFound);
 
             let mut secret = s.unwrap();
-            secret.hash = Some(hash);
+            secret.minted = true;
 
             self.secrets.update(user, index, &secret);
             Ok(())
@@ -503,7 +502,7 @@ mod cloud {
 
         /// Create disk
         #[ink(message)]
-        pub fn init_disk(&mut self, key: Vec<u8>, size: u32) -> Result<(), Error> {
+        pub fn create_disk(&mut self, key: Vec<u8>, size: u32) -> Result<(), Error> {
             let caller = self.env().caller();
 
             self.disks
@@ -511,15 +510,18 @@ mod cloud {
             Ok(())
         }
 
-        /// Update disk encryption key
+        /// Update disk encryption key``
         #[ink(message)]
         pub fn update_disk_key(&mut self, user: Address, id: u64, hash: H256) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
             let disk = self.disks.get(user, id).ok_or(Error::NotFound)?;
             match disk {
-                Disk::SecretSSD(k,_, size) => {
-                    self.disks
-                        .update(user, id, &Disk::SecretSSD(k.clone(), hash.as_bytes().to_vec(), size));
+                Disk::SecretSSD(k, _, size) => {
+                    self.disks.update(
+                        user,
+                        id,
+                        &Disk::SecretSSD(k.clone(), hash.as_bytes().to_vec(), size),
+                    );
                     Ok(())
                 }
             }

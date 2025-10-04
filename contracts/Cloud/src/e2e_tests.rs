@@ -158,7 +158,7 @@ async fn test_delete_user_disk<Client: E2EBackend>() -> E2EResult<()> {
     let _ = client
         .call(
             &ink_e2e::alice(),
-            &cloud_call_builder.init_disk("d1".as_bytes().to_vec(), 10),
+            &cloud_call_builder.create_disk("d1".as_bytes().to_vec(), 10),
         )
         .submit()
         .await
@@ -168,7 +168,7 @@ async fn test_delete_user_disk<Client: E2EBackend>() -> E2EResult<()> {
     let _ = client
         .call(
             &ink_e2e::alice(),
-            &cloud_call_builder.init_disk("d2".as_bytes().to_vec(), 10),
+            &cloud_call_builder.create_disk("d2".as_bytes().to_vec(), 10),
         )
         .submit()
         .await

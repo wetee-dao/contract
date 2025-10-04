@@ -247,7 +247,9 @@ pub struct Secret {
     // secret key
     pub k: Vec<u8>,
     /// secret hash
-    pub hash: Option<H256>,
+    pub hash: H256,
+    /// secret index
+    pub minted: bool,
 }
 
 primitives::define_map!(Pods, u64, Pod);

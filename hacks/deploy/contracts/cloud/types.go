@@ -5,7 +5,6 @@ import (
 
 	"github.com/centrifuge/go-substrate-rpc-client/v4/scale"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
-	"github.com/wetee-dao/ink.go/util"
 )
 
 type Pod struct { // Composite
@@ -500,8 +499,9 @@ func (ty *Command) Decode(decoder scale.Decoder) (err error) {
 }
 
 type Secret struct { // Composite
-	K    []byte
-	Hash util.Option[types.H256]
+	K      []byte
+	Hash   types.H256
+	Minted bool
 }
 type Disk struct { // Enum
 	SecretSSD *struct { // 0

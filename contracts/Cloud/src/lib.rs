@@ -466,16 +466,19 @@ mod cloud {
         pub fn create_secret(&mut self, key: Vec<u8>, hash: H256) -> Result<u64, Error> {
             let caller = self.env().caller();
 
-            Ok(self.secrets.insert(caller, &Secret { k: key, hash: hash, minted: false }))
+            Ok(self.secrets.insert(
+                caller,
+                &Secret {
+                    k: key,
+                    hash: hash,
+                    minted: false,
+                },
+            ))
         }
 
         /// Update secret
         #[ink(message)]
-        pub fn mint_secret(
-            &mut self,
-            user: Address,
-            index: u64,
-        ) -> Result<(), Error> {
+        pub fn mint_secret(&mut self, user: Address, index: u64) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
 
             let s = self.secrets.get(user, index);
@@ -502,12 +505,12 @@ mod cloud {
 
         /// Create disk
         #[ink(message)]
-        pub fn create_disk(&mut self, key: Vec<u8>, size: u32) -> Result<(), Error> {
+        pub fn create_disk(&mut self, key: Vec<u8>, size: u32) -> Result<u64, Error> {
             let caller = self.env().caller();
 
-            self.disks
-                .insert(caller, &Disk::SecretSSD(key, Vec::new(), size));
-            Ok(())
+            Ok(self
+                .disks
+                .insert(caller, &Disk::SecretSSD(key, Vec::new(), size)))
         }
 
         /// Update disk encryption key``

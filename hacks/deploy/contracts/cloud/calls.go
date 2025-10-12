@@ -901,12 +901,12 @@ func (c *Cloud) QuerySecret(
 	return v, gas, nil
 }
 
-func (c *Cloud) DryRunInitSecret(
-	key []byte, __ink_params chain.DryRunParams,
+func (c *Cloud) DryRunCreateSecret(
+	key []byte, hash types.H256, __ink_params chain.DryRunParams,
 ) (*util.Result[uint64, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
-		util.LogWithPurple("[ DryRun   method ]", "init_secret")
+		util.LogWithPurple("[ DryRun   method ]", "create_secret")
 	}
 	v, gas, err := chain.DryRunInk[util.Result[uint64, Error]](
 		c,
@@ -915,8 +915,8 @@ func (c *Cloud) DryRunInitSecret(
 		__ink_params.GasLimit,
 		__ink_params.StorageDepositLimit,
 		util.InkContractInput{
-			Selector: "0x0b67c2ff",
-			Args:     []any{key},
+			Selector: "0x23a11a66",
+			Args:     []any{key, hash},
 		},
 	)
 	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
@@ -929,12 +929,12 @@ func (c *Cloud) DryRunInitSecret(
 	return v, gas, nil
 }
 
-func (c *Cloud) ExecInitSecret(
-	key []byte, __ink_params chain.ExecParams,
+func (c *Cloud) ExecCreateSecret(
+	key []byte, hash types.H256, __ink_params chain.ExecParams,
 ) error {
 	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
 	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunInitSecret(key, _param)
+	_, gas, err := c.DryRunCreateSecret(key, hash, _param)
 	if err != nil {
 		return err
 	}
@@ -943,17 +943,17 @@ func (c *Cloud) ExecInitSecret(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0x0b67c2ff",
-			Args:     []any{key},
+			Selector: "0x23a11a66",
+			Args:     []any{key, hash},
 		},
 		__ink_params,
 	)
 }
 
-func (c *Cloud) CallOfInitSecret(
-	key []byte, __ink_params chain.DryRunParams,
+func (c *Cloud) CallOfCreateSecret(
+	key []byte, hash types.H256, __ink_params chain.DryRunParams,
 ) (*types.Call, error) {
-	_, gas, err := c.DryRunInitSecret(key, __ink_params)
+	_, gas, err := c.DryRunCreateSecret(key, hash, __ink_params)
 	if err != nil {
 		return nil, err
 	}
@@ -963,18 +963,18 @@ func (c *Cloud) CallOfInitSecret(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0x0b67c2ff",
-			Args:     []any{key},
+			Selector: "0x23a11a66",
+			Args:     []any{key, hash},
 		},
 	)
 }
 
-func (c *Cloud) DryRunUpdateSecret(
-	user types.H160, index uint64, hash types.H256, __ink_params chain.DryRunParams,
+func (c *Cloud) DryRunMintSecret(
+	user types.H160, index uint64, __ink_params chain.DryRunParams,
 ) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
-		util.LogWithPurple("[ DryRun   method ]", "update_secret")
+		util.LogWithPurple("[ DryRun   method ]", "mint_secret")
 	}
 	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
 		c,
@@ -983,8 +983,8 @@ func (c *Cloud) DryRunUpdateSecret(
 		__ink_params.GasLimit,
 		__ink_params.StorageDepositLimit,
 		util.InkContractInput{
-			Selector: "0x4972e7e8",
-			Args:     []any{user, index, hash},
+			Selector: "0x6fededf0",
+			Args:     []any{user, index},
 		},
 	)
 	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
@@ -997,12 +997,12 @@ func (c *Cloud) DryRunUpdateSecret(
 	return v, gas, nil
 }
 
-func (c *Cloud) ExecUpdateSecret(
-	user types.H160, index uint64, hash types.H256, __ink_params chain.ExecParams,
+func (c *Cloud) ExecMintSecret(
+	user types.H160, index uint64, __ink_params chain.ExecParams,
 ) error {
 	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
 	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunUpdateSecret(user, index, hash, _param)
+	_, gas, err := c.DryRunMintSecret(user, index, _param)
 	if err != nil {
 		return err
 	}
@@ -1011,17 +1011,17 @@ func (c *Cloud) ExecUpdateSecret(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0x4972e7e8",
-			Args:     []any{user, index, hash},
+			Selector: "0x6fededf0",
+			Args:     []any{user, index},
 		},
 		__ink_params,
 	)
 }
 
-func (c *Cloud) CallOfUpdateSecret(
-	user types.H160, index uint64, hash types.H256, __ink_params chain.DryRunParams,
+func (c *Cloud) CallOfMintSecret(
+	user types.H160, index uint64, __ink_params chain.DryRunParams,
 ) (*types.Call, error) {
-	_, gas, err := c.DryRunUpdateSecret(user, index, hash, __ink_params)
+	_, gas, err := c.DryRunMintSecret(user, index, __ink_params)
 	if err != nil {
 		return nil, err
 	}
@@ -1031,8 +1031,8 @@ func (c *Cloud) CallOfUpdateSecret(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0x4972e7e8",
-			Args:     []any{user, index, hash},
+			Selector: "0x6fededf0",
+			Args:     []any{user, index},
 		},
 	)
 }
@@ -1105,21 +1105,21 @@ func (c *Cloud) CallOfDelSecret(
 	)
 }
 
-func (c *Cloud) DryRunInitDisk(
+func (c *Cloud) DryRunCreateDisk(
 	key []byte, size uint32, __ink_params chain.DryRunParams,
-) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+) (*util.Result[uint64, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
-		util.LogWithPurple("[ DryRun   method ]", "init_disk")
+		util.LogWithPurple("[ DryRun   method ]", "create_disk")
 	}
-	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+	v, gas, err := chain.DryRunInk[util.Result[uint64, Error]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
 		__ink_params.GasLimit,
 		__ink_params.StorageDepositLimit,
 		util.InkContractInput{
-			Selector: "0x10074fa9",
+			Selector: "0xc44e70a9",
 			Args:     []any{key, size},
 		},
 	)
@@ -1133,12 +1133,12 @@ func (c *Cloud) DryRunInitDisk(
 	return v, gas, nil
 }
 
-func (c *Cloud) ExecInitDisk(
+func (c *Cloud) ExecCreateDisk(
 	key []byte, size uint32, __ink_params chain.ExecParams,
 ) error {
 	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
 	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunInitDisk(key, size, _param)
+	_, gas, err := c.DryRunCreateDisk(key, size, _param)
 	if err != nil {
 		return err
 	}
@@ -1147,17 +1147,17 @@ func (c *Cloud) ExecInitDisk(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0x10074fa9",
+			Selector: "0xc44e70a9",
 			Args:     []any{key, size},
 		},
 		__ink_params,
 	)
 }
 
-func (c *Cloud) CallOfInitDisk(
+func (c *Cloud) CallOfCreateDisk(
 	key []byte, size uint32, __ink_params chain.DryRunParams,
 ) (*types.Call, error) {
-	_, gas, err := c.DryRunInitDisk(key, size, __ink_params)
+	_, gas, err := c.DryRunCreateDisk(key, size, __ink_params)
 	if err != nil {
 		return nil, err
 	}
@@ -1167,7 +1167,7 @@ func (c *Cloud) CallOfInitDisk(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0x10074fa9",
+			Selector: "0xc44e70a9",
 			Args:     []any{key, size},
 		},
 	)

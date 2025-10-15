@@ -5,6 +5,7 @@ import (
 
 	"github.com/centrifuge/go-substrate-rpc-client/v4/scale"
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
+	"github.com/wetee-dao/ink.go/util"
 )
 
 type Pod struct { // Composite
@@ -258,7 +259,7 @@ func (ty *Service) Decode(decoder scale.Decoder) (err error) {
 }
 
 type ContainerDisk struct { // Composite
-	Id   uint32
+	Id   uint64
 	Path []byte
 }
 type Env struct { // Enum
@@ -877,16 +878,24 @@ type Tuple_128 struct { // Tuple
 type Tuple_132 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_121
+	F2 []Tuple_134
 	F3 uint32
 	F4 uint32
 	F5 byte
 }
+type Tuple_134 struct { // Tuple
+	F0 uint64
+	F1 Tuple_135
+}
 type Tuple_135 struct { // Tuple
+	F0 Container
+	F1 []util.Option[Disk]
+}
+type Tuple_140 struct { // Tuple
 	F0 uint64
 	F1 Secret
 }
-type Tuple_144 struct { // Tuple
+type Tuple_148 struct { // Tuple
 	F0 uint64
 	F1 Disk
 }

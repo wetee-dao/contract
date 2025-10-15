@@ -45,10 +45,10 @@ mod cloud {
         pod_containers: PodContainers,
 
         /// secret value
-        secrets: UserSecrets,
+        user_secrets: UserSecrets,
 
         /// users disks
-        disks: UserDisks,
+        user_disks: UserDisks,
     }
 
     impl Cloud {
@@ -73,8 +73,8 @@ mod cloud {
                 last_mint_block: Default::default(),
                 pod_report: Default::default(),
                 pod_key: Default::default(),
-                secrets: Default::default(),
-                disks: Default::default(),
+                user_secrets: Default::default(),
+                user_disks: Default::default(),
                 mint_interval: 14400u32.into(),
                 pod_contract_code_hash: pod_contract_code_hash,
             };
@@ -415,7 +415,7 @@ mod cloud {
         ) -> Vec<(
             u64,
             Pod,
-            Vec<(u64, Container)>,
+            Vec<(u64, (Container, Vec<Option<Disk>>))>,
             BlockNumber,
             BlockNumber,
             u8,
@@ -427,12 +427,31 @@ mod cloud {
                     continue;
                 }
                 let pod = pod_wrap.unwrap();
+
                 let containers = self.pod_containers.desc_list(pod_id, None, 20);
+                let mut containers_with_disk = Vec::new();
+                for (container_id, container) in containers {
+                    let disks = container
+                        .disk
+                        .clone()
+                        .into_iter()
+                        .map(|c| -> Option<Disk> { self.user_disks.get(pod.owner, c.id) })
+                        .collect::<Vec<_>>();
+                    containers_with_disk.push((container_id, (container, disks)));
+                }
+
                 let version = self.pod_version.get(pod_id).unwrap_or_default();
                 let status = self.pod_status.get(pod_id).unwrap_or_default();
                 let last_mint = self.last_mint_block.get(pod_id).unwrap_or_default();
 
-                pods.push((pod_id, pod, containers, version, last_mint, status));
+                pods.push((
+                    pod_id,
+                    pod,
+                    containers_with_disk,
+                    version,
+                    last_mint,
+                    status,
+                ));
             }
 
             pods
@@ -452,13 +471,13 @@ mod cloud {
             start: Option<u64>,
             size: u64,
         ) -> Vec<(u64, Secret)> {
-            self.secrets.desc_list(user, start, size)
+            self.user_secrets.desc_list(user, start, size)
         }
 
         /// Get secret
         #[ink(message)]
         pub fn secret(&self, user: Address, index: u64) -> Option<Secret> {
-            self.secrets.get(user, index)
+            self.user_secrets.get(user, index)
         }
 
         /// Create secret
@@ -466,7 +485,7 @@ mod cloud {
         pub fn create_secret(&mut self, key: Vec<u8>, hash: H256) -> Result<u64, Error> {
             let caller = self.env().caller();
 
-            Ok(self.secrets.insert(
+            Ok(self.user_secrets.insert(
                 caller,
                 &Secret {
                     k: key,
@@ -481,13 +500,13 @@ mod cloud {
         pub fn mint_secret(&mut self, user: Address, index: u64) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
 
-            let s = self.secrets.get(user, index);
+            let s = self.user_secrets.get(user, index);
             ensure!(s.is_some(), Error::NotFound);
 
             let mut secret = s.unwrap();
             secret.minted = true;
 
-            self.secrets.update(user, index, &secret);
+            self.user_secrets.update(user, index, &secret);
             Ok(())
         }
 
@@ -495,7 +514,7 @@ mod cloud {
         #[ink(message)]
         pub fn del_secret(&mut self, index: u64) -> Result<(), Error> {
             let caller = self.env().caller();
-            let delete = self.secrets.delete_by_key(caller, index);
+            let delete = self.user_secrets.delete_by_key(caller, index);
             if !delete {
                 return Err(Error::DelFailed);
             }
@@ -509,7 +528,7 @@ mod cloud {
             let caller = self.env().caller();
 
             Ok(self
-                .disks
+                .user_disks
                 .insert(caller, &Disk::SecretSSD(key, Vec::new(), size)))
         }
 
@@ -517,10 +536,10 @@ mod cloud {
         #[ink(message)]
         pub fn update_disk_key(&mut self, user: Address, id: u64, hash: H256) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
-            let disk = self.disks.get(user, id).ok_or(Error::NotFound)?;
+            let disk = self.user_disks.get(user, id).ok_or(Error::NotFound)?;
             match disk {
                 Disk::SecretSSD(k, _, size) => {
-                    self.disks.update(
+                    self.user_disks.update(
                         user,
                         id,
                         &Disk::SecretSSD(k.clone(), hash.as_bytes().to_vec(), size),
@@ -533,20 +552,20 @@ mod cloud {
         /// Get disk info
         #[ink(message)]
         pub fn disk(&self, user: Address, disk_id: u64) -> Option<Disk> {
-            self.disks.get(user, disk_id)
+            self.user_disks.get(user, disk_id)
         }
 
         /// Get user disk list
         #[ink(message)]
         pub fn user_disks(&self, user: Address, start: Option<u64>, size: u64) -> Vec<(u64, Disk)> {
-            self.disks.desc_list(user, start, size)
+            self.user_disks.desc_list(user, start, size)
         }
 
         /// Delete disk
         #[ink(message)]
         pub fn del_disk(&mut self, disk_id: u64) -> Result<(), Error> {
             let caller = self.env().caller();
-            let delete = self.disks.delete_by_key(caller, disk_id);
+            let delete = self.user_disks.delete_by_key(caller, disk_id);
             if !delete {
                 return Err(Error::DelFailed);
             }

@@ -855,12 +855,12 @@ func (c *Cloud) QueryWorkerPodLen(
 
 func (c *Cloud) QueryUserSecrets(
 	user types.H160, start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_135, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_140, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "user_secrets")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_135](
+	v, gas, err := chain.DryRunInk[[]Tuple_140](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1267,12 +1267,12 @@ func (c *Cloud) QueryDisk(
 
 func (c *Cloud) QueryUserDisks(
 	user types.H160, start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_144, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_148, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "user_disks")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_144](
+	v, gas, err := chain.DryRunInk[[]Tuple_148](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,

@@ -43,7 +43,7 @@ impl Default for PodType {
 }
 
 /// 网络设置
-/// disk setting
+/// network service
 #[derive(Clone)]
 #[cfg_attr(
     feature = "std",
@@ -145,8 +145,8 @@ impl Default for Disk {
     }
 }
 
-/// 储存设置
-/// disk setting
+/// 容器储存
+/// Container Disk
 #[derive(Clone)]
 #[cfg_attr(
     feature = "std",
@@ -155,7 +155,7 @@ impl Default for Disk {
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub struct ContainerDisk {
     /// value
-    pub id: u32,
+    pub id: u64,
     /// path
     pub path: Vec<u8>,
 }

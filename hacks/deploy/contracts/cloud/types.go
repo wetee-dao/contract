@@ -875,27 +875,50 @@ type Tuple_128 struct { // Tuple
 	F2 uint32
 	F3 byte
 }
-type Tuple_132 struct { // Tuple
+type Tuple_131 struct { // Tuple
+	F0 uint64
+	F1 K8sCluster
+	F2 []byte
+}
+type K8sCluster struct { // Composite
+	Name          []byte
+	Owner         types.H160
+	Level         byte
+	RegionId      uint32
+	StartBlock    uint32
+	StopBlock     util.Option[uint32]
+	TerminalBlock util.Option[uint32]
+	P2pId         util.AccountId
+	Ip            Ip
+	Port          uint32
+	Status        byte
+}
+type Ip struct { // Composite
+	Ipv4   util.Option[uint32]
+	Ipv6   util.Option[types.U128]
+	Domain util.Option[[]byte]
+}
+type Tuple_139 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_134
+	F2 []Tuple_141
 	F3 uint32
 	F4 uint32
 	F5 byte
 }
-type Tuple_134 struct { // Tuple
+type Tuple_141 struct { // Tuple
 	F0 uint64
-	F1 Tuple_135
+	F1 Tuple_142
 }
-type Tuple_135 struct { // Tuple
+type Tuple_142 struct { // Tuple
 	F0 Container
 	F1 []util.Option[Disk]
 }
-type Tuple_140 struct { // Tuple
+type Tuple_147 struct { // Tuple
 	F0 uint64
 	F1 Secret
 }
-type Tuple_148 struct { // Tuple
+type Tuple_155 struct { // Tuple
 	F0 uint64
 	F1 Disk
 }

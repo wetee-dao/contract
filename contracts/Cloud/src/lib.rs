@@ -9,7 +9,7 @@ mod cloud {
     use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, H256};
     use pod::PodRef;
     use primitives::{ensure, ok_or_err, u64_to_u8_32};
-    use subnet::SubnetRef;
+    use subnet::{datas::K8sCluster, SubnetRef};
 
     #[ink(storage)]
     pub struct Cloud {
@@ -180,6 +180,7 @@ mod cloud {
             Ok(())
         }
 
+        /// Mint pod ==> Deduct Resource Usage Fees
         #[ink(message)]
         pub fn mint_pod(&mut self, pod_id: u64, report: H256) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
@@ -407,6 +408,25 @@ mod cloud {
             Some((pod, containers, version, status))
         }
 
+        /// Pod ext info
+        #[ink(message)]
+        pub fn pod_ext_info(&self, pod_id: u64) -> Option<(u64, K8sCluster, Vec<u8>)> {
+            let pod_wrap = self.pods.get(pod_id);
+            if pod_wrap.is_none() {
+                return None;
+            }
+
+            let worker_id = self.worker_of_pod.get(pod_id).unwrap_or_default();
+            let worker_wrap = self.subnet.worker(worker_id);
+            if worker_wrap.is_none() {
+                return None;
+            }
+            let worker = worker_wrap.unwrap();
+            let region = self.subnet.region(worker.region_id).unwrap_or_default();
+
+            Some((worker_id,worker, region))
+        }
+
         /// Get pods info
         #[ink(message)]
         pub fn pods_by_ids(
@@ -547,6 +567,13 @@ mod cloud {
                     Ok(())
                 }
             }
+        }
+
+        /// Mint disk == pay for disk usage
+        #[ink(message)]
+        pub fn mint_disk(&mut self, user: Address, disk_id: u64) -> Result<(), Error> {
+            self.ensure_from_side_chain()?;
+            Ok(())
         }
 
         /// Get disk info

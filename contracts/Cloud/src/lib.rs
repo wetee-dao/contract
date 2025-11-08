@@ -171,10 +171,11 @@ mod cloud {
                 return Err(Error::PodStatusError);
             }
 
-            let now = self.env().block_number();
-
-            self.pod_status.insert(pod_id, &1);
-            self.last_mint_block.insert(pod_id, &now);
+            if status == 0 {
+                let now = self.env().block_number();
+                self.last_mint_block.insert(pod_id, &now);
+                self.pod_status.insert(pod_id, &1);
+            }
             self.pod_key.insert(pod_id, &pod_key);
 
             Ok(())
@@ -201,8 +202,12 @@ mod cloud {
             self.pod_report.insert(pod_id, &report);
 
             // mint pod
-            self.last_mint_block
-                .insert(pod_id, &(last_mint + self.mint_interval));
+            if now - last_mint > self.mint_interval*2 {
+                self.last_mint_block.insert(pod_id, &now);
+            } else {
+                self.last_mint_block
+                    .insert(pod_id, &(last_mint + self.mint_interval));
+            }
 
             // pay for pod to worker
 
@@ -424,7 +429,7 @@ mod cloud {
             let worker = worker_wrap.unwrap();
             let region = self.subnet.region(worker.region_id).unwrap_or_default();
 
-            Some((worker_id,worker, region))
+            Some((worker_id, worker, region))
         }
 
         /// Get pods info

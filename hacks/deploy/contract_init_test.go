@@ -12,6 +12,7 @@ import (
 
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
 	chain "github.com/wetee-dao/ink.go"
+	"github.com/wetee-dao/ink.go/pallet/revive"
 	"github.com/wetee-dao/ink.go/util"
 	"github.com/wetee-dao/tee-dsecret/pkg/model"
 )
@@ -169,6 +170,39 @@ func TestSubnetUpdate(t *testing.T) {
 	}
 }
 
+func TestMapAccount(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	h160 := pk.H160Address()
+
+	_, isSome, err := revive.GetOriginalAccountLatest(client.Api().RPC.State, h160)
+	if err != nil {
+		util.LogWithPurple("GetOriginalAccountLatest", err)
+		panic(err)
+	}
+	if !isSome {
+		runtimeCall := revive.MakeMapAccountCall()
+		call, err := (runtimeCall).AsCall()
+		if err != nil {
+			panic(err)
+		}
+
+		err = client.SignAndSubmit(&pk, call, true, 0)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 func DeploySubnetContract(client *chain.ChainClient, pk chain.Signer) *types.H160 {
 	data, err := os.ReadFile("../../target/ink/subnet/subnet.polkavm")
 	if err != nil {
@@ -213,7 +247,7 @@ func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 			Ipv6:   util.NewNone[types.U128](),
 			Domain: util.NewNone[[]byte](),
 		},
-		31000,
+		30110,
 		_call,
 	)
 	fmt.Println("node0 register result:", err)
@@ -229,7 +263,7 @@ func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 			Ipv6:   util.NewNone[types.U128](),
 			Domain: util.NewNone[[]byte](),
 		},
-		41000,
+		30120,
 		_call,
 	)
 	fmt.Println("node1 register result:", err)
@@ -245,7 +279,7 @@ func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 			Ipv6:   util.NewNone[types.U128](),
 			Domain: util.NewNone[[]byte](),
 		},
-		51000,
+		30130,
 		_call,
 	)
 	fmt.Println("node2 register result:", err)

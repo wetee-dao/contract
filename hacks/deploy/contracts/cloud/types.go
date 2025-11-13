@@ -11,16 +11,10 @@ import (
 type Pod struct { // Composite
 	Name       []byte
 	Owner      types.H160
-	Contract   PodRef
+	Contract   types.H160
 	Ptype      PodType
 	StartBlock uint32
 	TeeType    TEEType
-}
-type PodRef struct { // Composite
-	Inner CallBuilder
-}
-type CallBuilder struct { // Composite
-	Addr types.H160
 }
 type PodType struct { // Enum
 	CPU    *bool // 0
@@ -853,29 +847,29 @@ func (ty *EditType) Decode(decoder scale.Decoder) (err error) {
 	}
 }
 
-type Tuple_119 struct { // Tuple
+type Tuple_115 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_121
+	F2 []Tuple_117
 	F3 byte
 }
-type Tuple_121 struct { // Tuple
+type Tuple_117 struct { // Tuple
 	F0 uint64
 	F1 Container
 }
-type Tuple_125 struct { // Tuple
+type Tuple_121 struct { // Tuple
 	F0 uint64
 	F1 uint32
 	F2 uint32
 	F3 byte
 }
-type Tuple_128 struct { // Tuple
+type Tuple_124 struct { // Tuple
 	F0 Pod
-	F1 []Tuple_121
+	F1 []Tuple_117
 	F2 uint32
 	F3 byte
 }
-type Tuple_131 struct { // Tuple
+type Tuple_127 struct { // Tuple
 	F0 uint64
 	F1 K8sCluster
 	F2 []byte
@@ -898,27 +892,27 @@ type Ip struct { // Composite
 	Ipv6   util.Option[types.U128]
 	Domain util.Option[[]byte]
 }
-type Tuple_139 struct { // Tuple
+type Tuple_135 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_141
+	F2 []Tuple_137
 	F3 uint32
 	F4 uint32
 	F5 byte
 }
-type Tuple_141 struct { // Tuple
+type Tuple_137 struct { // Tuple
 	F0 uint64
-	F1 Tuple_142
+	F1 Tuple_138
 }
-type Tuple_142 struct { // Tuple
+type Tuple_138 struct { // Tuple
 	F0 Container
 	F1 []util.Option[Disk]
 }
-type Tuple_147 struct { // Tuple
+type Tuple_143 struct { // Tuple
 	F0 uint64
 	F1 Secret
 }
-type Tuple_155 struct { // Tuple
+type Tuple_151 struct { // Tuple
 	F0 uint64
 	F1 Disk
 }

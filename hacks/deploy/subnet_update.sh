@@ -8,7 +8,7 @@ done
 DIR="$( cd -P "$( dirname "$SOURCE"  )" && pwd  )"
 
 cd "$DIR/../../"
-cargo contract build --release --manifest-path contracts/Subnet/Cargo.toml
+cargo contract build --release --manifest-path inks/Subnet/Cargo.toml
 
 cd $DIR/contracts
 go-ink-gen -json ../../../target/ink/subnet/subnet.json

@@ -9,23 +9,23 @@ version = "0.1.0"
 
 [workspace]
 members = [
-  # contracts
-  "contracts/Dao",
-  "contracts/Subnet",
-  "contracts/Cloud",
-  "contracts/Pod",
-  "contracts/Test",
-  # "contracts/Bridge",
+  # inks
+  "inks/Dao",
+  "inks/Subnet",
+  "inks/Cloud",
+  "inks/Pod",
+  "inks/Test",
+  # "inks/Bridge",
 
   "primitives",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-ink = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-alpha", default-features = false }
-ink_e2e = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-alpha" }
-# ink = { version = "6.0.0-alpha", default-features = false  }
-# ink_e2e = { version = "6.0.0-alpha" }
+ink = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-beta", default-features = false }
+ink_e2e = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-beta" }
+# ink = { version = "v6.0.0-beta", default-features = false  }
+# ink_e2e = { version = "v6.0.0-beta" }
 scale = { package = "parity-scale-codec", version = "3.7.4", default-features = false }
 scale-info = { version = "2.11", default-features = false }
 primitives = { path = "primitives" }

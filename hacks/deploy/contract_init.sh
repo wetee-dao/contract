@@ -9,9 +9,9 @@ DIR="$( cd -P "$( dirname "$SOURCE"  )" && pwd  )"
 
 cd "$DIR/../../"
 
-cargo contract build --release --manifest-path contracts/Pod/Cargo.toml
-cargo contract build --release --manifest-path contracts/Subnet/Cargo.toml
-cargo contract build --release --manifest-path contracts/Cloud/Cargo.toml
+cargo contract build --release --manifest-path inks/Pod/Cargo.toml
+cargo contract build --release --manifest-path inks/Subnet/Cargo.toml
+cargo contract build --release --manifest-path inks/Cloud/Cargo.toml
 
 cd $DIR/contracts
 

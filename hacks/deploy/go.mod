@@ -4,7 +4,7 @@ go 1.23.12
 
 require (
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.2.2-0.20240919131012-e3b938563803
-	github.com/wetee-dao/ink.go v0.1.30
+	github.com/wetee-dao/ink.go v0.1.31
 	github.com/wetee-dao/tee-dsecret v0.1.12
 )
 

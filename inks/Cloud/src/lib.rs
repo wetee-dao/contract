@@ -576,7 +576,7 @@ mod cloud {
 
         /// Mint disk == pay for disk usage
         #[ink(message)]
-        pub fn mint_disk(&mut self, user: Address, disk_id: u64) -> Result<(), Error> {
+        pub fn mint_disk(&mut self, _user: Address, _disk_id: u64) -> Result<(), Error> {
             self.ensure_from_side_chain()?;
             Ok(())
         }

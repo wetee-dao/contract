@@ -11,6 +11,7 @@ primitives = {path = "../../primitives", package = "primitives", default-feature
 
 [dev-dependencies]
 ink_e2e = { workspace = true }
+ink_sandbox = { workspace = true }
 
 [lib]
 path = "src/lib.rs"

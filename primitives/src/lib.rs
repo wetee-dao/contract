@@ -3,9 +3,11 @@
 mod int;
 mod mapping;
 mod mapping_key;
+mod types;
 
 pub use int::*;
 pub use mapping::*;
+pub use types::*;
 
 #[macro_export]
 macro_rules! ensure {

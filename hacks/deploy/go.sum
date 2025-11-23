@@ -288,8 +288,8 @@ github.com/tklauser/numcpus v0.2.2 h1:oyhllyrScuYI6g+h/zUvNXNp1wy7x8qQy3t/piefld
 github.com/tklauser/numcpus v0.2.2/go.mod h1:x3qojaO3uyYt0i56EW/VUYs7uBvdl2fkfZFu0T9wgjM=
 github.com/vedhavyas/go-subkey/v2 v2.0.0 h1:LemDIsrVtRSOkp0FA8HxP6ynfKjeOj3BY2U9UNfeDMA=
 github.com/vedhavyas/go-subkey/v2 v2.0.0/go.mod h1:95aZ+XDCWAUUynjlmi7BtPExjXgXxByE0WfBwbmIRH4=
-github.com/wetee-dao/ink.go v0.1.31 h1:b8cLdnfwipbRBP3uxqT4DBoIUIkZNr/8hy21DYh6AUk=
-github.com/wetee-dao/ink.go v0.1.31/go.mod h1:yUFJ+uGf2russEIpsEL3A+pHc9mbA0v9WxKB+3ZBVLU=
+github.com/wetee-dao/ink.go v0.1.33 h1:3nkGp6EoZIqOn1JJHyofsHDCFX0oAmi1lDm0fvhcv6A=
+github.com/wetee-dao/ink.go v0.1.33/go.mod h1:yUFJ+uGf2russEIpsEL3A+pHc9mbA0v9WxKB+3ZBVLU=
 github.com/wetee-dao/tee-dsecret v0.1.12 h1:OJR2tDAaI+Z7G4a052idfFITeHNsysrfVurUsJjVViA=
 github.com/wetee-dao/tee-dsecret v0.1.12/go.mod h1:tT29ohxZBe/94WPZashl/pNr/ErOBSsGN5vrugppOF0=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=

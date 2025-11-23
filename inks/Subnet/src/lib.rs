@@ -4,12 +4,12 @@ pub mod datas;
 mod errors;
 mod events;
 
-pub use self::subnet::{Subnet, SubnetRef};
+// pub use self::subnet::{Subnet, SubnetRef};
 
 #[ink::contract]
 mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
-    use primitives::{ensure, ok_or_err};
+    use primitives::{ensure, ok_or_err, AssetInfo};
 
     use crate::{
         datas::{NodeID, *},
@@ -65,8 +65,18 @@ mod subnet {
 
         /// USD of deposit Price
         deposit_prices: Mapping<u8, U256>,
-        /// n/1_000_000 of USD
-        deposit_ratio: Mapping<u32, U256>,
+
+        /// next asset id
+        next_asset_id: u32,
+
+        /// asset asset id
+        asset_infos: Mapping<u32, AssetInfo>,
+
+        /// n/1_000 of USD
+        asset_prices: Mapping<u32, U256>,
+
+        /// prices for different levels
+        level_prices: Mapping<u8, RunPrice>,
 
         /// boot nooes
         boot_nodes: Vec<NodeID>,
@@ -125,8 +135,44 @@ mod subnet {
         }
 
         /// list regions
-        pub fn regions(&self) -> Vec<(u32,Vec<u8>)> {
-           self.regions.desc_list(None, 1000)
+        pub fn regions(&self) -> Vec<(u32, Vec<u8>)> {
+            self.regions.desc_list(None, 1000)
+        }
+
+        /// set price for different levels
+        #[ink(message)]
+        pub fn set_level_price(&mut self, level: u8, price: RunPrice) -> Result<(), Error> {
+            self.ensure_from_gov()?;
+            self.level_prices.insert(level, &price);
+            Ok(())
+        }
+
+        /// get price for different levels (USD
+        #[ink(message)]
+        pub fn level_price(&self, level: u8) -> Option<RunPrice> {
+            self.level_prices.get(level)
+        }
+
+        /// set asset info
+        #[ink(message)]
+        pub fn set_asset(&mut self, info: AssetInfo, price: U256) -> Result<(), Error> {
+            let id = self.next_asset_id;
+            self.next_asset_id += 1;
+            self.asset_infos.insert(id, &info);
+            self.asset_prices.insert(id, &price);
+
+            Ok(())
+        }
+
+        /// get asset info
+        #[ink(message)]
+        pub fn asset(&self, id: u32) -> Option<(AssetInfo, U256)> {
+            let info = self.asset_infos.get(id);
+            let price = self.asset_prices.get(id);
+            if info.is_none() || price.is_none() {
+                return None;
+            }
+            Some((info.unwrap(), price.unwrap()))
         }
 
         /// worker info

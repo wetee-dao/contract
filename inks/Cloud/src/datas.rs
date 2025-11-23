@@ -20,6 +20,9 @@ pub struct Pod {
     /// tee version
     /// tee 版本
     pub tee_type: TEEType,
+    /// Pod level
+    /// 等级
+    pub level: u8,
 }
 
 #[derive(Clone)]

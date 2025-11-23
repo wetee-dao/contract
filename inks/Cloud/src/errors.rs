@@ -23,4 +23,6 @@ pub enum Error {
     DelFailed,
     /// noet found
     NotFound,
+    /// pay failed
+    PayFailed,
 }

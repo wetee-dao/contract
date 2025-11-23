@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 ink = { workspace = true, default-features = false, features = ["unstable-hostfn"] }
+ink_precompiles = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false }
 
 [features]

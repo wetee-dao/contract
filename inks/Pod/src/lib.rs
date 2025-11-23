@@ -3,13 +3,14 @@
 mod datas;
 mod errors;
 
-pub use self::pod::{Pod, PodRef};
+// pub use self::pod::{Pod, PodRef};
 
 #[ink::contract]
 mod pod {
     use crate::errors::Error;
     use ink::{H256, U256};
-    use primitives::{ensure, ok_or_err};
+    use ink_precompiles::erc20::{erc20, Erc20};
+    use primitives::{ensure, ok_or_err, AssetInfo};
 
     #[ink(storage)]
     #[derive(Default)]
@@ -20,10 +21,6 @@ mod pod {
         pod_id: u64,
         /// owner
         owner: Address,
-        /// balance of pod
-        balance: U256,
-        /// balance allow to pay for computing power
-        allowance: Option<U256>,
     }
 
     impl Pod {
@@ -31,13 +28,10 @@ mod pod {
         pub fn new(id: u64, owner: Address) -> Self {
             let caller = Self::env().caller();
             let mut ins: Pod = Default::default();
-            let transferred = Self::env().transferred_value();
 
             ins.cloud_contract = caller;
             ins.pod_id = id;
-            ins.balance = transferred;
             ins.owner = owner;
-            ins.allowance = None;
 
             ins
         }
@@ -48,56 +42,94 @@ mod pod {
             self.cloud_contract
         }
 
-        /// approve worker to pay computing power
-        #[ink(message)]
-        pub fn approve(&mut self, value: Option<U256>) -> Result<(), Error> {
-            let caller = self.env().caller();
-
-            ensure!(self.owner == caller, Error::NotOwner);
-
-            self.allowance = value;
-            Ok(())
-        }
-
         /// pay for cloud
         #[ink(message)]
-        pub fn pay_for_woker(&mut self, worker: Address, amount: U256) -> Result<(), Error> {
+        pub fn pay_for_woker(
+            &mut self,
+            to: Address,
+            asset: AssetInfo,
+            amount: U256,
+        ) -> Result<(), Error> {
             self.ensure_from_cloud()?;
 
-            let allowance = self.allowance;
-            if allowance.is_some() {
-                ensure!(allowance.unwrap() >= amount, Error::NotEnoughAllowance);
-                self.allowance = Some(allowance.unwrap() - amount);
+            match asset {
+                AssetInfo::Native(_) => {
+                    // check pod balance
+                    ensure!(self.env().balance() >= amount, Error::NotEnoughBalance);
+
+                    // transfer to worker
+                    match self.env().transfer(to, amount) {
+                        Ok(_) => Ok(()),
+                        Err(_e) => Err(Error::TransferFailed),
+                    }
+                }
+                AssetInfo::ERC20(_, asset_id) => {
+                    let mut asset = erc20(TRUST_BACKED_ASSETS_PRECOMPILE_INDEX, asset_id);
+
+                    // check pod balance
+                    ensure!(
+                        asset.balanceOf(self.env().address()) >= amount,
+                        Error::NotEnoughBalance
+                    );
+
+                    // transfer to worker
+                    let ok = asset.transfer(to, amount);
+                    if !ok {
+                        return Err(Error::TransferFailed);
+                    }
+                    Ok(())
+                }
             }
-
-            ensure!(self.balance >= amount, Error::NotEnoughBalance);
-            ok_or_err!(self.env().transfer(worker, amount), Error::TransferFailed);
-
-            self.balance -= amount;
-            Ok(())
         }
 
         /// Charge balance
         #[ink(message, payable)]
-        pub fn charge(&mut self){
+        pub fn charge(&mut self) -> Result<(), Error> {
             let transferred = Self::env().transferred_value();
-            self.balance += transferred;
+
+            Ok(())
         }
 
         /// Withdraw balance
         #[ink(message)]
-        pub fn withdraw(&mut self, amount: U256) -> Result<(), Error> {
+        pub fn withdraw(
+            &mut self,
+            asset: AssetInfo,
+            to: Address,
+            amount: U256,
+        ) -> Result<(), Error> {
             let caller = self.env().caller();
 
             ensure!(self.owner == caller, Error::NotOwner);
-            ensure!(self.balance >= amount, Error::InsufficientBalance);
 
-            ok_or_err!(
-                self.env().transfer(self.cloud_contract, amount),
-                Error::TransferFailed
-            );
+            match asset {
+                AssetInfo::Native(_) => {
+                    // check pod balance
+                    ensure!(self.env().balance() >= amount, Error::InsufficientBalance);
 
-            Ok(())
+                    // transfer to cloud contract
+                    match self.env().transfer(to, amount) {
+                        Ok(_) => Ok(()),
+                        Err(_e) => Err(Error::TransferFailed),
+                    }
+                }
+                AssetInfo::ERC20(_, asset_id) => {
+                    let mut asset = erc20(TRUST_BACKED_ASSETS_PRECOMPILE_INDEX, asset_id);
+
+                    // check pod balance
+                    ensure!(
+                        asset.balanceOf(self.env().address()) >= amount,
+                        Error::InsufficientBalance
+                    );
+
+                    // transfer to worker
+                    let ok = asset.transfer(to, amount);
+                    if !ok {
+                        return Err(Error::TransferFailed);
+                    }
+                    Ok(())
+                }
+            }
         }
 
         /// Update contract with gov

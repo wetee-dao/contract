@@ -6,7 +6,7 @@ mod errors;
 #[ink::contract]
 mod cloud {
     use crate::{datas::*, errors::Error};
-    use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, H256};
+    use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, H256, U256};
     use pod::PodRef;
     use primitives::{ensure, ok_or_err, u64_to_u8_32};
     use subnet::{datas::K8sCluster, SubnetRef};
@@ -22,6 +22,8 @@ mod cloud {
 
         /// pods
         pods: Pods,
+        /// pod pay asset
+        pod_pay_asset: Mapping<u64, u32>,
         /// pod last block number
         pod_version: Mapping<u64, BlockNumber>,
         /// pod status 0=>created  1=>deoloying 2=>error  3=>stop
@@ -66,6 +68,7 @@ mod cloud {
                 pods: Default::default(),
                 pod_version: Default::default(),
                 pod_status: Default::default(),
+                pod_pay_asset: Default::default(),
                 pod_of_user: Default::default(),
                 pods_of_worker: Default::default(),
                 worker_of_pod: Default::default(),
@@ -118,6 +121,7 @@ mod cloud {
             containers: Vec<Container>,
             region_id: u32,
             level: u8,
+            pay_asset: u32,
             worker_id: u64,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -147,8 +151,10 @@ mod cloud {
                 ptype: pod_type,
                 start_block: now,
                 tee_type: tee_type,
+                level: level,
             });
             self.pod_of_user.insert(caller, &pod_id);
+            self.pod_pay_asset.insert(pod_id, &pay_asset);
             self.pods_of_worker.insert(worker_id, &pod_id);
             self.worker_of_pod.insert(pod_id, &worker_id);
             self.last_mint_block.insert(pod_id, &now);
@@ -202,7 +208,7 @@ mod cloud {
             self.pod_report.insert(pod_id, &report);
 
             // mint pod
-            if now - last_mint > self.mint_interval*2 {
+            if now - last_mint > self.mint_interval * 2 {
                 self.last_mint_block.insert(pod_id, &now);
             } else {
                 self.last_mint_block
@@ -210,6 +216,32 @@ mod cloud {
             }
 
             // pay for pod to worker
+            let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::NotFound)?;
+            let worker = self.subnet.worker(worker_id).ok_or(Error::NotFound)?;
+            let mut pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let containers = self.pod_containers.list_all(pod_id);
+            let level_price = self.subnet.level_price(pod.level).ok_or(Error::NotFound)?;
+            let pay_value = containers
+                .iter()
+                .map(|(_,c)| match pod.tee_type {
+                    TEEType::SGX => {
+                        c.cpu as u64 * level_price.cpu_per
+                            + c.mem as u64 * level_price.memory_per
+                            + c.gpu as u64 * level_price.gpu_per
+                    }
+                    TEEType::CVM => {
+                        c.cpu as u64 * level_price.cvm_cpu_per
+                            + c.mem as u64 * level_price.cvm_memory_per
+                            + c.gpu as u64 * level_price.gpu_per
+                    }
+                })
+                .sum::<u64>();
+
+            let pay_asset_id = self.pod_pay_asset.get(pod_id).ok_or(Error::NotFound)?;
+            let pay_asset = self.subnet.asset(pay_asset_id).ok_or(Error::NotFound)?;
+            let pay_value = U256::from(pay_value) * 1_000 / U256::from(pay_asset.1);
+            ok_or_err!(pod.contract
+                .pay_for_woker(worker.owner, pay_asset.0, pay_value),Error::PayFailed);
 
             Ok(())
         }

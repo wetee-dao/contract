@@ -154,6 +154,29 @@ pub struct EpochInfo {
     pub side_chain_pub: Address,
 }
 
+/// 挖矿价格
+/// RunPrice
+#[derive(Clone, PartialEq)]
+#[cfg_attr(
+    feature = "std",
+    derive(Debug, Eq, ink::storage::traits::StorageLayout)
+)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub struct RunPrice {
+    /// SGX cpu price of one core
+    pub cpu_per: u64,
+    /// TDX/SNP cpu price of one core
+    pub cvm_cpu_per: u64,
+    /// SGX memory price of 1G
+    pub memory_per: u64,
+    /// TDX/SNP memory price of 1G
+    pub cvm_memory_per: u64,
+    /// Disk price of 1G
+    pub disk_per: u64,
+    /// GPU price of one GPU
+    pub gpu_per: u64,
+}
+
 primitives::define_map!(Workers, NodeID, K8sCluster);
 
 primitives::define_map!(Regions, u32, Vec<u8>);
@@ -163,3 +186,4 @@ primitives::double_u32_map!(WorkerMortgages, NodeID, AssetDeposit);
 primitives::define_map!(Secrets, NodeID, SecretNode);
 
 primitives::double_u32_map!(RegionWorkers, u32, NodeID);
+

@@ -230,7 +230,7 @@ func (c *Cloud) QuerySubnetAddress(
 }
 
 func (c *Cloud) DryRunCreatePod(
-	name []byte, pod_type PodType, tee_type TEEType, containers []Container, region_id uint32, level byte, worker_id uint64, __ink_params chain.DryRunParams,
+	name []byte, pod_type PodType, tee_type TEEType, containers []Container, region_id uint32, level byte, pay_asset uint32, worker_id uint64, __ink_params chain.DryRunParams,
 ) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
@@ -244,7 +244,7 @@ func (c *Cloud) DryRunCreatePod(
 		__ink_params.StorageDepositLimit,
 		util.InkContractInput{
 			Selector: "0x080c3dfd",
-			Args:     []any{name, pod_type, tee_type, containers, region_id, level, worker_id},
+			Args:     []any{name, pod_type, tee_type, containers, region_id, level, pay_asset, worker_id},
 		},
 	)
 	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
@@ -258,11 +258,11 @@ func (c *Cloud) DryRunCreatePod(
 }
 
 func (c *Cloud) ExecCreatePod(
-	name []byte, pod_type PodType, tee_type TEEType, containers []Container, region_id uint32, level byte, worker_id uint64, __ink_params chain.ExecParams,
+	name []byte, pod_type PodType, tee_type TEEType, containers []Container, region_id uint32, level byte, pay_asset uint32, worker_id uint64, __ink_params chain.ExecParams,
 ) error {
 	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
 	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunCreatePod(name, pod_type, tee_type, containers, region_id, level, worker_id, _param)
+	_, gas, err := c.DryRunCreatePod(name, pod_type, tee_type, containers, region_id, level, pay_asset, worker_id, _param)
 	if err != nil {
 		return err
 	}
@@ -272,16 +272,16 @@ func (c *Cloud) ExecCreatePod(
 		gas.StorageDeposit,
 		util.InkContractInput{
 			Selector: "0x080c3dfd",
-			Args:     []any{name, pod_type, tee_type, containers, region_id, level, worker_id},
+			Args:     []any{name, pod_type, tee_type, containers, region_id, level, pay_asset, worker_id},
 		},
 		__ink_params,
 	)
 }
 
 func (c *Cloud) CallOfCreatePod(
-	name []byte, pod_type PodType, tee_type TEEType, containers []Container, region_id uint32, level byte, worker_id uint64, __ink_params chain.DryRunParams,
+	name []byte, pod_type PodType, tee_type TEEType, containers []Container, region_id uint32, level byte, pay_asset uint32, worker_id uint64, __ink_params chain.DryRunParams,
 ) (*types.Call, error) {
-	_, gas, err := c.DryRunCreatePod(name, pod_type, tee_type, containers, region_id, level, worker_id, __ink_params)
+	_, gas, err := c.DryRunCreatePod(name, pod_type, tee_type, containers, region_id, level, pay_asset, worker_id, __ink_params)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +292,7 @@ func (c *Cloud) CallOfCreatePod(
 		gas.StorageDeposit,
 		util.InkContractInput{
 			Selector: "0x080c3dfd",
-			Args:     []any{name, pod_type, tee_type, containers, region_id, level, worker_id},
+			Args:     []any{name, pod_type, tee_type, containers, region_id, level, pay_asset, worker_id},
 		},
 	)
 }

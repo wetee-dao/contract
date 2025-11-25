@@ -41,6 +41,91 @@ type Tuple_63 struct { // Tuple
 	F0 uint64
 	F1 uint32
 }
+type AssetInfo struct { // Enum
+	Native *[]byte   // 0
+	ERC20  *struct { // 1
+		F0 []byte
+		F1 uint32
+	}
+}
+
+func (ty AssetInfo) Encode(encoder scale.Encoder) (err error) {
+	if ty.Native != nil {
+		err = encoder.PushByte(0)
+		if err != nil {
+			return err
+		}
+		err = encoder.Encode(*ty.Native)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.ERC20 != nil {
+		err = encoder.PushByte(1)
+		if err != nil {
+			return err
+		}
+
+		err = encoder.Encode(ty.ERC20.F0)
+		if err != nil {
+			return err
+		}
+
+		err = encoder.Encode(ty.ERC20.F1)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+	return fmt.Errorf("unrecognized enum")
+}
+
+func (ty *AssetInfo) Decode(decoder scale.Decoder) (err error) {
+	variant, err := decoder.ReadOneByte()
+	if err != nil {
+		return err
+	}
+	switch variant {
+	case 0: // Inline
+		ty.Native = new([]byte)
+		err = decoder.Decode(ty.Native)
+		if err != nil {
+			return err
+		}
+		return
+	case 1: // Tuple
+		ty.ERC20 = &struct {
+			F0 []byte
+			F1 uint32
+		}{}
+
+		err = decoder.Decode(&ty.ERC20.F0)
+		if err != nil {
+			return err
+		}
+
+		err = decoder.Decode(&ty.ERC20.F1)
+		if err != nil {
+			return err
+		}
+
+		return
+	default:
+		return fmt.Errorf("unrecognized enum")
+	}
+}
+
+type RunPrice struct { // Composite
+	CpuPer       uint64
+	CvmCpuPer    uint64
+	MemoryPer    uint64
+	CvmMemoryPer uint64
+	DiskPer      uint64
+	GpuPer       uint64
+}
 type Error struct { // Enum
 	NotEnoughBalance          *bool // 0
 	MustCallByMainContract    *bool // 1
@@ -332,15 +417,19 @@ func (ty *Error) Error() string {
 	return "Unknown"
 }
 
-type Tuple_92 struct { // Tuple
+type Tuple_99 struct { // Tuple
+	F0 AssetInfo
+	F1 types.U256
+}
+type Tuple_105 struct { // Tuple
 	F0 uint64
 	F1 K8sCluster
 }
-type Tuple_101 struct { // Tuple
+type Tuple_114 struct { // Tuple
 	F0 uint64
 	F1 SecretNode
 }
-type Tuple_104 struct { // Tuple
+type Tuple_117 struct { // Tuple
 	F0 uint64
 	F1 SecretNode
 	F2 uint32

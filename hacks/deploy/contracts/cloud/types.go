@@ -15,6 +15,8 @@ type Pod struct { // Composite
 	Ptype      PodType
 	StartBlock uint32
 	TeeType    TEEType
+	Level      byte
+	PayAssetId uint32
 }
 type PodType struct { // Enum
 	CPU    *bool // 0
@@ -579,6 +581,7 @@ type Error struct { // Enum
 	InvalidSideChainCaller *bool // 8
 	DelFailed              *bool // 9
 	NotFound               *bool // 10
+	PayFailed              *bool // 11
 }
 
 func (ty Error) Encode(encoder scale.Encoder) (err error) {
@@ -669,6 +672,14 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		}
 		return nil
 	}
+
+	if ty.PayFailed != nil {
+		err = encoder.PushByte(11)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 	return fmt.Errorf("unrecognized enum")
 }
 
@@ -722,6 +733,10 @@ func (ty *Error) Decode(decoder scale.Decoder) (err error) {
 		t := true
 		ty.NotFound = &t
 		return
+	case 11: // Base
+		t := true
+		ty.PayFailed = &t
+		return
 	default:
 		return fmt.Errorf("unrecognized enum")
 	}
@@ -769,6 +784,10 @@ func (ty *Error) Error() string {
 
 	if ty.NotFound != nil {
 		return "NotFound"
+	}
+
+	if ty.PayFailed != nil {
+		return "PayFailed"
 	}
 	return "Unknown"
 }

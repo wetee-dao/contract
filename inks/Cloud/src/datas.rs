@@ -23,6 +23,9 @@ pub struct Pod {
     /// Pod level
     /// 等级
     pub level: u8,
+    /// Pay asset
+    /// 支付资产
+    pub pay_asset_id: u32,
 }
 
 #[derive(Clone)]
@@ -145,6 +148,13 @@ pub enum Disk {
 impl Default for Disk {
     fn default() -> Self {
         Disk::SecretSSD(Vec::new(), Vec::new(), 1) // 1G SSD
+    }
+}
+impl Disk {
+    pub fn size(&self) -> u32 {
+        match self {
+            Disk::SecretSSD(_, _, size) => *size,
+        }
     }
 }
 

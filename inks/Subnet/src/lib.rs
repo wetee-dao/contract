@@ -4,8 +4,6 @@ pub mod datas;
 mod errors;
 mod events;
 
-// pub use self::subnet::{Subnet, SubnetRef};
-
 #[ink::contract]
 mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
@@ -695,6 +693,7 @@ mod subnet {
 
             Ok(())
         }
+
         /// Gov call only call from contract
         fn ensure_from_gov(&self) -> Result<(), Error> {
             ensure!(

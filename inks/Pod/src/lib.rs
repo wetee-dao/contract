@@ -3,8 +3,6 @@
 mod datas;
 mod errors;
 
-// pub use self::pod::{Pod, PodRef};
-
 #[ink::contract]
 mod pod {
     use crate::errors::Error;
@@ -17,6 +15,8 @@ mod pod {
     pub struct Pod {
         /// parent contract ==> Dao contract/user
         cloud_contract: Address,
+        /// sidechain Multi-sig account
+        side_chain_multi_key: Address,
         /// pod ID
         pod_id: u64,
         /// owner
@@ -24,8 +24,9 @@ mod pod {
     }
 
     impl Pod {
+        /// Constructor
         #[ink(constructor)]
-        pub fn new(id: u64, owner: Address) -> Self {
+        pub fn new(id: u64, owner: Address, side_chain_multi_key: Address) -> Self {
             let caller = Self::env().caller();
             let mut ins: Pod = Default::default();
 
@@ -36,10 +37,22 @@ mod pod {
             ins
         }
 
+        /// Get pod ID
+        #[ink(message)]
+        pub fn id(&self) -> u64 {
+            self.pod_id
+        }
+
         /// Create pod
         #[ink(message)]
         pub fn cloud(&mut self) -> Address {
             self.cloud_contract
+        }
+
+        /// Get owner
+        #[ink(message)]
+        pub fn owner(&self) -> Address {
+            self.owner
         }
 
         /// pay for cloud
@@ -82,13 +95,20 @@ mod pod {
             }
         }
 
-        /// Charge balance
-        #[ink(message, payable)]
-        pub fn charge(&mut self) -> Result<(), Error> {
-            let transferred = Self::env().transferred_value();
+        // /// Call contract
+        // #[ink(message)]
+        // pub fn call(&mut self, method: &str, data: Vec<u8>) -> Result<(), Error> {
+        //     let caller = self.env().caller();
+        //     Ok(())
+        // }
 
-            Ok(())
-        }
+        // /// Call back to contract
+        // #[ink(message)]
+        // pub fn call_back(&mut self) -> Result<(), Error> {
+        //     self.ensure_from_side_chain()?;
+
+        //     Ok(())
+        // }
 
         /// Withdraw balance
         #[ink(message)]
@@ -146,6 +166,17 @@ mod pod {
             ensure!(
                 self.env().caller() == self.cloud_contract,
                 Error::MustCallByCloudContract
+            );
+
+            Ok(())
+        }
+
+        /// ensure the caller is from side chain
+        fn ensure_from_side_chain(&self) -> Result<(), Error> {
+            let caller = self.env().caller();
+            ensure!(
+                caller == self.side_chain_multi_key,
+                Error::InvalidSideChainCaller
             );
 
             Ok(())

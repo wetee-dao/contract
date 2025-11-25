@@ -22,8 +22,6 @@ mod cloud {
 
         /// pods
         pods: Pods,
-        /// pod pay asset
-        pod_pay_asset: Mapping<u64, u32>,
         /// pod last block number
         pod_version: Mapping<u64, BlockNumber>,
         /// pod status 0=>created  1=>deoloying 2=>error  3=>stop
@@ -68,7 +66,6 @@ mod cloud {
                 pods: Default::default(),
                 pod_version: Default::default(),
                 pod_status: Default::default(),
-                pod_pay_asset: Default::default(),
                 pod_of_user: Default::default(),
                 pods_of_worker: Default::default(),
                 worker_of_pod: Default::default(),
@@ -136,7 +133,7 @@ mod cloud {
 
             // init new pod contract
             let pod_id = self.pods.next_id();
-            let contract = PodRef::new(pod_id, caller)
+            let contract = PodRef::new(pod_id, caller, self.subnet.side_chain_key())
                 .endowment(pay_value)
                 .code_hash(self.pod_contract_code_hash)
                 .salt_bytes(Some(u64_to_u8_32(pod_id)))
@@ -152,9 +149,9 @@ mod cloud {
                 start_block: now,
                 tee_type: tee_type,
                 level: level,
+                pay_asset_id: pay_asset,
             });
             self.pod_of_user.insert(caller, &pod_id);
-            self.pod_pay_asset.insert(pod_id, &pay_asset);
             self.pods_of_worker.insert(worker_id, &pod_id);
             self.worker_of_pod.insert(pod_id, &worker_id);
             self.last_mint_block.insert(pod_id, &now);
@@ -223,25 +220,41 @@ mod cloud {
             let level_price = self.subnet.level_price(pod.level).ok_or(Error::NotFound)?;
             let pay_value = containers
                 .iter()
-                .map(|(_,c)| match pod.tee_type {
+                .map(|(_, c)| match pod.tee_type {
                     TEEType::SGX => {
                         c.cpu as u64 * level_price.cpu_per
                             + c.mem as u64 * level_price.memory_per
                             + c.gpu as u64 * level_price.gpu_per
+                            + c.disk
+                                .iter()
+                                .map(|d| {
+                                    self.disk(pod.owner, d.id).unwrap_or_default().size() as u64
+                                        * level_price.disk_per
+                                })
+                                .sum::<u64>()
                     }
                     TEEType::CVM => {
                         c.cpu as u64 * level_price.cvm_cpu_per
                             + c.mem as u64 * level_price.cvm_memory_per
                             + c.gpu as u64 * level_price.gpu_per
+                            + c.disk
+                                .iter()
+                                .map(|d| {
+                                    self.disk(pod.owner, d.id).unwrap_or_default().size() as u64
+                                        * level_price.disk_per
+                                })
+                                .sum::<u64>()
                     }
                 })
                 .sum::<u64>();
 
-            let pay_asset_id = self.pod_pay_asset.get(pod_id).ok_or(Error::NotFound)?;
-            let pay_asset = self.subnet.asset(pay_asset_id).ok_or(Error::NotFound)?;
+            let pay_asset = self.subnet.asset(pod.pay_asset_id).ok_or(Error::NotFound)?;
             let pay_value = U256::from(pay_value) * 1_000 / U256::from(pay_asset.1);
-            ok_or_err!(pod.contract
-                .pay_for_woker(worker.owner, pay_asset.0, pay_value),Error::PayFailed);
+            ok_or_err!(
+                pod.contract
+                    .pay_for_woker(worker.owner, pay_asset.0, pay_value),
+                Error::PayFailed
+            );
 
             Ok(())
         }

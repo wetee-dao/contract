@@ -15,4 +15,6 @@ pub enum Error {
     NotEnoughAllowance,
     /// not enough balance
     NotEnoughBalance,
+    /// Invalid side chain caller
+    InvalidSideChainCaller,
 }

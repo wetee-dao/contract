@@ -7,8 +7,8 @@ pub enum Error {
     MustCallByCloudContract,
     /// Insufficient balance
     InsufficientBalance,
-    /// Transfer failed
-    TransferFailed,
+    /// Pay failed
+    PayFailed,
     /// NotOwner
     NotOwner,
     /// not enough allowance

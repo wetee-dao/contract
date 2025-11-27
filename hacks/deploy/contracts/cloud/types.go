@@ -581,7 +581,13 @@ type Error struct { // Enum
 	InvalidSideChainCaller *bool // 8
 	DelFailed              *bool // 9
 	NotFound               *bool // 10
-	PayFailed              *bool // 11
+	PodNotFound            *bool // 11
+	WorkerIdNotFound       *bool // 12
+	WorkerNotFound         *bool // 13
+	LevelPriceNotFound     *bool // 14
+	AssetNotFound          *bool // 15
+	BalanceNotEnough       *bool // 16
+	PayFailed              *bool // 17
 }
 
 func (ty Error) Encode(encoder scale.Encoder) (err error) {
@@ -673,8 +679,56 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.PayFailed != nil {
+	if ty.PodNotFound != nil {
 		err = encoder.PushByte(11)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.WorkerIdNotFound != nil {
+		err = encoder.PushByte(12)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.WorkerNotFound != nil {
+		err = encoder.PushByte(13)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.LevelPriceNotFound != nil {
+		err = encoder.PushByte(14)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.AssetNotFound != nil {
+		err = encoder.PushByte(15)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.BalanceNotEnough != nil {
+		err = encoder.PushByte(16)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.PayFailed != nil {
+		err = encoder.PushByte(17)
 		if err != nil {
 			return err
 		}
@@ -735,6 +789,30 @@ func (ty *Error) Decode(decoder scale.Decoder) (err error) {
 		return
 	case 11: // Base
 		t := true
+		ty.PodNotFound = &t
+		return
+	case 12: // Base
+		t := true
+		ty.WorkerIdNotFound = &t
+		return
+	case 13: // Base
+		t := true
+		ty.WorkerNotFound = &t
+		return
+	case 14: // Base
+		t := true
+		ty.LevelPriceNotFound = &t
+		return
+	case 15: // Base
+		t := true
+		ty.AssetNotFound = &t
+		return
+	case 16: // Base
+		t := true
+		ty.BalanceNotEnough = &t
+		return
+	case 17: // Base
+		t := true
 		ty.PayFailed = &t
 		return
 	default:
@@ -784,6 +862,30 @@ func (ty *Error) Error() string {
 
 	if ty.NotFound != nil {
 		return "NotFound"
+	}
+
+	if ty.PodNotFound != nil {
+		return "PodNotFound"
+	}
+
+	if ty.WorkerIdNotFound != nil {
+		return "WorkerIdNotFound"
+	}
+
+	if ty.WorkerNotFound != nil {
+		return "WorkerNotFound"
+	}
+
+	if ty.LevelPriceNotFound != nil {
+		return "LevelPriceNotFound"
+	}
+
+	if ty.AssetNotFound != nil {
+		return "AssetNotFound"
+	}
+
+	if ty.BalanceNotEnough != nil {
+		return "BalanceNotEnough"
 	}
 
 	if ty.PayFailed != nil {
@@ -866,29 +968,29 @@ func (ty *EditType) Decode(decoder scale.Decoder) (err error) {
 	}
 }
 
-type Tuple_115 struct { // Tuple
+type Tuple_118 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_117
+	F2 []Tuple_120
 	F3 byte
 }
-type Tuple_117 struct { // Tuple
+type Tuple_120 struct { // Tuple
 	F0 uint64
 	F1 Container
 }
-type Tuple_121 struct { // Tuple
+type Tuple_124 struct { // Tuple
 	F0 uint64
 	F1 uint32
 	F2 uint32
 	F3 byte
 }
-type Tuple_124 struct { // Tuple
+type Tuple_127 struct { // Tuple
 	F0 Pod
-	F1 []Tuple_117
+	F1 []Tuple_120
 	F2 uint32
 	F3 byte
 }
-type Tuple_127 struct { // Tuple
+type Tuple_130 struct { // Tuple
 	F0 uint64
 	F1 K8sCluster
 	F2 []byte
@@ -911,27 +1013,103 @@ type Ip struct { // Composite
 	Ipv6   util.Option[types.U128]
 	Domain util.Option[[]byte]
 }
-type Tuple_135 struct { // Tuple
+type Tuple_138 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_137
+	F2 []Tuple_140
 	F3 uint32
 	F4 uint32
 	F5 byte
 }
-type Tuple_137 struct { // Tuple
+type Tuple_140 struct { // Tuple
 	F0 uint64
-	F1 Tuple_138
+	F1 Tuple_141
 }
-type Tuple_138 struct { // Tuple
+type Tuple_141 struct { // Tuple
 	F0 Container
 	F1 []util.Option[Disk]
 }
-type Tuple_143 struct { // Tuple
+type Tuple_146 struct { // Tuple
 	F0 uint64
 	F1 Secret
 }
-type Tuple_151 struct { // Tuple
+type Tuple_154 struct { // Tuple
 	F0 uint64
 	F1 Disk
+}
+type AssetInfo struct { // Enum
+	Native *[]byte   // 0
+	ERC20  *struct { // 1
+		F0 []byte
+		F1 uint32
+	}
+}
+
+func (ty AssetInfo) Encode(encoder scale.Encoder) (err error) {
+	if ty.Native != nil {
+		err = encoder.PushByte(0)
+		if err != nil {
+			return err
+		}
+		err = encoder.Encode(*ty.Native)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.ERC20 != nil {
+		err = encoder.PushByte(1)
+		if err != nil {
+			return err
+		}
+
+		err = encoder.Encode(ty.ERC20.F0)
+		if err != nil {
+			return err
+		}
+
+		err = encoder.Encode(ty.ERC20.F1)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+	return fmt.Errorf("unrecognized enum")
+}
+
+func (ty *AssetInfo) Decode(decoder scale.Decoder) (err error) {
+	variant, err := decoder.ReadOneByte()
+	if err != nil {
+		return err
+	}
+	switch variant {
+	case 0: // Inline
+		ty.Native = new([]byte)
+		err = decoder.Decode(ty.Native)
+		if err != nil {
+			return err
+		}
+		return
+	case 1: // Tuple
+		ty.ERC20 = &struct {
+			F0 []byte
+			F1 uint32
+		}{}
+
+		err = decoder.Decode(&ty.ERC20.F0)
+		if err != nil {
+			return err
+		}
+
+		err = decoder.Decode(&ty.ERC20.F1)
+		if err != nil {
+			return err
+		}
+
+		return
+	default:
+		return fmt.Errorf("unrecognized enum")
+	}
 }

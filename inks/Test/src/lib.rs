@@ -28,6 +28,12 @@ mod test {
             ins
         }
 
+        /// Charge
+        #[ink(message, default, payable)]
+        pub fn charge(&mut self) {
+            let _transferred = self.env().transferred_value();
+        }
+
         #[ink(message)]
         pub fn add(&mut self,  worker_id: u64, value: TestItem) -> Result<(), Error> {
             let id = self.tests.insert(&value);

@@ -113,6 +113,138 @@ func (c *Cloud) CallOfSetPodContract(
 	)
 }
 
+func (c *Cloud) DryRunPodContract(
+	__ink_params chain.DryRunParams,
+) (*types.H256, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "pod_contract")
+	}
+	v, gas, err := chain.DryRunInk[types.H256](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x8c4a83fa",
+			Args:     []any{},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Cloud) ExecPodContract(
+	__ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunPodContract(_param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x8c4a83fa",
+			Args:     []any{},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Cloud) CallOfPodContract(
+	__ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunPodContract(__ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x8c4a83fa",
+			Args:     []any{},
+		},
+	)
+}
+
+func (c *Cloud) DryRunUpdatePodContract(
+	pod_id uint64, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "update_pod_contract")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xc5753cce",
+			Args:     []any{pod_id},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Cloud) ExecUpdatePodContract(
+	pod_id uint64, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunUpdatePodContract(pod_id, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0xc5753cce",
+			Args:     []any{pod_id},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Cloud) CallOfUpdatePodContract(
+	pod_id uint64, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunUpdatePodContract(pod_id, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0xc5753cce",
+			Args:     []any{pod_id},
+		},
+	)
+}
+
 func (c *Cloud) DryRunSetMintInterval(
 	t uint32, __ink_params chain.DryRunParams,
 ) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
@@ -569,6 +701,98 @@ func (c *Cloud) CallOfRestartPod(
 	)
 }
 
+func (c *Cloud) QueryPodReport(
+	pod_id uint64, __ink_params chain.DryRunParams,
+) (*util.Option[types.H256], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "pod_report")
+	}
+	v, gas, err := chain.DryRunInk[util.Option[types.H256]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xe052951f",
+			Args:     []any{pod_id},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Cloud) DryRunChargePod(
+	pod_id uint64, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "charge_pod")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xad9294a3",
+			Args:     []any{pod_id},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Cloud) ExecChargePod(
+	pod_id uint64, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunChargePod(pod_id, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0xad9294a3",
+			Args:     []any{pod_id},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Cloud) CallOfChargePod(
+	pod_id uint64, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunChargePod(pod_id, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0xad9294a3",
+			Args:     []any{pod_id},
+		},
+	)
+}
+
 func (c *Cloud) DryRunEditContainer(
 	pod_id uint64, containers []ContainerInput, __ink_params chain.DryRunParams,
 ) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
@@ -663,12 +887,12 @@ func (c *Cloud) QueryPodLen(
 
 func (c *Cloud) QueryPods(
 	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_115, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_118, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "pods")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_115](
+	v, gas, err := chain.DryRunInk[[]Tuple_118](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -711,12 +935,12 @@ func (c *Cloud) QueryUserPodLen(
 
 func (c *Cloud) QueryUserPods(
 	start util.Option[uint32], size uint32, __ink_params chain.DryRunParams,
-) (*[]Tuple_115, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_118, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "user_pods")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_115](
+	v, gas, err := chain.DryRunInk[[]Tuple_118](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -735,12 +959,12 @@ func (c *Cloud) QueryUserPods(
 
 func (c *Cloud) QueryWorkerPodsVersion(
 	worker_id uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_121, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_124, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "worker_pods_version")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_121](
+	v, gas, err := chain.DryRunInk[[]Tuple_124](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -759,12 +983,12 @@ func (c *Cloud) QueryWorkerPodsVersion(
 
 func (c *Cloud) QueryWorkerPods(
 	worker_id uint64, start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_115, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_118, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "worker_pods")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_115](
+	v, gas, err := chain.DryRunInk[[]Tuple_118](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -783,12 +1007,12 @@ func (c *Cloud) QueryWorkerPods(
 
 func (c *Cloud) QueryPod(
 	pod_id uint64, __ink_params chain.DryRunParams,
-) (*util.Option[Tuple_124], *chain.DryRunReturnGas, error) {
+) (*util.Option[Tuple_127], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "pod")
 	}
-	v, gas, err := chain.DryRunInk[util.Option[Tuple_124]](
+	v, gas, err := chain.DryRunInk[util.Option[Tuple_127]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -807,12 +1031,12 @@ func (c *Cloud) QueryPod(
 
 func (c *Cloud) QueryPodExtInfo(
 	pod_id uint64, __ink_params chain.DryRunParams,
-) (*util.Option[Tuple_127], *chain.DryRunReturnGas, error) {
+) (*util.Option[Tuple_130], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "pod_ext_info")
 	}
-	v, gas, err := chain.DryRunInk[util.Option[Tuple_127]](
+	v, gas, err := chain.DryRunInk[util.Option[Tuple_130]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -831,12 +1055,12 @@ func (c *Cloud) QueryPodExtInfo(
 
 func (c *Cloud) QueryPodsByIds(
 	pod_ids []uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_135, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_138, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "pods_by_ids")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_135](
+	v, gas, err := chain.DryRunInk[[]Tuple_138](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -879,12 +1103,12 @@ func (c *Cloud) QueryWorkerPodLen(
 
 func (c *Cloud) QueryUserSecrets(
 	user types.H160, start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_143, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_146, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "user_secrets")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_143](
+	v, gas, err := chain.DryRunInk[[]Tuple_146](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1265,74 +1489,6 @@ func (c *Cloud) CallOfUpdateDiskKey(
 	)
 }
 
-func (c *Cloud) DryRunMintDisk(
-	_user types.H160, _disk_id uint64, __ink_params chain.DryRunParams,
-) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
-	if c.ChainClient.Debug {
-		fmt.Println()
-		util.LogWithPurple("[ DryRun   method ]", "mint_disk")
-	}
-	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
-		c,
-		__ink_params.Origin,
-		__ink_params.PayAmount,
-		__ink_params.GasLimit,
-		__ink_params.StorageDepositLimit,
-		util.InkContractInput{
-			Selector: "0x07093d89",
-			Args:     []any{_user, _disk_id},
-		},
-	)
-	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
-		return nil, nil, err
-	}
-	if v != nil && v.IsErr {
-		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
-	}
-
-	return v, gas, nil
-}
-
-func (c *Cloud) ExecMintDisk(
-	_user types.H160, _disk_id uint64, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunMintDisk(_user, _disk_id, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x07093d89",
-			Args:     []any{_user, _disk_id},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Cloud) CallOfMintDisk(
-	_user types.H160, _disk_id uint64, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunMintDisk(_user, _disk_id, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x07093d89",
-			Args:     []any{_user, _disk_id},
-		},
-	)
-}
-
 func (c *Cloud) QueryDisk(
 	user types.H160, disk_id uint64, __ink_params chain.DryRunParams,
 ) (*util.Option[Disk], *chain.DryRunReturnGas, error) {
@@ -1359,12 +1515,12 @@ func (c *Cloud) QueryDisk(
 
 func (c *Cloud) QueryUserDisks(
 	user types.H160, start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_151, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_154, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "user_disks")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_151](
+	v, gas, err := chain.DryRunInk[[]Tuple_154](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1445,6 +1601,162 @@ func (c *Cloud) CallOfDelDisk(
 		util.InkContractInput{
 			Selector: "0xc0434fe0",
 			Args:     []any{disk_id},
+		},
+	)
+}
+
+func (c *Cloud) DryRunCharge(
+	__ink_params chain.DryRunParams,
+) (*util.NullTuple, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "charge")
+	}
+	v, gas, err := chain.DryRunInk[util.NullTuple](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x1906ffe6",
+			Args:     []any{},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Cloud) ExecCharge(
+	__ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunCharge(_param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x1906ffe6",
+			Args:     []any{},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Cloud) CallOfCharge(
+	__ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunCharge(__ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x1906ffe6",
+			Args:     []any{},
+		},
+	)
+}
+
+func (c *Cloud) QueryBalance(
+	asset AssetInfo, __ink_params chain.DryRunParams,
+) (*types.U256, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "balance")
+	}
+	v, gas, err := chain.DryRunInk[types.U256](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xb48c1684",
+			Args:     []any{asset},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Cloud) DryRunTransfer(
+	asset AssetInfo, to types.H160, amount types.U256, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "transfer")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x84a15da1",
+			Args:     []any{asset, to, amount},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Cloud) ExecTransfer(
+	asset AssetInfo, to types.H160, amount types.U256, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunTransfer(asset, to, amount, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x84a15da1",
+			Args:     []any{asset, to, amount},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Cloud) CallOfTransfer(
+	asset AssetInfo, to types.H160, amount types.U256, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunTransfer(asset, to, amount, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x84a15da1",
+			Args:     []any{asset, to, amount},
 		},
 	)
 }

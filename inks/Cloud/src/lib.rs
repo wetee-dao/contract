@@ -6,9 +6,10 @@ mod errors;
 #[ink::contract]
 mod cloud {
     use crate::{datas::*, errors::Error};
-    use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, H256, U256};
+    use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, ToAddr, H256, U256};
+    use ink_precompiles::erc20::{erc20, Erc20};
     use pod::PodRef;
-    use primitives::{ensure, ok_or_err, u64_to_u8_32};
+    use primitives::{ensure, ok_or_err, u64_to_u8_32, AssetInfo};
     use subnet::{datas::K8sCluster, SubnetRef};
 
     #[ink(storage)]
@@ -91,6 +92,23 @@ mod cloud {
             Ok(())
         }
 
+        /// Charge
+        #[ink(message)]
+        pub fn pod_contract(&mut self) -> H256 {
+            self.pod_contract_code_hash
+        }
+
+        #[ink(message)]
+        pub fn update_pod_contract(&mut self, pod_id: u64) -> Result<(), Error> {
+            let mut pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
+            ok_or_err!(
+                pod.contract.set_code(self.pod_contract_code_hash),
+                Error::SetCodeFailed
+            );
+
+            Ok(())
+        }
+
         /// set mint interval
         #[ink(message)]
         pub fn set_mint_interval(&mut self, t: BlockNumber) -> Result<(), Error> {
@@ -124,7 +142,7 @@ mod cloud {
             let caller = self.env().caller();
 
             // check worker status
-            let worker = self.subnet.worker(worker_id).ok_or(Error::NotFound)?;
+            let worker = self.subnet.worker(worker_id).ok_or(Error::WorkerNotFound)?;
             ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
             ensure!(worker.region_id == region_id, Error::RegionNotMatch);
             // ensure!(worker.status == 1, Error::WorkerNotOnline);
@@ -213,11 +231,17 @@ mod cloud {
             }
 
             // pay for pod to worker
-            let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::NotFound)?;
-            let worker = self.subnet.worker(worker_id).ok_or(Error::NotFound)?;
-            let mut pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let worker_id = self
+                .worker_of_pod
+                .get(pod_id)
+                .ok_or(Error::WorkerIdNotFound)?;
+            let worker = self.subnet.worker(worker_id).ok_or(Error::WorkerNotFound)?;
+            let mut pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             let containers = self.pod_containers.list_all(pod_id);
-            let level_price = self.subnet.level_price(pod.level).ok_or(Error::NotFound)?;
+            let level_price = self
+                .subnet
+                .level_price(pod.level)
+                .ok_or(Error::LevelPriceNotFound)?;
             let pay_value = containers
                 .iter()
                 .map(|(_, c)| match pod.tee_type {
@@ -248,7 +272,10 @@ mod cloud {
                 })
                 .sum::<u64>();
 
-            let pay_asset = self.subnet.asset(pod.pay_asset_id).ok_or(Error::NotFound)?;
+            let pay_asset = self
+                .subnet
+                .asset(pod.pay_asset_id)
+                .ok_or(Error::AssetNotFound)?;
             let pay_value = U256::from(pay_value) * 1_000 / U256::from(pay_asset.1);
             ok_or_err!(
                 pod.contract
@@ -265,12 +292,15 @@ mod cloud {
             let caller = self.env().caller();
 
             // check pod owner
-            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             // stop pod
             self.pod_status.insert(pod_id, &3);
-            let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::NotFound)?;
+            let worker_id = self
+                .worker_of_pod
+                .get(pod_id)
+                .ok_or(Error::WorkerNotFound)?;
 
             // delete pod in worker
             let all_pod = self.pods_of_worker.list_all(worker_id);
@@ -294,7 +324,7 @@ mod cloud {
             let caller = self.env().caller();
 
             // check pod owner
-            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             // check pod status
@@ -305,7 +335,10 @@ mod cloud {
 
             // if status == 3, restart pod
             if status == 3 {
-                let worker_id = self.worker_of_pod.get(pod_id).ok_or(Error::NotFound)?;
+                let worker_id = self
+                    .worker_of_pod
+                    .get(pod_id)
+                    .ok_or(Error::WorkerNotFound)?;
                 // restart pod
                 self.pod_status.insert(pod_id, &0);
                 self.pods_of_worker.insert(worker_id, &pod_id);
@@ -318,6 +351,12 @@ mod cloud {
             Ok(())
         }
 
+        /// Report of pod
+        #[ink(message)]
+        pub fn pod_report(&self, pod_id: u64) -> Option<H256> {
+            self.pod_report.get(pod_id)
+        }
+
         // add update remove container
         #[ink(message)]
         pub fn edit_container(
@@ -326,7 +365,7 @@ mod cloud {
             containers: Vec<ContainerInput>,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             for container in containers.iter() {
@@ -619,13 +658,6 @@ mod cloud {
             }
         }
 
-        /// Mint disk == pay for disk usage
-        #[ink(message)]
-        pub fn mint_disk(&mut self, _user: Address, _disk_id: u64) -> Result<(), Error> {
-            self.ensure_from_side_chain()?;
-            Ok(())
-        }
-
         /// Get disk info
         #[ink(message)]
         pub fn disk(&self, user: Address, disk_id: u64) -> Option<Disk> {
@@ -650,6 +682,58 @@ mod cloud {
             Ok(())
         }
 
+        /// Charge
+        #[ink(message, default, payable)]
+        pub fn charge(&mut self) {
+            let _transferred = self.env().transferred_value();
+        }
+
+        /// Get balance of cloud contract
+        #[ink(message)]
+        pub fn balance(&self, asset: AssetInfo) -> U256 {
+            match asset {
+                AssetInfo::Native(_) => self.env().balance(),
+                AssetInfo::ERC20(_, asset_id) => {
+                    let asset = erc20(TRUST_BACKED_ASSETS_PRECOMPILE_INDEX, asset_id);
+                    asset.balanceOf(self.env().address())
+                }
+            }
+        }
+
+        /// Transfer asset to worker
+        #[ink(message)]
+        pub fn transfer(
+            &mut self,
+            asset: AssetInfo,
+            to: Address,
+            amount: U256,
+        ) -> Result<(), Error> {
+            self.ensure_from_gov()?;
+
+            match asset {
+                AssetInfo::Native(_) => self
+                    .env()
+                    .transfer(to, amount)
+                    .map_err(|_| Error::PayFailed),
+                AssetInfo::ERC20(_, asset_id) => {
+                    let mut asset = erc20(TRUST_BACKED_ASSETS_PRECOMPILE_INDEX, asset_id);
+
+                    // check pod balance
+                    ensure!(
+                        asset.balanceOf(self.env().address()) >= amount,
+                        Error::BalanceNotEnough
+                    );
+
+                    // transfer to worker
+                    let ok = asset.transfer(to, amount);
+                    if !ok {
+                        return Err(Error::PayFailed);
+                    }
+                    Ok(())
+                }
+            }
+        }
+
         /// Update contract with gov
         #[ink(message)]
         pub fn set_code(&mut self, code_hash: H256) -> Result<(), Error> {
@@ -663,7 +747,7 @@ mod cloud {
         /// Add container
         pub fn add_container(&mut self, pod_id: u64, container: Container) -> Result<(), Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             self.pod_containers.insert(pod_id, &container);
@@ -678,7 +762,7 @@ mod cloud {
             container: Container,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             self.pod_containers.update(pod_id, container_id, &container);
@@ -688,7 +772,7 @@ mod cloud {
         /// Delete container
         pub fn del_container(&mut self, pod_id: u64, container_id: u64) -> Result<bool, Error> {
             let caller = self.env().caller();
-            let pod = self.pods.get(pod_id).ok_or(Error::NotFound)?;
+            let pod = self.pods.get(pod_id).ok_or(Error::PodNotFound)?;
             ensure!(pod.owner == caller, Error::NotPodOwner);
 
             let ok = self.pod_containers.delete_by_key(pod_id, container_id);

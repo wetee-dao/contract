@@ -31,12 +31,25 @@ mod pod {
             let mut ins: Pod = Default::default();
 
             ins.cloud_contract = caller;
+            ins.side_chain_multi_key = side_chain_multi_key;
             ins.pod_id = id;
             ins.owner = owner;
 
             ins
         }
 
+        /// Charge
+        #[ink(message, default, payable)]
+        pub fn charge(&mut self) {
+            let _transferred = self.env().transferred_value();
+        }
+
+
+        #[ink(message)]
+        pub fn account_id(&self) -> AccountId {
+            self.env().account_id()
+        }
+        
         /// Get pod ID
         #[ink(message)]
         pub fn id(&self) -> u64 {
@@ -73,7 +86,7 @@ mod pod {
                     // transfer to worker
                     match self.env().transfer(to, amount) {
                         Ok(_) => Ok(()),
-                        Err(_e) => Err(Error::TransferFailed),
+                        Err(_e) => Err(Error::PayFailed),
                     }
                 }
                 AssetInfo::ERC20(_, asset_id) => {
@@ -88,7 +101,7 @@ mod pod {
                     // transfer to worker
                     let ok = asset.transfer(to, amount);
                     if !ok {
-                        return Err(Error::TransferFailed);
+                        return Err(Error::PayFailed);
                     }
                     Ok(())
                 }
@@ -130,7 +143,7 @@ mod pod {
                     // transfer to cloud contract
                     match self.env().transfer(to, amount) {
                         Ok(_) => Ok(()),
-                        Err(_e) => Err(Error::TransferFailed),
+                        Err(_e) => Err(Error::PayFailed),
                     }
                 }
                 AssetInfo::ERC20(_, asset_id) => {
@@ -145,7 +158,7 @@ mod pod {
                     // transfer to worker
                     let ok = asset.transfer(to, amount);
                     if !ok {
-                        return Err(Error::TransferFailed);
+                        return Err(Error::PayFailed);
                     }
                     Ok(())
                 }

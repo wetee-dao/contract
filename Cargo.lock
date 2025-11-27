@@ -1592,6 +1592,7 @@ version = "0.1.0"
 dependencies = [
  "ink",
  "ink_e2e",
+ "ink_precompiles",
  "ink_sandbox",
  "parity-scale-codec",
  "pod",

@@ -203,6 +203,73 @@ func TestMapAccount(t *testing.T) {
 	}
 }
 
+func TestSetPrice(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	subnetIns, err := subnet.InitSubnetContract(client, SubnetAddress)
+	if err != nil {
+		util.LogWithPurple("InitCloudContract", err)
+		panic(err)
+	}
+
+	err = subnetIns.ExecSetLevelPrice(1, subnet.RunPrice{
+		CpuPer:       1,
+		CvmCpuPer:    1,
+		MemoryPer:    1,
+		CvmMemoryPer: 1,
+		DiskPer:      1,
+		GpuPer:       1,
+	}, chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		util.LogWithPurple("ExecSetLevelPrice", err)
+		panic(err)
+	}
+}
+
+func TestSetAssetPrice(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	subnetIns, err := subnet.InitSubnetContract(client, SubnetAddress)
+	if err != nil {
+		util.LogWithPurple("InitCloudContract", err)
+		panic(err)
+	}
+
+	name := []byte("T")
+	err = subnetIns.ExecSetAsset(subnet.AssetInfo{
+		Native: &name,
+	}, types.NewU256(*big.NewInt(1000)), chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+
+	if err != nil {
+		util.LogWithPurple("ExecSetAsset", err)
+		panic(err)
+	}
+}
+
 func DeploySubnetContract(client *chain.ChainClient, pk chain.Signer) *types.H160 {
 	data, err := os.ReadFile("../../target/ink/subnet/subnet.polkavm")
 	if err != nil {
@@ -305,6 +372,29 @@ func InitWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		panic(err)
 	}
 
+	err = subnetContract.ExecSetLevelPrice(0, subnet.RunPrice{
+		CpuPer:       1,
+		CvmCpuPer:    1,
+		MemoryPer:    1,
+		CvmMemoryPer: 1,
+		DiskPer:      1,
+		GpuPer:       1,
+	}, _call)
+	if err != nil {
+		panic(err)
+	}
+
+	name := []byte("T")
+	err = subnetContract.ExecSetAsset(subnet.AssetInfo{
+		Native: &name,
+	}, types.NewU256(*big.NewInt(1000)), chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	pubkey, _ := model.PubKeyFromSS58("5GSBfdb3PxME3XM4JrkFKAgHH77ADDWXUx6o8KGVmavLnZ44")
 	err = subnetContract.ExecWorkerRegister(
 		[]byte("worker0"),
@@ -401,4 +491,107 @@ func TestCloudQuerySecret(t *testing.T) {
 		panic(err)
 	}
 	fmt.Println("disks:", disks)
+}
+
+func TestCloudUpdatePodContract(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	/// init pod
+	podData, err := os.ReadFile("../../target/ink/pod/pod.polkavm")
+	if err != nil {
+		util.LogWithPurple("read file error", err)
+		panic(err)
+	}
+
+	/// upload pod code
+	podCode, err := client.UploadInkCode(podData, &pk)
+	if err != nil {
+		util.LogWithPurple("UploadInkCode", err)
+		panic(err)
+	}
+
+	cloudContract, err := cloud.InitCloudContract(client, CloudAddress)
+	if err != nil {
+		panic(err)
+	}
+
+	err = cloudContract.ExecSetPodContract(*podCode, chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	err = cloudContract.ExecUpdatePodContract(0, chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func TestPodCharge(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	cloudContract, err := cloud.InitCloudContract(client, CloudAddress)
+	if err != nil {
+		panic(err)
+	}
+
+	err = cloudContract.ExecChargePod(0, chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(1000000000000000000)),
+	})
+	if err != nil {
+		panic(err)
+	}
+}
+
+func TestCloudTransfer(t *testing.T) {
+	client, err := chain.InitClient([]string{TestChainUrl}, true)
+	if err != nil {
+		panic(err)
+	}
+
+	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
+	if err != nil {
+		util.LogWithPurple("Sr25519PairFromSecret", err)
+		panic(err)
+	}
+
+	cloudContract, err := cloud.InitCloudContract(client, CloudAddress)
+	if err != nil {
+		panic(err)
+	}
+
+	tName := []byte("T")
+	err = cloudContract.ExecTransfer(cloud.AssetInfo{
+		Native: &tName,
+	}, pk.H160Address(), types.NewU256(*big.NewInt(10001)), chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
 }

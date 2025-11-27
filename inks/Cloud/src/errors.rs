@@ -21,8 +21,20 @@ pub enum Error {
     InvalidSideChainCaller,
     /// delete pod failed
     DelFailed,
-    /// noet found
+    /// not found
     NotFound,
+    /// noet found
+    PodNotFound,
+    /// worker id not found
+    WorkerIdNotFound,
+    /// worker not found
+    WorkerNotFound,
+    /// level price not found
+    LevelPriceNotFound,
+    /// asset not found
+    AssetNotFound,
+    /// balance not enough
+    BalanceNotEnough,
     /// pay failed
     PayFailed,
 }

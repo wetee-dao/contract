@@ -2,6 +2,11 @@ use ink::{prelude::vec::Vec, Address, U256};
 
 use crate::errors::Error;
 
+/// ERC20-like token interface
+/// 类似 ERC20 的代币接口
+/// 
+/// This trait defines the standard token operations including transfer, approval, and burning.
+/// 该 trait 定义了标准的代币操作，包括转账、授权和销毁。
 #[ink::trait_definition]
 pub trait Erc20 {
     #[ink(message)]

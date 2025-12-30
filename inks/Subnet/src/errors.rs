@@ -1,36 +1,38 @@
+/// Error types for Subnet contract
+/// 子网合约错误类型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Error {
-    /// Not enough balance
+    /// Not enough balance / 余额不足
     NotEnoughBalance,
-    /// Caller must be main contract
+    /// Caller must be main contract / 调用者必须是主合约
     MustCallByMainContract,
-    /// Worker not exist
+    /// Worker does not exist / 工作节点不存在
     WorkerNotExist,
-    /// Worker not owned by caller
+    /// Worker is not owned by caller / 工作节点不属于调用者
     WorkerNotOwnedByCaller,
-    /// worker status not ready
+    /// Worker status is not ready / 工作节点状态未就绪
     WorkerStatusNotReady,
-    /// Worker mortgage not exist
+    /// Worker mortgage does not exist / 工作节点抵押不存在
     WorkerMortgageNotExist,
-    /// Transfer failed
+    /// Transfer failed / 转账失败
     TransferFailed,
-    /// Worker is use by user
+    /// Worker is being used by user / 工作节点正被用户使用
     WorkerIsUseByUser,
-    /// Node not exist
+    /// Node does not exist / 节点不存在
     NodeNotExist,
-    /// Secret node already exists
+    /// Secret node already exists / 密钥节点已存在
     SecretNodeAlreadyExists,
-    /// Update: set code failed
+    /// Set code failed / 设置代码失败
     SetCodeFailed,
-    /// Epoch not expired
+    /// Epoch has not expired / 周期未过期
     EpochNotExpired,
-    /// InvalidSideChainSignature
+    /// Invalid side chain signature / 无效的侧链签名
     InvalidSideChainSignature,
-    /// Remove when Node is running
+    /// Cannot remove node when it is running / 节点运行时无法删除
     NodeIsRunning,
-    /// caller is not side chain multi-sig address
+    /// Caller is not side chain multi-sig address / 调用者不是侧链多重签名地址
     InvalidSideChainCaller,
-    /// region not exist
+    /// Region does not exist / 区域不存在
     RegionNotExist,
 }

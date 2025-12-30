@@ -38,7 +38,8 @@ macro_rules! define_map {
             // insert value
             pub fn insert(&mut self, value: &$value_ty) -> $key_ty {
                 let key = self.next_id;
-                self.next_id += 1;
+                // Use checked_add to prevent overflow
+                self.next_id = self.next_id.checked_add(1).expect("next_id overflow");
                 self.store.insert(key, value);
 
                 key
@@ -66,14 +67,16 @@ macro_rules! define_map {
                 }
 
                 let start = start_key_.unwrap_or(total_len);
-                for i in 1..size + 1 {
-                    if start < i {
+                // Use saturating_add to prevent overflow in range
+                let max_i = size.saturating_add(1);
+                for i in 1..max_i {
+                    // Use checked_sub to prevent underflow
+                    if let Some(k) = start.checked_sub(i) {
+                        if let Some(v) = self.store.get(k) {
+                            list.push((k, v));
+                        }
+                    } else {
                         break;
-                    }
-                    let k = start - i;
-                    let v = self.store.get(k);
-                    if v.is_some() {
-                        list.push((k, v.unwrap()));
                     }
                 }
 
@@ -93,11 +96,19 @@ macro_rules! define_map {
                 }
 
                 let start = start_key;
-                for i in 0..size + 1 {
-                    let k = start + i;
-                    let v = self.store.get(k);
-                    if v.is_some() {
-                        list.push((k, v.unwrap()));
+                // Check for potential overflow
+                let max_size = size.saturating_add(1);
+                for i in 0..max_size {
+                    // Use checked_add to prevent overflow
+                    if let Some(k) = start.checked_add(i) {
+                        if k >= total_len {
+                            break;
+                        }
+                        if let Some(v) = self.store.get(k) {
+                            list.push((k, v));
+                        }
+                    } else {
+                        break;
                     }
                 }
 
@@ -162,14 +173,18 @@ macro_rules! define_double_map_base {
 
                     // save key in
                     self.k1.insert(&k, &len);
-                    self.k1_length += 1;
+                    // Use checked_add to prevent overflow
+                    self.k1_length = self.k1_length.checked_add(1).expect("k1_length overflow");
                 }
 
                 // save next id
-                let next_id = self.k2_next_id.get(id.unwrap()).unwrap_or_default();
-                self.k2_next_id.insert(id.unwrap(), &(next_id + 1));
+                let id_val = id.unwrap();
+                let next_id = self.k2_next_id.get(id_val).unwrap_or_default();
+                // Use checked_add to prevent overflow
+                let new_next_id = next_id.checked_add(1).expect("next_id overflow");
+                self.k2_next_id.insert(id_val, &new_next_id);
 
-                let key = primitives::combine(id.unwrap(), next_id);
+                let key = primitives::combine(id_val, next_id);
                 self.store.insert(key, v);
 
                 next_id
@@ -210,22 +225,22 @@ macro_rules! define_double_map_base {
                     return list;
                 }
 
-                let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
+                let id_val = id.unwrap();
+                let total_len = self.k2_next_id.get(&id_val).unwrap_or_default();
                 if total_len == 0 || size == 0 {
                     return list;
                 }
 
-                let start_key = start_key_.unwrap_or(total_len);
-                let start = primitives::combine(id.unwrap(), start_key);
-                for i in 0..size + 1 {
-                    if start < i as $realk_ty {
+                let start_key = start_key_.unwrap_or(if total_len > 0 { total_len - 1 } else { 0 });
+                for i in 0..size {
+                    // Use checked_sub to prevent underflow
+                    if let Some(k2) = start_key.checked_sub(i) {
+                        let k = primitives::combine(id_val, k2);
+                        if let Some(v) = self.store.get(k) {
+                            list.push((k2, v));
+                        }
+                    } else {
                         break;
-                    }
-                    let k = start - i as $realk_ty;
-                    let v = self.store.get(k);
-                    let (_, k2) = primitives::split(k);
-                    if v.is_some() {
-                        list.push((k2, v.unwrap()));
                     }
                 }
 
@@ -245,19 +260,26 @@ macro_rules! define_double_map_base {
                     return list;
                 }
 
-                let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
-                if total_len == 0 || size == 0 || start_key > total_len {
+                let id_val = id.unwrap();
+                let total_len = self.k2_next_id.get(&id_val).unwrap_or_default();
+                if total_len == 0 || size == 0 || start_key >= total_len {
                     return list;
                 }
 
-                let start = primitives::combine(id.unwrap(), start_key);
-                let mut list = ink::prelude::vec::Vec::new();
-                for i in 0..size + 1 {
-                    let k = start + i as $realk_ty;
-                    let v = self.store.get(k);
-                    let (_, k2) = primitives::split(k);
-                    if v.is_some() {
-                        list.push((k2, v.unwrap()));
+                // Check for potential overflow
+                let max_size = size.saturating_add(1);
+                for i in 0..max_size {
+                    // Use checked_add to prevent overflow
+                    if let Some(k2) = start_key.checked_add(i) {
+                        if k2 >= total_len {
+                            break;
+                        }
+                        let k = primitives::combine(id_val, k2);
+                        if let Some(v) = self.store.get(k) {
+                            list.push((k2, v));
+                        }
+                    } else {
+                        break;
                     }
                 }
 
@@ -271,13 +293,13 @@ macro_rules! define_double_map_base {
                     return list;
                 }
 
-                let total_len = self.k2_next_id.get(&id.unwrap()).unwrap_or_default();
+                let id_val = id.unwrap();
+                let total_len = self.k2_next_id.get(&id_val).unwrap_or_default();
                 for i in 0..total_len {
-                    let k = i as $realk_ty;
+                    let k = primitives::combine(id_val, i);
                     let v = self.store.get(k);
-                    let (_, k2) = primitives::split(k);
                     if v.is_some() {
-                        list.push((k2, v.unwrap()));
+                        list.push((i, v.unwrap()));
                     }
                 }
 
@@ -292,7 +314,18 @@ macro_rules! define_double_map_base {
                 }
                 let id = id_wrap.unwrap();
 
+                // Verify that k2 is within valid range
+                let total_len = self.k2_next_id.get(id).unwrap_or_default();
+                if k2 >= total_len {
+                    return false;
+                }
+
+                // Verify that the key exists before deleting
                 let key = primitives::combine(id, k2);
+                if !self.store.contains(key) {
+                    return false;
+                }
+
                 self.store.remove(key);
                 true
             }

@@ -10,21 +10,37 @@ mod pod {
     use ink_precompiles::erc20::{erc20, Erc20};
     use primitives::{ensure, ok_or_err, AssetInfo};
 
+    /// Pod Contract Storage
+    /// Pod 合约存储结构
+    /// 
+    /// This contract represents a single pod (compute instance) in the cloud.
+    /// It manages the pod's balance, payments to workers, and owner permissions.
+    /// 该合约代表云中的单个 Pod（计算实例）。
+    /// 它管理 Pod 的余额、向工作节点的支付和所有者权限。
     #[ink(storage)]
     #[derive(Default)]
     pub struct Pod {
-        /// parent contract ==> Dao contract/user
+        /// Cloud contract address (parent contract) / 云合约地址（父合约）
         cloud_contract: Address,
-        /// sidechain Multi-sig account
+        /// Sidechain multi-signature account / 侧链多重签名账户
         side_chain_multi_key: Address,
-        /// pod ID
+        /// Pod ID / Pod ID
         pod_id: u64,
-        /// owner
+        /// Pod owner address / Pod 所有者地址
         owner: Address,
     }
 
     impl Pod {
-        /// Constructor
+        /// Create a new Pod contract
+        /// 创建新的 Pod 合约
+        /// 
+        /// # Arguments
+        /// * `id` - Pod ID / Pod ID
+        /// * `owner` - Pod owner address / Pod 所有者地址
+        /// * `side_chain_multi_key` - Sidechain multi-signature account / 侧链多重签名账户
+        /// 
+        /// # Returns
+        /// * `Self` - New Pod contract instance / 新的 Pod 合约实例
         #[ink(constructor)]
         pub fn new(id: u64, owner: Address, side_chain_multi_key: Address) -> Self {
             let caller = Self::env().caller();
@@ -38,7 +54,11 @@ mod pod {
             ins
         }
 
-        /// Charge
+        /// Charge native tokens to pod (payable)
+        /// 向 Pod 充值原生代币（可支付）
+        /// 
+        /// The transferred value is added to the pod's balance.
+        /// 转账的金额将添加到 Pod 的余额中。
         #[ink(message, default, payable)]
         pub fn charge(&mut self) {
             let _transferred = self.env().transferred_value();
@@ -68,7 +88,22 @@ mod pod {
             self.owner
         }
 
-        /// pay for cloud
+        /// Pay worker for computing resources (cloud contract only)
+        /// 向工作节点支付计算资源费用（仅云合约）
+        /// 
+        /// # Arguments
+        /// * `to` - Worker address to pay / 要支付的工作节点地址
+        /// * `asset` - Asset type (Native or ERC20) / 资产类型（原生或 ERC20）
+        /// * `amount` - Amount to pay / 支付金额
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MustCallByCloudContract` - Must be called by cloud contract / 必须由云合约调用
+        /// * `NotEnoughBalance` - Insufficient pod balance / Pod 余额不足
+        /// * `NotEnoughAllowance` - Insufficient allowance (if set) / 授权额度不足（如果已设置）
+        /// * `PayFailed` - Payment transfer failed / 支付转账失败
         #[ink(message)]
         pub fn pay_for_woker(
             &mut self,

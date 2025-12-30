@@ -9,6 +9,11 @@ use crate::{
     errors::Error,
 };
 
+/// Governance interface
+/// 治理接口
+/// 
+/// This trait defines operations for DAO governance including proposal submission, voting, and execution.
+/// 该 trait 定义了 DAO 治理的操作，包括提案提交、投票和执行。
 #[ink::trait_definition]
 pub trait Gov {
     #[ink(message)]

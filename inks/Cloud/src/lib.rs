@@ -6,53 +6,71 @@ mod errors;
 #[ink::contract]
 mod cloud {
     use crate::{datas::*, errors::Error};
-    use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, ToAddr, H256, U256};
+    use ink::{env::call::FromAddr, prelude::vec::Vec, storage::Mapping, H256, U256};
     use ink_precompiles::erc20::{erc20, Erc20};
     use pod::PodRef;
     use primitives::{ensure, ok_or_err, u64_to_u8_32, AssetInfo};
     use subnet::{datas::K8sCluster, SubnetRef};
 
+    /// Cloud Contract Storage
+    /// 云合约存储结构
+    /// 
+    /// This contract manages pods (compute instances) in a cloud computing environment.
+    /// It handles pod creation, deployment, lifecycle management, and resource allocation.
+    /// 该合约管理云计算环境中的 Pod（计算实例）。
+    /// 它处理 Pod 创建、部署、生命周期管理和资源分配。
     #[ink(storage)]
     pub struct Cloud {
-        /// parent contract ==> Dao contract/user
+        /// Governance contract address (DAO contract or user) / 治理合约地址（DAO 合约或用户）
         gov_contract: Address,
-        /// subnet_contract
+        /// Subnet contract reference / 子网合约引用
         subnet: SubnetRef,
-        /// pod contract code hash
+        /// Pod contract code hash for instantiation / 用于实例化的 Pod 合约代码哈希
         pod_contract_code_hash: H256,
 
-        /// pods
+        /// All pods storage / 所有 Pod 存储
         pods: Pods,
-        /// pod last block number
+        /// Last update block number for each pod / 每个 Pod 的最后更新区块号
         pod_version: Mapping<u64, BlockNumber>,
-        /// pod status 0=>created  1=>deoloying 2=>error  3=>stop
+        /// Pod status: 0=created, 1=deploying, 2=error, 3=stopped
+        /// Pod 状态：0=已创建，1=部署中，2=错误，3=已停止
         pod_status: Mapping<u64, u8>,
-        /// last mint block number of pod
+        /// Last mint block number for each pod / 每个 Pod 的最后挖矿区块号
         last_mint_block: Mapping<u64, BlockNumber>,
-        /// tee mint interval
+        /// TEE mint interval in blocks / TEE 挖矿间隔（区块数）
         mint_interval: BlockNumber,
-        /// tee mint hash of pod
+        /// TEE mint report hash for each pod / 每个 Pod 的 TEE 挖矿报告哈希
         pod_report: Mapping<u64, H256>,
-        /// pod deployed ed25519 key,Generate within the TEE for each deployment
+        /// Pod deployed ed25519 key (generated within TEE for each deployment)
+        /// Pod 部署的 ed25519 密钥（在每个部署的 TEE 内生成）
         pod_key: Mapping<u64, AccountId>,
-        /// pod of user
+        /// Pods owned by each user / 每个用户拥有的 Pod
         pod_of_user: UserPods,
-        /// pods of worker
+        /// Pods running on each worker / 每个工作节点上运行的 Pod
         pods_of_worker: WorkerPods,
-        /// pod id to worker
+        /// Worker ID for each pod / 每个 Pod 的工作节点 ID
         worker_of_pod: Mapping<u64, u64>,
 
-        /// pod's containers
+        /// Containers in each pod / 每个 Pod 中的容器
         pod_containers: PodContainers,
 
-        /// secret value
+        /// User secrets storage / 用户密钥存储
         user_secrets: UserSecrets,
 
-        /// users disks
+        /// User disks storage / 用户磁盘存储
         user_disks: UserDisks,
     }
 
     impl Cloud {
+        /// Create a new Cloud contract
+        /// 创建新的云合约
+        /// 
+        /// # Arguments
+        /// * `subnet_addr` - Address of the Subnet contract / 子网合约地址
+        /// * `pod_contract_code_hash` - Code hash of the Pod contract / Pod 合约代码哈希
+        /// 
+        /// # Returns
+        /// * `Self` - New Cloud contract instance / 新的云合约实例
         #[ink(constructor)]
         pub fn new(subnet_addr: Address, pod_contract_code_hash: H256) -> Self {
             let caller = Self::env().caller();
@@ -83,7 +101,17 @@ mod cloud {
             ins
         }
 
-        /// set new pod code hash
+        /// Set new pod contract code hash (governance only)
+        /// 设置新的 Pod 合约代码哈希（仅治理）
+        /// 
+        /// # Arguments
+        /// * `pod_contract` - New pod contract code hash / 新的 Pod 合约代码哈希
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MustCallByGovContract` - Must be called by governance contract / 必须由治理合约调用
         #[ink(message)]
         pub fn set_pod_contract(&mut self, pod_contract: H256) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -109,9 +137,20 @@ mod cloud {
             Ok(())
         }
 
-        /// set mint interval
+        /// Set TEE mint interval (governance only)
+        /// 设置 TEE 挖矿间隔（仅治理）
+        /// 
+        /// # Arguments
+        /// * `t` - Mint interval in blocks / 挖矿间隔（区块数）
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MustCallByGovContract` - Must be called by governance contract / 必须由治理合约调用
         #[ink(message)]
         pub fn set_mint_interval(&mut self, t: BlockNumber) -> Result<(), Error> {
+            self.ensure_from_gov()?;
             self.mint_interval = t;
             Ok(())
         }

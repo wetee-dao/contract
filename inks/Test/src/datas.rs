@@ -17,5 +17,4 @@ pub struct TestItem {
 
 primitives::define_map!(TestMap, u64, TestItem);
 
-
 primitives::double_u64_map!(WorkerItems, u64, u64);

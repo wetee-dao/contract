@@ -2,6 +2,11 @@ use ink::{Address, U256};
 
 use crate::errors::Error;
 
+/// Treasury management interface
+/// 国库管理接口
+/// 
+/// This trait defines operations for managing DAO treasury including spending and payouts.
+/// 该 trait 定义了管理 DAO 国库的操作，包括支出和支付。
 #[ink::trait_definition]
 pub trait Treasury {
     #[ink(message)]

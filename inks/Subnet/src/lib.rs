@@ -14,69 +14,76 @@ mod subnet {
         errors::Error,
     };
 
+    /// Subnet Contract Storage
+    /// 子网合约存储结构
+    /// 
+    /// This contract manages the subnet infrastructure including workers, validators,
+    /// regions, epochs, and resource pricing.
+    /// 该合约管理子网基础设施，包括工作节点、验证者、区域、周期和资源定价。
     #[ink(storage)]
     #[derive(Default)]
     pub struct Subnet {
-        /// parent contract ==> Dao contract/user
+        /// Governance contract address (DAO contract or user) / 治理合约地址（DAO 合约或用户）
         gov_contract: Address,
 
-        /// Computing power is divided into different zones to ensure user experience.
+        /// Computing regions (divided into different zones to ensure user experience)
+        /// 计算区域（分为不同区域以确保用户体验）
         regions: Regions,
-        /// workers
+        /// Worker nodes storage / 工作节点存储
         workers: Workers,
-        /// worker status
+        /// Worker status: 0=offline, 1=online / 工作节点状态：0=离线，1=在线
         worker_status: Mapping<NodeID, u8>,
-        /// user off worker
+        /// Worker owner mapping / 工作节点所有者映射
         owner_of_worker: Mapping<Address, NodeID>,
-        /// user off worker
+        /// Worker mint account mapping / 工作节点挖矿账户映射
         mint_of_worker: Mapping<AccountId, NodeID>,
-        /// Workers of region
+        /// Workers in each region / 每个区域的工作节点
         regions_workers: RegionWorkers,
 
-        /// worker mortgage
+        /// Worker mortgage records / 工作节点抵押记录
         worker_mortgages: WorkerMortgages,
 
-        /// secret validators
+        /// Secret validator nodes / 密钥验证者节点
         secrets: Secrets,
-        /// user off secret
+        /// Secret node owner mapping / 密钥节点所有者映射
         secret_of_user: Mapping<Address, NodeID>,
-        /// secret mortgages
+        /// Secret node mortgages / 密钥节点抵押
         secret_mortgages: Mapping<NodeID, U256>,
 
-        /// subnet epoch
+        /// Current subnet epoch / 当前子网周期
         epoch: u32,
-        /// epoch solt block number
+        /// Epoch slot block number / 周期槽区块号
         epoch_solt: u32,
-        /// sidechain Multi-sig account
+        /// Sidechain multi-signature account / 侧链多重签名账户
         side_chain_multi_key: Address,
-        /// last epoch block
+        /// Last epoch block number / 上一个周期的区块号
         last_epoch_block: BlockNumber,
-        /// run secrets
+        /// Currently running secret validators / 当前运行的密钥验证者
         runing_secrets: Vec<(NodeID, u32)>,
-        /// pending secrets
+        /// Pending secret validators for next epoch / 下一个周期的待处理密钥验证者
         pending_secrets: Vec<(NodeID, u32)>,
 
-        /// worker node code TEE version (TEE Signer,TEE signature)
+        /// Worker node code TEE version (TEE Signer, TEE signature) / 工作节点代码 TEE 版本（TEE 签名者，TEE 签名）
         worker_code: (Vec<u8>, Vec<u8>),
-        /// Secret node code TEE version (TEE Signer,TEE signature)
+        /// Secret node code TEE version (TEE Signer, TEE signature) / 密钥节点代码 TEE 版本（TEE 签名者，TEE 签名）
         secret_code: (Vec<u8>, Vec<u8>),
 
-        /// USD of deposit Price
+        /// Deposit prices in USD by level / 按级别的 USD 抵押价格
         deposit_prices: Mapping<u8, U256>,
 
-        /// next asset id
+        /// Next asset ID / 下一个资产 ID
         next_asset_id: u32,
 
-        /// asset asset id
+        /// Asset information by asset ID / 按资产 ID 的资产信息
         asset_infos: Mapping<u32, AssetInfo>,
 
-        /// n/1_000 of USD
+        /// Asset prices (n/1000 of USD) / 资产价格（USD 的 n/1000）
         asset_prices: Mapping<u32, U256>,
 
-        /// prices for different levels
+        /// Prices for different worker levels / 不同工作节点级别的价格
         level_prices: Mapping<u8, RunPrice>,
 
-        /// boot nooes
+        /// Boot nodes for network initialization / 用于网络初始化的引导节点
         boot_nodes: Vec<NodeID>,
     }
 
@@ -576,8 +583,10 @@ mod subnet {
 
         /// set epoch solt
         #[ink(message)]
-        pub fn set_epoch_solt(&mut self, epoch_solt: u32) {
+        pub fn set_epoch_solt(&mut self, epoch_solt: u32) -> Result<(), Error> {
+            self.ensure_from_gov()?;
             self.epoch_solt = epoch_solt;
+            Ok(())
         }
 
         /// goto next epoch

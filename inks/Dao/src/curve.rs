@@ -1,35 +1,45 @@
 use ink::env::BlockNumber;
 use primitives::{fixed_from_i64, fixed_from_u64, u32_from_fixed, Percent};
 
+/// Curve argument for creating voting curves
+/// 用于创建投票曲线的曲线参数
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum CurveArg {
+    /// Linear decreasing curve / 线性递减曲线
     LinearDecreasing {
-        // 开始 最大
+        /// Starting value (maximum) / 起始值（最大值）
         begin: u32,
-        // 结束 最小
+        /// Ending value (minimum) / 结束值（最小值）
         end: u32,
-        // 轨道长度
+        /// Curve length in blocks / 曲线长度（区块数）
         length: BlockNumber,
     },
+    /// Stepped decreasing curve / 阶梯递减曲线
     SteppedDecreasing {
-        // 开始 最大
+        /// Starting value (maximum) / 起始值（最大值）
         begin: u32,
-        // 结束 最小
+        /// Ending value (minimum) / 结束值（最小值）
         end: u32,
-        // 下降步长
+        /// Step size for each decrease / 每次下降的步长
         step: u32,
-        // 下降周期
+        /// Period between steps in blocks / 步进之间的周期（区块数）
         period: BlockNumber,
     },
+    /// Reciprocal curve (K/(x+S)-T) / 倒数曲线 (K/(x+S)-T)
     Reciprocal{
+        /// X-axis offset percentage / X 轴偏移百分比
         x_offset_percent: Percent, 
+        /// X-axis scale argument / X 轴缩放参数
         x_scale_arg: u32, 
+        /// Starting value (maximum) / 起始值（最大值）
         begin: u32, 
+        /// Ending value (minimum) / 结束值（最小值）
         end: u32,
     }
 }
 
-/// 投票轨道
+/// Voting curve types for calculating approval/support thresholds
+/// 用于计算批准/支持阈值的投票曲线类型
 #[derive(Clone)]
 #[cfg_attr(
     feature = "std",
@@ -37,46 +47,61 @@ pub enum CurveArg {
 )]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Curve {
-    /// Linear curve starting at `(0, ceil)`, proceeding linearly to `(length, floor)`, then
-    /// remaining at `floor` until the end of the period.
+    /// Linear decreasing curve
+    /// Starts at `(0, begin)`, proceeds linearly to `(length, end)`, then remains at `end`.
+    /// 线性递减曲线
+    /// 从 `(0, begin)` 开始，线性递减到 `(length, end)`，然后保持在 `end`。
     LinearDecreasing {
-        // 开始 最大
+        /// Starting value (maximum) / 起始值（最大值）
         begin: u32,
-        // 结束 最小
+        /// Ending value (minimum) / 结束值（最小值）
         end: u32,
-        // 轨道长度
+        /// Curve length in blocks / 曲线长度（区块数）
         length: BlockNumber,
     },
 
-    /// Stepped curve, beginning at `(0, begin)`, then remaining constant for `period`, at which
-    /// point it steps down to `(period, begin - step)`. It then remains constant for another
-    /// `period` before stepping down to `(period * 2, begin - step * 2)`. This pattern continues
-    /// but the `y` component has a lower limit of `end`.
+    /// Stepped decreasing curve
+    /// Begins at `(0, begin)`, remains constant for `period`, then steps down to `(period, begin - step)`.
+    /// This pattern continues with a lower limit of `end`.
+    /// 阶梯递减曲线
+    /// 从 `(0, begin)` 开始，保持 `period` 个区块不变，然后下降到 `(period, begin - step)`。
+    /// 此模式持续进行，下限为 `end`。
     SteppedDecreasing {
-        // 开始 最大
+        /// Starting value (maximum) / 起始值（最大值）
         begin: u32,
-        // 结束 最小
+        /// Ending value (minimum) / 结束值（最小值）
         end: u32,
-        // 下降步长
+        /// Step size for each decrease / 每次下降的步长
         step: u32,
-        // 下降周期
+        /// Period between steps in blocks / 步进之间的周期（区块数）
         period: BlockNumber,
     },
 
-    /// A recipocal (`K/(x+S)-T`) curve: `factor` is `K` and `x_offset` is `S`, `y_offset` is `T`.
+    /// Reciprocal curve: `K/(x+S)-T`
+    /// Where `factor` is `K`, `x_offset` is `S`, and `y_offset` is `T`.
+    /// 倒数曲线：`K/(x+S)-T`
+    /// 其中 `factor` 是 `K`，`x_offset` 是 `S`，`y_offset` 是 `T`。
     Reciprocal {
-        // 轨道系数
+        /// Curve factor (K) / 曲线系数 (K)
         factor: u32,
-        // x轴缩放系数
+        /// X-axis scale factor / X 轴缩放系数
         x_scale: u32,
-        // 轨道偏移量
+        /// X-axis offset (S) / X 轴偏移量 (S)
         x_offset: i64,
-        // 轨道偏移量
+        /// Y-axis offset (T) / Y 轴偏移量 (T)
         y_offset: i64,
     },
 }
 
 impl Curve {
+    /// Calculate the Y value of the curve at a given X (block number)
+    /// 计算曲线在给定 X（区块号）处的 Y 值
+    /// 
+    /// # Arguments
+    /// * `x` - Block number / 区块号
+    /// 
+    /// # Returns
+    /// * `u32` - Y value (threshold percentage) / Y 值（阈值百分比）
     pub fn y(&self, x: BlockNumber) -> u32 {
         match self {
             Curve::LinearDecreasing { begin, end, length } => {
@@ -84,7 +109,7 @@ impl Curve {
                     return *end;
                 }
 
-                // 计算斜率
+                // Calculate slope / 计算斜率
                 let slope = fixed_from_i64((begin - end) as i64) * fixed_from_i64(x as i64)
                     / fixed_from_i64(*length as i64);
 
@@ -116,7 +141,10 @@ impl Curve {
                 x_offset,
                 y_offset,
             } => {
-                // A recipocal (`K/(x+S)-T`) curve: `factor` is `K` and `x_offset` is `S`, `y_offset` is `T`.
+                // Calculate reciprocal curve: K/(x/S + x_offset) - y_offset
+                // 计算倒数曲线：K/(x/S + x_offset) - y_offset
+                // Where factor is K, x_offset is S, y_offset is T
+                // 其中 factor 是 K，x_offset 是 S，y_offset 是 T
                 ((fixed_from_i64(*factor as i64)
                     / (fixed_from_u64(x as u64) / (*x_scale as i128)
                         + fixed_from_u64(*x_offset as u64)))
@@ -126,6 +154,14 @@ impl Curve {
     }
 }
 
+/// Convert CurveArg to Curve
+/// 将 CurveArg 转换为 Curve
+/// 
+/// # Arguments
+/// * `arg` - Curve argument / 曲线参数
+/// 
+/// # Returns
+/// * `Curve` - Converted curve / 转换后的曲线
 pub fn arg_to_curve(arg: CurveArg) -> Curve {
     match arg {
         CurveArg::LinearDecreasing { begin, end, length } => Curve::LinearDecreasing {

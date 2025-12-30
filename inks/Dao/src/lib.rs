@@ -27,84 +27,110 @@ mod dao {
     };
     use primitives::{ensure, ok_or_err};
 
+    /// DAO Contract Storage
+    /// DAO 合约存储结构
+    /// 
+    /// This contract implements a decentralized autonomous organization (DAO) with governance,
+    /// voting, treasury management, and ERC20-like token functionality.
+    /// 该合约实现了去中心化自治组织（DAO），包含治理、投票、国库管理和类似 ERC20 的代币功能。
     #[ink(storage)]
     #[derive(Default)]
     pub struct DAO {
-        /// proposals
+        /// Proposals storage / 提案存储
         proposals: Proposals,
-        /// track of proposal
+        /// Track ID of each proposal / 每个提案的轨道 ID
         track_of_proposal: Mapping<CalllId, u16>,
-        /// caller of proposal
+        /// Caller address of each proposal / 每个提案的提交者地址
         proposal_caller: Mapping<CalllId, Address>,
-        /// deposit of proposal
+        /// Deposit information: (depositor, amount, block_number) / 押金信息：(押金者, 金额, 区块号)
         deposit_of_proposal: Mapping<CalllId, (Address, U256, BlockNumber)>,
-        /// status of proposal
+        /// Status of each proposal / 每个提案的状态
         status_of_proposal: Mapping<CalllId, PropStatus>,
-        /// votes of proposal
+        /// Votes associated with each proposal / 与每个提案关联的投票
         votes_of_proposal: VoteOfProposal,
-        /// submit block number
+        /// Block number when proposal was submitted / 提案提交时的区块号
         submit_block_of_proposal: Mapping<CalllId, BlockNumber>,
 
-        /// tracks
+        /// Voting tracks configuration / 投票轨道配置
         tracks: Tracks,
-        /// track rules (If selector == none, it means entire contract uses a single track)
+        /// Track rules mapping: (contract, selector) -> track_id
+        /// If selector == none, it means entire contract uses a single track
+        /// 轨道规则映射：(合约地址, 选择器) -> 轨道ID
+        /// 如果选择器为 None，表示整个合约使用单一轨道
         track_rules: Mapping<(Option<Address>, Option<Selector>), u16>,
-        /// default track
+        /// Default track ID for proposals / 提案的默认轨道 ID
         defalut_track: Option<u16>,
 
-        /// vote of proposal
+        /// All votes storage / 所有投票存储
         votes: Votes,
-        /// votes of member
+        /// Vote IDs of each member / 每个成员的投票 ID
         vote_of_member: VoteOfMember,
-        /// lock of votes
+        /// Unlocked votes tracking / 已解锁投票追踪
         unlock_of_votes: Mapping<u64, ()>,
 
-        /// sudo call history
+        /// Sudo call history / Sudo 调用历史
         sudo_calls: SudoCalls,
-        /// sudo account
+        /// Sudo account address (can execute any function without governance) / Sudo 账户地址（无需治理即可执行任何函数）
         sudo_account: Option<Address>,
 
-        /// members
+        /// List of all member addresses / 所有成员地址列表
         members: Vec<Address>,
-        /// member can join without gov
+        /// Whether members can join without governance approval / 成员是否可以在无需治理批准的情况下加入
         public_join: bool,
-        /// member balance
+        /// Balance of each member / 每个成员的余额
         member_balances: Mapping<Address, U256>,
-        /// member lock balance
+        /// Locked balance of each member (used for voting) / 每个成员的锁定余额（用于投票）
         member_lock_balances: Mapping<Address, U256>,
-        /// total issuance TOKEN
+        /// Total token issuance / 代币总发行量
         total_issuance: U256,
-        /// Mapping of the token amount which an account is allowed to withdraw
-        /// from another account.
+        /// Mapping of the token amount which an account is allowed to withdraw from another account
+        /// 允许一个账户从另一个账户提取的代币数量映射
         allowances: Mapping<(Address, Address), U256>,
-        /// transfer enable
+        /// Whether token transfer is enabled / 代币转账是否启用
         transfer: bool,
 
-        /// token info
+        /// Token information by token ID / 按代币 ID 的代币信息
         tokens: Mapping<u32, TokenInfo>,
-        /// tokens of member
+        /// Token balances of each member by token ID / 每个成员按代币 ID 的代币余额
         member_tokens: Mapping<(Address, u32), U256>,
 
-        /// next spend id
+        /// Next spend ID for treasury operations / 国库操作的下一个支出 ID
         next_spend_id: u64,
-        /// spends of treasury
+        /// Treasury spend records / 国库支出记录
         spends: Mapping<u64, Spend>,
     }
 
     impl Member for DAO {
-        /// Returns list of members.
+        /// Returns list of all members
+        /// 返回所有成员列表
+        /// 
+        /// # Returns
+        /// * `Vec<Address>` - List of member addresses / 成员地址列表
         #[ink(message)]
         fn list(&self) -> Vec<Address> {
             self.members.clone()
         }
 
-        /// Returns whether public join is enabled.
+        /// Returns whether public join is enabled
+        /// 返回是否启用公开加入
+        /// 
+        /// # Returns
+        /// * `bool` - True if public join is enabled / 如果启用公开加入则返回 true
         #[ink(message)]
         fn get_public_join(&self) -> bool {
             self.public_join
         }
 
-        /// Pubblic join DAO.
+        /// Public join DAO (anyone can join if public_join is enabled)
+        /// 公开加入 DAO（如果启用了 public_join，任何人都可以加入）
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful, Error if failed
+        ///   成功返回 Ok，失败返回 Error
+        /// 
+        /// # Errors
+        /// * `PublicJoinNotAllowed` - Public join is not enabled / 未启用公开加入
+        /// * `MemberExisted` - User is already a member / 用户已经是成员
         #[ink(message)]
         fn public_join(&mut self) -> Result<(), Error> {
             ensure!(self.public_join, Error::PublicJoinNotAllowed);
@@ -122,7 +148,17 @@ mod dao {
             Ok(())
         }
 
-        /// Set public join is enabled or not.
+        /// Set whether public join is enabled or not (governance only)
+        /// 设置是否启用公开加入（仅治理）
+        /// 
+        /// # Arguments
+        /// * `public_join` - True to enable public join, false to disable / true 启用公开加入，false 禁用
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MustCallByGov` - Must be called by governance / 必须由治理调用
         #[ink(message)]
         fn set_public_join(&mut self, public_join: bool) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -131,7 +167,19 @@ mod dao {
             Ok(())
         }
 
-        /// Join to DAO with gov.
+        /// Join to DAO with governance approval (governance only)
+        /// 通过治理批准加入 DAO（仅治理）
+        /// 
+        /// # Arguments
+        /// * `new_user` - Address of the new member / 新成员地址
+        /// * `balance` - Initial token balance for the new member / 新成员的初始代币余额
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MustCallByGov` - Must be called by governance / 必须由治理调用
+        /// * `MemberExisted` - User is already a member / 用户已经是成员
         #[ink(message)]
         fn join(&mut self, new_user: Address, balance: U256) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -150,7 +198,15 @@ mod dao {
             Ok(())
         }
 
-        // levae DAO
+        /// Leave DAO (only if balance is zero)
+        /// 离开 DAO（仅当余额为零时）
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MemberNotExisted` - User is not a member / 用户不是成员
+        /// * `MemberBalanceNotZero` - Member still has balance or locked balance / 成员仍有余额或锁定余额
         #[ink(message)]
         fn levae(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -180,7 +236,15 @@ mod dao {
             Ok(())
         }
 
-        // levae DAO and burn all balance
+        /// Leave DAO and burn all balance (including locked balance)
+        /// 离开 DAO 并销毁所有余额（包括锁定余额）
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MemberNotExisted` - User is not a member / 用户不是成员
+        /// * `LowBalance` - Total issuance underflow / 总发行量下溢
         #[ink(message)]
         fn levae_with_burn(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -197,6 +261,7 @@ mod dao {
                     .member_lock_balances
                     .get(caller)
                     .unwrap_or(U256::from(0));
+            ensure!(self.total_issuance >= amount, Error::LowBalance);
             self.total_issuance -= amount;
 
             // remove user from DAO
@@ -207,7 +272,19 @@ mod dao {
             Ok(())
         }
 
-        /// Delete member from DAO
+        /// Delete member from DAO and burn all balance (governance only)
+        /// 从 DAO 删除成员并销毁所有余额（仅治理）
+        /// 
+        /// # Arguments
+        /// * `user` - Address of the member to delete / 要删除的成员地址
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MustCallByGov` - Must be called by governance / 必须由治理调用
+        /// * `MemberNotExisted` - User is not a member / 用户不是成员
+        /// * `LowBalance` - Total issuance underflow / 总发行量下溢
         #[ink(message)]
         fn delete(&mut self, user: Address) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -218,6 +295,7 @@ mod dao {
             // get amount of user
             let amount = self.member_balances.get(user).unwrap_or(U256::from(0))
                 + self.member_lock_balances.get(user).unwrap_or(U256::from(0));
+            ensure!(self.total_issuance >= amount, Error::LowBalance);
             self.total_issuance -= amount;
 
             // remove user from DAO
@@ -230,31 +308,73 @@ mod dao {
     }
 
     impl Erc20 for DAO {
+        /// Returns the token name (ERC20 standard)
+        /// 返回代币名称（ERC20 标准）
+        /// 
+        /// # Returns
+        /// * `Vec<u8>` - Token name / 代币名称
         #[ink(message)]
         fn name(&self) -> Vec<u8> {
             return Vec::new();
         }
 
+        /// Returns the token symbol (ERC20 standard)
+        /// 返回代币符号（ERC20 标准）
+        /// 
+        /// # Returns
+        /// * `Vec<u8>` - Token symbol / 代币符号
         #[ink(message)]
         fn symbol(&self) -> Vec<u8> {
             return Vec::new();
         }
 
+        /// Returns the number of decimals (ERC20 standard)
+        /// 返回小数位数（ERC20 标准）
+        /// 
+        /// # Returns
+        /// * `u8` - Number of decimals (12) / 小数位数（12）
         #[ink(message)]
         fn decimals(&self) -> u8 {
             12
         }
 
+        /// Returns the total token supply (ERC20 standard)
+        /// 返回代币总供应量（ERC20 标准）
+        /// 
+        /// # Returns
+        /// * `U256` - Total token supply / 代币总供应量
         #[ink(message)]
         fn total_supply(&self) -> U256 {
             self.total_issuance
         }
 
+        /// Returns the free (unlocked) balance of an account (ERC20 standard)
+        /// 返回账户的可用（未锁定）余额（ERC20 标准）
+        /// 
+        /// # Arguments
+        /// * `owner` - Address of the account / 账户地址
+        /// 
+        /// # Returns
+        /// * `U256` - Free balance (total balance - locked balance) / 可用余额（总余额 - 锁定余额）
         #[ink(message)]
         fn balance_of(&self, owner: Address) -> U256 {
             self.free_balance(owner)
         }
 
+        /// Transfer tokens from caller to another address (ERC20 standard)
+        /// 从调用者向另一个地址转账代币（ERC20 标准）
+        /// 
+        /// # Arguments
+        /// * `to` - Recipient address / 接收者地址
+        /// * `value` - Amount to transfer / 转账金额
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `TransferDisable` - Transfer is disabled / 转账已禁用
+        /// * `MemberNotExisted` - Caller or recipient is not a member / 调用者或接收者不是成员
+        /// * `LowBalance` - Insufficient free balance / 可用余额不足
         #[ink(message)]
         fn transfer(&mut self, to: Address, value: U256) -> Result<(), Error> {
             ensure!(self.transfer, Error::TransferDisable);
@@ -271,16 +391,31 @@ mod dao {
             let free = self.free_balance(caller);
             ensure!(free >= value, Error::LowBalance);
 
-            let total = self.member_balances.get(to).unwrap();
-            self.member_balances.insert(caller, &(total - value));
-            self.member_balances.insert(
-                to,
-                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + value),
-            );
+            let caller_balance = self.member_balances.get(caller).unwrap();
+            let to_balance = self.member_balances.get(to).unwrap_or(U256::from(0));
+            
+            self.member_balances.insert(caller, &(caller_balance - value));
+            self.member_balances.insert(to, &(to_balance + value));
 
             Ok(())
         }
 
+        /// Transfer tokens from one address to another using allowance (ERC20 standard)
+        /// 使用授权额度从一个地址向另一个地址转账代币（ERC20 标准）
+        /// 
+        /// # Arguments
+        /// * `from` - Address to transfer from / 转出地址
+        /// * `to` - Address to transfer to / 转入地址
+        /// * `value` - Amount to transfer / 转账金额
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `TransferDisable` - Transfer is disabled / 转账已禁用
+        /// * `InsufficientAllowance` - Insufficient allowance / 授权额度不足
+        /// * `MemberNotExisted` - From or to address is not a member / 转出或转入地址不是成员
+        /// * `LowBalance` - Insufficient free balance / 可用余额不足
         #[ink(message)]
         fn transfer_from(&mut self, from: Address, to: Address, value: U256) -> Result<(), Error> {
             ensure!(self.transfer, Error::TransferDisable);
@@ -293,18 +428,26 @@ mod dao {
             let free = self.free_balance(from);
             ensure!(free >= value, Error::LowBalance);
 
-            let total = self.member_balances.get(to).unwrap();
-            self.member_balances.insert(from, &(total - value));
-            self.member_balances.insert(
-                to,
-                &(self.member_balances.get(to).unwrap_or(U256::from(0)) + value),
-            );
+            let from_balance = self.member_balances.get(from).unwrap();
+            let to_balance = self.member_balances.get(to).unwrap_or(U256::from(0));
+            
+            self.member_balances.insert(from, &(from_balance - value));
+            self.member_balances.insert(to, &(to_balance + value));
             self.allowances
                 .insert((from, spender), &(allowance - value));
 
             Ok(())
         }
 
+        /// Approve spender to transfer tokens on behalf of caller (ERC20 standard)
+        /// 授权支出者代表调用者转账代币（ERC20 标准）
+        /// 
+        /// # Arguments
+        /// * `spender` - Address to approve / 被授权的地址
+        /// * `value` - Amount to approve / 授权金额
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
         #[ink(message)]
         fn approve(&mut self, spender: Address, value: U256) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -313,11 +456,31 @@ mod dao {
             Ok(())
         }
 
+        /// Returns the amount of tokens that spender is allowed to transfer from owner (ERC20 standard)
+        /// 返回支出者被允许从所有者转账的代币数量（ERC20 标准）
+        /// 
+        /// # Arguments
+        /// * `owner` - Token owner address / 代币所有者地址
+        /// * `spender` - Spender address / 支出者地址
+        /// 
+        /// # Returns
+        /// * `U256` - Allowance amount / 授权额度
         #[ink(message)]
         fn allowance(&mut self, owner: Address, spender: Address) -> U256 {
             self.allowances.get((owner, spender)).unwrap_or_default()
         }
 
+        /// Burn tokens from caller's balance (reduces total supply)
+        /// 销毁调用者余额中的代币（减少总供应量）
+        /// 
+        /// # Arguments
+        /// * `amount` - Amount of tokens to burn / 要销毁的代币数量
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `LowBalance` - Insufficient free balance / 可用余额不足
         #[ink(message)]
         fn burn(&mut self, amount: U256) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -327,10 +490,19 @@ mod dao {
 
             let total = self.member_balances.get(caller).unwrap();
             self.member_balances.insert(caller, &(total - amount));
+            self.total_issuance -= amount;
 
             Ok(())
         }
 
+        /// Returns the locked balance of an account (used for voting)
+        /// 返回账户的锁定余额（用于投票）
+        /// 
+        /// # Arguments
+        /// * `owner` - Address of the account / 账户地址
+        /// 
+        /// # Returns
+        /// * `U256` - Locked balance / 锁定余额
         #[ink(message)]
         fn lock_balance_of(&self, owner: Address) -> U256 {
             self.member_lock_balances
@@ -340,7 +512,20 @@ mod dao {
     }
 
     impl Sudo for DAO {
-        /// If sudo is enabled, sudo account can call any function without gov
+        /// Execute a call with sudo privileges (sudo account only)
+        /// 使用 sudo 权限执行调用（仅 sudo 账户）
+        /// 
+        /// If sudo is enabled, sudo account can call any function without governance approval.
+        /// 如果启用了 sudo，sudo 账户可以在无需治理批准的情况下调用任何函数。
+        /// 
+        /// # Arguments
+        /// * `call` - Call to execute / 要执行的调用
+        /// 
+        /// # Returns
+        /// * `Result<Vec<u8>, Error>` - Execution result / 执行结果
+        /// 
+        /// # Errors
+        /// * `CallFailed` - Not sudo account or call execution failed / 不是 sudo 账户或调用执行失败
         #[ink(message)]
         fn sudo(&mut self, call: Call) -> Result<Vec<u8>, Error> {
             let caller = self.env().caller();
@@ -361,7 +546,17 @@ mod dao {
             result
         }
 
-        /// After ensuring stable operation of DAO, delete sudo.
+        /// Remove sudo account (governance only)
+        /// 删除 sudo 账户（仅治理）
+        /// 
+        /// After ensuring stable operation of DAO, delete sudo to make it fully decentralized.
+        /// 在确保 DAO 稳定运行后，删除 sudo 以使其完全去中心化。
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MustCallByGov` - Must be called by governance / 必须由治理调用
         #[ink(message)]
         fn remove_sudo(&mut self) -> Result<(), Error> {
             self.ensure_from_gov()?;
@@ -395,7 +590,9 @@ mod dao {
             let mut list = Vec::new();
             let start = (page - 1) * size;
             for i in start..start + size {
-                list.push(self.tracks.get(i).unwrap())
+                if let Some(track) = self.tracks.get(i) {
+                    list.push(track);
+                }
             }
             list
         }
@@ -487,7 +684,9 @@ mod dao {
             let mut list = Vec::new();
             let start = ((page - 1) * size) as u32;
             for i in start..start + size as u32 {
-                list.push(self.proposals.get(i as u32).unwrap())
+                if let Some(proposal) = self.proposals.get(i as u32) {
+                    list.push(proposal);
+                }
             }
             list
         }
@@ -497,7 +696,20 @@ mod dao {
             self.proposals.get(id)
         }
 
-        /// Submit a proposal to DAO
+        /// Submit a proposal to DAO for governance voting
+        /// 向 DAO 提交提案以供治理投票
+        /// 
+        /// # Arguments
+        /// * `call` - Call to execute if proposal passes / 提案通过后要执行的调用
+        /// * `track_id` - Voting track ID to use / 要使用的投票轨道 ID
+        /// 
+        /// # Returns
+        /// * `Result<CalllId, Error>` - Proposal ID if successful / 成功返回提案 ID
+        /// 
+        /// # Errors
+        /// * `MemberNotExisted` - Caller is not a member / 调用者不是成员
+        /// * `NoTrack` - Track ID is invalid / 轨道 ID 无效
+        /// * `MaxBalanceOverflow` - Call amount exceeds track max balance / 调用金额超过轨道最大余额
         #[ink(message)]
         fn submit_proposal(&mut self, call: Call, track_id: u16) -> Result<CalllId, Error> {
             let caller = self.env().caller();
@@ -514,7 +726,7 @@ mod dao {
 
             // check call amount
             let track = self.tracks.get(track_id).unwrap();
-            ensure!(call.amount >= track.max_balance, Error::MaxBalanceOverflow);
+            ensure!(call.amount <= track.max_balance, Error::MaxBalanceOverflow);
 
             // save proposal
             let call_id = self.proposals.insert(&call);
@@ -562,7 +774,22 @@ mod dao {
             Ok(())
         }
 
-        /// Confirm a proposal with deposit TOKEN.
+        /// Confirm a proposal by depositing tokens (payable)
+        /// 通过存入代币确认提案（可支付）
+        /// 
+        /// This moves the proposal from Pending to Ongoing status and starts the voting period.
+        /// 这将提案从待处理状态移动到进行中状态，并开始投票期。
+        /// 
+        /// # Arguments
+        /// * `proposal_id` - ID of the proposal to confirm / 要确认的提案 ID
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `InvalidProposalStatus` - Proposal is not in Pending status / 提案不在待处理状态
+        /// * `InvalidDepositTime` - Too early to deposit (prepare period not passed) / 存入时间过早（准备期未过）
+        /// * `InvalidDeposit` - Deposit amount is less than required / 存入金额少于要求
         #[ink(message, payable)]
         fn deposit_proposal(&mut self, proposal_id: CalllId) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -625,7 +852,22 @@ mod dao {
             self.votes.get(vote_id)
         }
 
-        /// Vote for a proposal
+        /// Vote for a proposal (payable - the transferred value is locked as voting weight)
+        /// 对提案投票（可支付 - 转账的金额将作为投票权重被锁定）
+        /// 
+        /// # Arguments
+        /// * `proposal_id` - ID of the proposal to vote on / 要投票的提案 ID
+        /// * `opinion` - Vote opinion (YES or NO) / 投票意见（是或否）
+        /// 
+        /// # Returns
+        /// * `Result<(), Error>` - Ok if successful / 成功返回 Ok
+        /// 
+        /// # Errors
+        /// * `MemberNotExisted` - Caller is not a member / 调用者不是成员
+        /// * `LowBalance` - Insufficient free balance / 可用余额不足
+        /// * `InvalidProposalStatus` - Proposal is not in Ongoing status / 提案不在进行中状态
+        /// * `PropNotOngoing` - Proposal is not ongoing / 提案未在进行中
+        /// * `InvalidVoteTime` - Voting period has ended / 投票期已结束
         #[ink(message)]
         fn submit_vote(&mut self, proposal_id: CalllId, opinion: Opinion) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -718,6 +960,7 @@ mod dao {
                 .member_lock_balances
                 .get(caller)
                 .unwrap_or(U256::from(0));
+            ensure!(lock >= vote.pledge, Error::LowBalance);
             self.member_lock_balances
                 .insert(caller, &(lock - vote.pledge));
 
@@ -760,6 +1003,7 @@ mod dao {
                 .member_lock_balances
                 .get(caller)
                 .unwrap_or(U256::from(0));
+            ensure!(lock >= vote.pledge, Error::LowBalance);
             self.member_lock_balances
                 .insert(caller, &(lock - vote.pledge));
             self.unlock_of_votes.insert(vote_id, &());
@@ -798,16 +1042,16 @@ mod dao {
                 return Err(Error::ProposalInDecision);
             }
 
+            //  Set the status to approved first (CEI pattern: Checks-Effects-Interactions)
+            self.status_of_proposal
+                .insert(proposal_id, &PropStatus::Approved(now));
+
             // Return the deposit amount.
             let deposit = self.deposit_of_proposal.get(proposal_id).unwrap();
             let result = self.env().transfer(deposit.0, deposit.1);
             if result.is_err() {
                 return Err(Error::TransferFailed);
             }
-
-            //  Set the status to approved.
-            self.status_of_proposal
-                .insert(proposal_id, &PropStatus::Approved(now));
 
             let result = self.exec_call(call);
             self.env().emit_event(ProposalExecution {
@@ -1037,7 +1281,7 @@ mod dao {
                 ids.push(self.defalut_track.unwrap());
             }
 
-            return Vec::new();
+            return ids;
         }
 
         /// Get track of call
@@ -1060,15 +1304,18 @@ mod dao {
             let vote_ids = self.votes_of_proposal.list(proposal_id, 1, 10000000);
             let mut votes = Vec::new();
             for id in vote_ids {
-                let vote = self.votes.get(id.1).unwrap();
-                votes.push(vote);
+                if let Some(vote) = self.votes.get(id.1) {
+                    votes.push(vote);
+                }
             }
 
             // get track
             let track = self.get_track(proposal_id)?;
 
             // get vote begin and end time
-            let (_, _, begin) = self.deposit_of_proposal.get(proposal_id).unwrap();
+            let (_, _, begin) = self.deposit_of_proposal
+                .get(proposal_id)
+                .ok_or(Error::InvalidProposalStatus)?;
             let end = begin + track.max_deciding;
             let confirm_period = track.confirm_period;
             let all = self.total_issuance;
@@ -1100,18 +1347,24 @@ mod dao {
                     }
                 }
 
-                if yes * 10000 / no >= min_approval && support * 10000 / all >= min_support {
-                    if vote.vote_block - last_achieve_block > confirm_period {
-                        is_confirm = true;
-                        break;
-                    }
+                // 防止除零错误
+                if no > U256::from(0) && all > U256::from(0) {
+                    let approval_ratio = yes * 10000 / no;
+                    let support_ratio = support * 10000 / all;
+                    
+                    if approval_ratio >= min_approval && support_ratio >= min_support {
+                        if vote.vote_block - last_achieve_block > confirm_period {
+                            is_confirm = true;
+                            break;
+                        }
 
-                    // 记录上次成功的投票块
-                    if last_achieve_block == 0 {
-                        last_achieve_block = vote.vote_block;
+                        // 记录上次成功的投票块
+                        if last_achieve_block == 0 {
+                            last_achieve_block = vote.vote_block;
+                        }
+                    } else {
+                        last_achieve_block = 0;
                     }
-                } else {
-                    last_achieve_block = 0;
                 }
             }
 

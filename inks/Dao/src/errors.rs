@@ -1,68 +1,70 @@
+/// Error types for DAO contract
+/// DAO 合约错误类型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Error {
-    /// token not found
+    /// Token not found / 代币未找到
     TokenNotFound,
-    /// Returned if member already exists.
+    /// Member already exists / 成员已存在
     MemberExisted,
-    /// Returned if  member does not exist.
+    /// Member does not exist / 成员不存在
     MemberNotExisted,
-    /// Returned if member has balance.
+    /// Member still has balance (cannot leave) / 成员仍有余额（无法离开）
     MemberBalanceNotZero,
-    /// Returned if member public join not allowed.
+    /// Public join is not allowed / 不允许公开加入
     PublicJoinNotAllowed,
-    /// Returned if balance is too low.
+    /// Balance is too low / 余额不足
     LowBalance,
-    /// Returned if allowance is too low.
+    /// Allowance is too low / 授权额度不足
     InsufficientAllowance,
-    /// Returned if call failed.
+    /// Call execution failed / 调用执行失败
     CallFailed,
-    /// Returned if decision deposit is invalid.
+    /// Decision deposit is invalid / 决定押金无效
     InvalidDeposit,
-    /// Returned if transfer failed.
+    /// Transfer failed / 转账失败
     TransferFailed,
-    /// must call by gov account.
+    /// Must be called by governance / 必须由治理调用
     MustCallByGov,
-    /// Prposal is not ongoing
+    /// Proposal is not ongoing / 提案未在进行中
     PropNotOngoing,
-    /// Prposal is not end
+    /// Proposal is not ended / 提案未结束
     PropNotEnd,
-    /// Returned if proposal is invalid.
+    /// Proposal is invalid / 提案无效
     InvalidProposal,
-    /// Returned if proposal status is invalid.
+    /// Proposal status is invalid / 提案状态无效
     InvalidProposalStatus,
-    /// Returned if proposal is not caller.
+    /// Proposal caller is invalid / 提案调用者无效
     InvalidProposalCaller,
-    /// Returned if deposit time is invalid.
+    /// Deposit time is invalid / 存入时间无效
     InvalidDepositTime,
-    /// Returned if vote time is invalid.
+    /// Vote time is invalid / 投票时间无效
     InvalidVoteTime,
-    /// Returned if vote status is invalid.
+    /// Vote status is invalid / 投票状态无效
     InvalidVoteStatus,
-    /// Returned if vote user is invalid.
+    /// Vote user is invalid / 投票用户无效
     InvalidVoteUser,
-    /// Returned if proposal is in decision.
+    /// Proposal is in decision period / 提案在决策期内
     ProposalInDecision,
-    /// Returned if vote is unlocked.
+    /// Vote is already unlocked / 投票已解锁
     VoteAlreadyUnlocked,
-    /// Returned if vote unlock time is invalid.
+    /// Vote unlock time is invalid / 投票解锁时间无效
     InvalidVoteUnlockTime,
-    /// Returned if proposal is not confirmed.
+    /// Proposal is not confirmed / 提案未确认
     ProposalNotConfirmed,
-    /// Returned if dao has no track.
+    /// DAO has no track / DAO 没有轨道
     NoTrack,
-    /// Returned if max balance overflow track max balance.
+    /// Max balance exceeds track max balance / 最大余额超过轨道最大余额
     MaxBalanceOverflow,
-    /// Returned if transfer is disable.
+    /// Transfer is disabled / 转账已禁用
     TransferDisable,
-    /// Return if vote is invalid.
+    /// Vote is invalid / 投票无效
     InvalidVote,
-    /// Update: set code failed
+    /// Set code failed / 设置代码失败
     SetCodeFailed,
-    /// Spend not found
+    /// Spend record not found / 支出记录未找到
     SpendNotFound,
-    /// Spend already exists
+    /// Spend already executed / 支出已执行
     SpendAlreadyExecuted,
-    /// Spend transfer error
+    /// Spend transfer error / 支出转账错误
     SpendTransferError,
 }

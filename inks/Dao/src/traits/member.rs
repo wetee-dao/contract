@@ -3,6 +3,11 @@ use ink::{Address, U256};
 
 use crate::errors::Error;
 
+/// Member management interface
+/// 成员管理接口
+/// 
+/// This trait defines operations for managing DAO members including joining, leaving, and deletion.
+/// 该 trait 定义了管理 DAO 成员的操作，包括加入、离开和删除。
 #[ink::trait_definition]
 pub trait Member {
     #[ink(message)]

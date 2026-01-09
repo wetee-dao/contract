@@ -1,5 +1,5 @@
 use ink_e2e::ContractsBackend;
-use subnet::{Subnet, SubnetRef};
+use subnet::{SubnetRef};
 use ink::primitives::AccountIdMapper;
 
 use super::cloud::*;

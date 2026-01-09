@@ -219,16 +219,16 @@ mod pod {
             Ok(())
         }
 
-        /// ensure the caller is from side chain
-        fn ensure_from_side_chain(&self) -> Result<(), Error> {
-            let caller = self.env().caller();
-            ensure!(
-                caller == self.side_chain_multi_key,
-                Error::InvalidSideChainCaller
-            );
+        // /// ensure the caller is from side chain
+        // fn ensure_from_side_chain(&self) -> Result<(), Error> {
+        //     let caller = self.env().caller();
+        //     ensure!(
+        //         caller == self.side_chain_multi_key,
+        //         Error::InvalidSideChainCaller
+        //     );
 
-            Ok(())
-        }
+        //     Ok(())
+        // }
     }
 }
 

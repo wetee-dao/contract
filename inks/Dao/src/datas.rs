@@ -144,22 +144,6 @@ pub enum PropStatus {
     Canceled,
 }
 
-/// Voting Statistics.
-/// 投票数据统计
-#[derive(Clone)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout)
-)]
-#[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub struct Tally {
-    /// The number of yes votes
-    /// 同意的数量
-    pub yes: U256,
-    /// The number of no votes
-    /// 不同意的数量
-    pub no: U256,
-}
 
 /// Proposal ID type / 提案 ID 类型
 pub type CalllId = u32;
@@ -225,21 +209,20 @@ pub struct Spend {
     pub payout: bool,
 }
 
-
-/// Proposals storage mapping / 提案存储映射
+// Proposals storage mapping / 提案存储映射
 primitives::define_map!(Proposals, CalllId, Call);
 
-/// Tracks storage mapping / 轨道存储映射
+// Tracks storage mapping / 轨道存储映射
 primitives::define_map!(Tracks, u16, Track);
 
-/// Votes storage mapping / 投票存储映射
+// Votes storage mapping / 投票存储映射
 primitives::define_map!(Votes, u64, VoteInfo);
 
-/// Sudo calls storage mapping / Sudo 调用存储映射
+// Sudo calls storage mapping / Sudo 调用存储映射
 primitives::define_map!(SudoCalls, CalllId, Call);
 
-/// Vote IDs of proposals (double mapping) / 提案的投票 ID（双重映射）
+// Vote IDs of proposals (double mapping) / 提案的投票 ID（双重映射）
 primitives::double_u32_map!(VoteOfProposal, CalllId, u64);
 
-/// Vote IDs of members (double mapping) / 成员的投票 ID（双重映射）
+// Vote IDs of members (double mapping) / 成员的投票 ID（双重映射）
 primitives::double_u32_map!(VoteOfMember, Address, u64);

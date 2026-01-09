@@ -845,6 +845,9 @@ mod cloud {
     }
 }
 
+#[cfg(test)]
+mod tests;
+
 // #[cfg(all(test, feature = "e2e-tests"))]
 #[cfg(test)]
 mod e2e_tests;

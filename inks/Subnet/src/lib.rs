@@ -5,7 +5,7 @@ mod errors;
 mod events;
 
 #[ink::contract]
-mod subnet {
+pub mod subnet {
     use ink::{prelude::vec::Vec, storage::Mapping, H256, U256};
     use primitives::{ensure, ok_or_err, AssetInfo};
 

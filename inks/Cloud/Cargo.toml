@@ -18,6 +18,8 @@ subnet = {path = "../Subnet", default-features = false, features = ["ink-as-depe
 [dev-dependencies]
 ink_e2e = {workspace = true}
 ink_sandbox = { workspace = true }
+cloud-test-macros = { path = "./src/test-macros" }
+
 
 [lib]
 path = "src/lib.rs"

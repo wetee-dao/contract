@@ -177,6 +177,7 @@ pub mod subnet {
             if info.is_none() || price.is_none() {
                 return None;
             }
+            
             Some((info.unwrap(), price.unwrap()))
         }
 

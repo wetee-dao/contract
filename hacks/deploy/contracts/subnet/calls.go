@@ -1427,12 +1427,12 @@ func (c *Subnet) QueryEpochInfo(
 
 func (c *Subnet) DryRunSetEpochSolt(
 	epoch_solt uint32, __ink_params chain.DryRunParams,
-) (*util.NullTuple, *chain.DryRunReturnGas, error) {
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "set_epoch_solt")
 	}
-	v, gas, err := chain.DryRunInk[util.NullTuple](
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1446,6 +1446,10 @@ func (c *Subnet) DryRunSetEpochSolt(
 	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
 		return nil, nil, err
 	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
 	return v, gas, nil
 }
 

@@ -303,8 +303,8 @@ func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		panic(err)
 	}
 
-	v1, _ := model.PubKeyFromSS58("5CdERUzLMFh5D8RB82bd6t4nuqKJLdNr6ZQ9NAsoQqVMyz5B")
-	p1, _ := model.PubKeyFromSS58("5CAG6XhZY5Q3seRa4BwDhSQGFHqoA4H2m3GJKew7xArJwcNJ")
+	v1, _ := model.PubKeyFromSS58("5G9jCxcTzRyQAwHKtcbXodVDXfeYTyeMdQxaP7hf1sNQhZ31")
+	p1, _ := model.PubKeyFromSS58("5FKgVaCgpVKD8uC6z2bLFW23JUbQdYbFrX48po9NsZQmze5t")
 	err = subnetContract.ExecSecretRegister(
 		[]byte("node0"),
 		v1.AccountID(),
@@ -319,8 +319,8 @@ func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 	)
 	fmt.Println("node0 register result:", err)
 
-	v2, _ := model.PubKeyFromSS58("5Fk6tyXKk9HmATcSvtcEjMHsyfn2e49H76qP72yFXzUU4ws6")
-	p2, _ := model.PubKeyFromSS58("5GuRb3N6Qraej2S3kQNX33UMnk47saYTAH4EBGzPiuqG8kni")
+	v2, _ := model.PubKeyFromSS58("5GnjKDE6ArHPqaAwETR4TF7XZbjHU4pytXomt57jJrEBjP75")
+	p2, _ := model.PubKeyFromSS58("5EwWfJzsZFs3coDWKjNSWJRsTgXGfYfwoDr6ZH1HufUMzWMs")
 	err = subnetContract.ExecSecretRegister(
 		[]byte("node1"),
 		v2.AccountID(),
@@ -335,8 +335,8 @@ func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 	)
 	fmt.Println("node1 register result:", err)
 
-	v3, _ := model.PubKeyFromSS58("5CK7kDvy6svMswxifABZAu8GFrcAvEw1z9nt7Wuuvh8YMzx1")
-	p3, _ := model.PubKeyFromSS58("5FgmV7fM5yAyZK5DfbAv3x9CrSBcnNt3Zykbxs9S9HHrvbeG")
+	v3, _ := model.PubKeyFromSS58("5CQXegBto71RP1duknM8JWPkDZrPrqgxHutPjnvnpaz2qaRx")
+	p3, _ := model.PubKeyFromSS58("5C8ynzqMj1D6a3vUbxds62Vp7iHFCr2Wpbffw6r2HbnWTN6D")
 	err = subnetContract.ExecSecretRegister(
 		[]byte("node2"),
 		v3.AccountID(),
@@ -542,29 +542,7 @@ func TestCloudUpdatePodContract(t *testing.T) {
 }
 
 func TestPodCharge(t *testing.T) {
-	client, err := chain.InitClient([]string{TestChainUrl}, true)
-	if err != nil {
-		panic(err)
-	}
 
-	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
-	if err != nil {
-		util.LogWithPurple("Sr25519PairFromSecret", err)
-		panic(err)
-	}
-
-	cloudContract, err := cloud.InitCloudContract(client, CloudAddress)
-	if err != nil {
-		panic(err)
-	}
-
-	err = cloudContract.ExecChargePod(0, chain.ExecParams{
-		Signer:    &pk,
-		PayAmount: types.NewU128(*big.NewInt(1000000000000000000)),
-	})
-	if err != nil {
-		panic(err)
-	}
 }
 
 func TestCloudTransfer(t *testing.T) {

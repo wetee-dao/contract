@@ -8,7 +8,7 @@ version = "0.1.0"
 ink = {workspace = true, default-features = false, features = ["unstable-hostfn"]}
 ink_precompiles = { workspace = true, default-features = false }
 scale-info = { workspace = true, default-features = false }
-primitives = {path = "../../primitives", package = "primitives", default-features = false}
+primitives = { workspace = true, default-features = false }
 
 [dev-dependencies]
 ink_e2e = {workspace = true}

@@ -60,7 +60,6 @@ func TestContractInit(t *testing.T) {
 		Code:   util.InkCode{Upload: &cloudCode},
 		Salt:   util.NewSome(salt),
 	})
-
 	if err != nil {
 		util.LogWithPurple("DeployContract", err)
 		panic(err)

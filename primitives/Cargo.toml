@@ -1,16 +1,11 @@
 [package]
-name = "primitives"
+name = "polkadot-primitives"
 version = "0.1.0"
-authors = ["BaiL"]
 edition = "2021"
+description = "PolkaVM 合约用轻量 primitives（ensure!/ok_or_err!）"
+
+[lib]
+name = "polkadot_primitives"
+path = "src/lib.rs"
 
 [dependencies]
-ink = { workspace = true, default-features = false, features = ["unstable-hostfn"] }
-ink_precompiles = { workspace = true, default-features = false }
-scale-info = { workspace = true, default-features = false }
-
-[features]
-default = ["std"]
-std = [
-    "ink/std",
-]

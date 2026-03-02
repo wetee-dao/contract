@@ -1,6 +1,13 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-//! 供 PolkaVM/wrevive 合约使用的轻量 primitives：仅导出 ensure! / ok_or_err! 宏。
+mod int;
+mod mapping;
+mod mapping_key;
+mod types;
+
+pub use int::*;
+pub use mapping::*;
+pub use types::*;
 
 #[macro_export]
 macro_rules! ensure {
@@ -20,3 +27,15 @@ macro_rules! ok_or_err {
         }
     };
 }
+
+
+pub fn u64_to_u8_32(value: u64) -> [u8; 32] {
+    let mut arr = [0u8; 32];
+    let bytes = value.to_be_bytes();
+
+    arr[24..32].copy_from_slice(&bytes);
+    arr
+}
+
+#[cfg(test)]
+mod tests;

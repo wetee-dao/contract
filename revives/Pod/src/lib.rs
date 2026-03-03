@@ -156,23 +156,4 @@ pub mod pod {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use wrevive_api::with_engine;
-
-    #[test]
-    fn deploy_and_getters() {
-        use wrevive_api::Address;
-        let id = 1u64;
-        let owner = Address::from([2u8; 20]);
-        let side_chain = Address::from([3u8; 20]);
-        with_engine(|e| {
-            e.reset();
-            e.set_caller([1u8; 20]);
-        });
-        let _ = pod::new(id, owner, side_chain);
-        assert_eq!(pod::id(), 1);
-        assert_eq!(pod::owner(), owner);
-        assert_eq!(pod::cloud(), Address::from([1u8; 20]));
-    }
-}
+mod tests;

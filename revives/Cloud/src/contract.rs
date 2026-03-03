@@ -709,22 +709,4 @@ pub mod cloud {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use wrevive_api::with_engine;
-
-    #[test]
-    fn deploy_and_getters() {
-        let subnet_addr = Address::from([1u8; 20]);
-        let code_hash = H256::from([2u8; 32]);
-        with_engine(|e| {
-            e.reset();
-            e.set_caller([3u8; 20]);
-        });
-        let _ = cloud::new(subnet_addr, code_hash);
-        assert_eq!(cloud::subnet_address(), subnet_addr);
-        assert_eq!(cloud::mint_interval(), 14400);
-        assert_eq!(cloud::pod_len(), 0);
-        assert_eq!(cloud::pod_contract(), H256::from([2u8; 32]));
-    }
-}
+mod tests;

@@ -1,7 +1,7 @@
 [workspace.package]
 name = "WeTEE"
 authors = ["WeTEE DAO"]
-edition = "2021"
+edition = "2024"
 homepage = "https://wetee.app"
 license = "Apache 2.0"
 repository = "https://github.com/wetee-dao/chain"
@@ -9,29 +9,16 @@ version = "0.1.0"
 
 [workspace]
 members = [
-  # inks
-  # "inks/Dao",
-  # "inks/Subnet",
-  # "inks/Cloud",
-  # "inks/Pod",
-  # "inks/Test",
-  # "inks/Bridge",
-
   # polkadot (wrevive / PolkaVM)
-  "polkadot/Pod",
-  "polkadot/Subnet",
-  "polkadot/Cloud",
+  "revives/Pod",
+  "revives/Subnet",
+  "revives/Cloud",
 
   "primitives",
-  # "primitives2",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-ink = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-beta.1", default-features = false }
-ink_precompiles = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-beta.1", default-features = false }
-ink_e2e = { git = "https://github.com/use-ink/ink",  tag = "v6.0.0-beta.1" }
-ink_sandbox = { git = "https://github.com/use-ink/ink.git", tag = "v6.0.0-beta.1" }
 scale = { package = "parity-scale-codec", version = "3.7.4", default-features = false }
 scale-info = { version = "2.11", default-features = false }
 primitives = { path = "primitives2" }

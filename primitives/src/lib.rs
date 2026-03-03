@@ -1,6 +1,9 @@
 #![no_std]
 
-//! 供 PolkaVM/wrevive 合约使用的轻量 primitives：仅导出 ensure! / ok_or_err! 宏。
+//! 供 PolkaVM/wrevive 合约使用的轻量 primitives：ensure! / ok_or_err! 宏 + 跨合约共享类型。
+
+pub mod types;
+pub use types::*;
 
 #[macro_export]
 macro_rules! ensure {

@@ -6,15 +6,15 @@
 
 extern crate alloc;
 
-#[cfg(not(test))]
+#[cfg(all(not(test), not(feature = "interface")))]
 #[global_allocator]
 static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::BumpAllocator::new();
 
 use parity_scale_codec::Encode as ScaleEncode;
-use wrevive_api::{env, Address, Bytes, H256, ReturnFlags, Storage, U256};
+use wrevive_api::{Address, H256, Storage, U256, env};
 use wrevive_macro::{revive_contract, storage};
 
-pub use primitives::{ensure, ok_or_err};
+pub use primitives::{AssetInfo, ensure, ok_or_err};
 
 /// 合约错误类型（与 inks Pod 保持一致）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ScaleEncode, parity_scale_codec::Decode)]
@@ -31,18 +31,10 @@ pub enum Error {
     UnsupportedAsset,
 }
 
-/// 资产类型：原生或 ERC20（与 primitives AssetInfo 兼容的 SCALE 编码）
-/// 使用 wrevive_api::Bytes、wrevive_api::H256
-#[derive(Debug, Clone, PartialEq, Eq, ScaleEncode, parity_scale_codec::Decode)]
-pub enum AssetInfo {
-    Native(Bytes),
-    ERC20(Bytes, H256),
-}
-
 #[revive_contract]
-mod pod {
+pub mod pod {
     use super::*;
-    use crate::{ensure, AssetInfo, Error};
+    use crate::{AssetInfo, Error, ensure};
 
     /// 云合约地址（父合约）
     const CLOUD_CONTRACT: Storage<Address> = storage!(b"cloud_contract");

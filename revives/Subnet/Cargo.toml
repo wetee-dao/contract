@@ -1,11 +1,16 @@
 [package]
-name = "cloud-polkadot"
+name = "subnet_contract"
 version = "0.1.0"
-edition = "2021"
-description = "Cloud 合约 PolkaVM/wrevive 版本，供 PolkaVM 部署"
+edition = "2024"
+description = "Subnet 合约 PolkaVM/wrevive 版本，供 PolkaVM 部署"
 
-[lib]
-name = "cloud_polkadot"
+[features]
+default = []
+# 作为依赖被引入时启用，禁止本 crate 的 global_allocator，避免与主合约冲突
+interface = []
+
+[[bin]]
+name = "subnet_contract"
 path = "src/lib.rs"
 
 [dependencies]
@@ -14,9 +19,10 @@ polkavm-derive = "0.31"
 alloy-core = { version = "1.5", default-features = false, features = ["sol-types"] }
 pallet-revive-uapi = { version = "0.10", default-features = false }
 parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+pvm-contract-types = { git = "https://github.com/paritytech/cargo-pvm-contract", branch = "main" }
 wrevive-macro = { path = "../../../wrevive/crates/wrevive-macro" }
-wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features = false, features = ["off_chain"] }
-primitives = { path = "../../primitives", package = "polkadot-primitives" }
+wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features = false, features = ["on_chain"] }
+primitives = { path = "../../primitives", package = "primitives" }
 
 [profile.release]
 codegen-units = 1

@@ -1,11 +1,8 @@
 [package]
-name = "polkadot-primitives"
+name = "primitives"
 version = "0.1.0"
-edition = "2021"
-description = "PolkaVM 合约用轻量 primitives（ensure!/ok_or_err!）"
-
-[lib]
-name = "polkadot_primitives"
-path = "src/lib.rs"
+edition = "2024"
 
 [dependencies]
+parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
+wrevive-api = { path = "../../wrevive/crates/wrevive-api", default-features = false }

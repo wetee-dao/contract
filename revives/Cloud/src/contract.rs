@@ -5,7 +5,6 @@
 #![cfg_attr(not(test), no_main)]
 
 extern crate alloc;
-use alloc::vec::Vec;
 
 #[cfg(not(test))]
 #[global_allocator]
@@ -14,33 +13,21 @@ static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::Bump
 mod datas;
 mod errors;
 
-use wrevive_api::{env, Address, BlockNumber, H256, ReturnFlags, Storage, U256};
+use wrevive_api::{Address, BlockNumber, H256, Storage, U256, Vec, env};
 use wrevive_macro::{list_2d, mapping, revive_contract, storage};
 
 pub use datas::{
-    AssetInfo, BlockNumber as DataBlockNumber, Container, ContainerInput, Disk, EditType, K8sCluster,
-    Pod, PodType, RunPrice, Secret, TEEType,
+    AssetInfo, Container, ContainerInput, Disk, EditType,
+    K8sCluster, Pod, PodType, RunPrice, Secret, TEEType,
 };
 pub use errors::Error;
 pub use primitives::{ensure, ok_or_err};
 
 #[revive_contract]
-mod cloud {
+pub mod cloud {
     use super::*;
-    use crate::{ensure, Error};
-    use alloc::vec;
-    use alloc::vec::Vec;
-    use parity_scale_codec::{Decode, Encode};
+    use crate::{Error, ensure};
     use wrevive_api::{List2D, Mapping};
-
-    const SUBNET_WORKER_SELECTOR: [u8; 4] = [0xb5, 0xaf, 0x86, 0x68]; // blake2s("worker")[0..4]
-    const SUBNET_SIDE_CHAIN_KEY_SELECTOR: [u8; 4] = [0x33, 0x4c, 0xf9, 0x07]; // blake2s("side_chain_key")[0..4]
-    const SUBNET_LEVEL_PRICE_SELECTOR: [u8; 4] = [0x99, 0xdf, 0x4d, 0xf3]; // blake2s("level_price")[0..4]
-    const SUBNET_ASSET_SELECTOR: [u8; 4] = [0x48, 0x13, 0x9d, 0x63]; // blake2s("asset")[0..4]
-    const SUBNET_REGION_SELECTOR: [u8; 4] = [0x90, 0x52, 0x4f, 0x41]; // blake2s("region")[0..4]
-
-    const POD_SET_CODE_SELECTOR: [u8; 4] = [0x1c, 0x8e, 0xcd, 0x54]; // blake2s("set_code")[0..4]
-    const POD_PAY_FOR_WORKER_SELECTOR: [u8; 4] = [0x2c, 0x9a, 0x5b, 0x1c]; // blake2s("pay_for_woker")[0..4]
 
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
     const SUBNET_ADDRESS: Storage<Address> = storage!(b"subnet_address");
@@ -90,10 +77,10 @@ mod cloud {
         let pod = PODS.get(env(), &pod_id).map_err(|_| Error::PodNotFound)?;
         let code_hash = POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero());
 
-        // 调用 Pod 合约的 set_code(code_hash)
-        let input = encode_message(POD_SET_CODE_SELECTOR, &code_hash);
-        call_contract_raw(&pod.pod_address, &input).map_err(|_| Error::SetCodeFailed)?;
-
+        // 调用 Pod 合约的 set_code(code_hash)，返回已 decode 的结果
+        pod_contract::pod::interface::set_code(&pod.pod_address, &code_hash)
+            .map_err(|_| Error::SetCodeFailed)?
+            .map_err(|_| Error::SetCodeFailed)?;
         Ok(())
     }
 
@@ -170,10 +157,7 @@ mod cloud {
 
     /// 当前调用者拥有的 Pod 列表（按内部 k2 倒序分页）
     #[revive(message)]
-    pub fn user_pods(
-        start: Option<u64>,
-        size: u64,
-    ) -> Vec<(u64, Pod, Vec<(u64, Container)>, u8)> {
+    pub fn user_pods(start: Option<u64>, size: u64) -> Vec<(u64, Pod, Vec<(u64, Container)>, u8)> {
         let caller = env().caller();
         let ids = POD_OF_USER.desc_list(env(), &caller, start, size as u32);
         let mut out = Vec::new();
@@ -247,14 +231,18 @@ mod cloud {
             hash,
             minted: false,
         };
-        USER_SECRETS.insert(env(), &caller, &s).ok_or(Error::NotFound)
+        USER_SECRETS
+            .insert(env(), &caller, &s)
+            .ok_or(Error::NotFound)
     }
 
     /// 侧链标记 Secret 已 mint（仅 side-chain 可调用）
     #[revive(message)]
     pub fn mint_secret(user: Address, index: u64) -> Result<(), Error> {
         ensure_from_side_chain()?;
-        let mut s = USER_SECRETS.get(env(), &user, index).ok_or(Error::NotFound)?;
+        let mut s = USER_SECRETS
+            .get(env(), &user, index)
+            .ok_or(Error::NotFound)?;
         s.minted = true;
         USER_SECRETS
             .update(env(), &user, index, &s)
@@ -288,7 +276,12 @@ mod cloud {
         match disk {
             Disk::SecretSSD(k, _old, size) => {
                 USER_DISKS
-                    .update(env(), &user, id, &Disk::SecretSSD(k, hash.as_bytes().to_vec(), size))
+                    .update(
+                        env(),
+                        &user,
+                        id,
+                        &Disk::SecretSSD(k, hash.as_bytes().to_vec(), size),
+                    )
                     .ok_or(Error::NotFound)?;
                 Ok(())
             }
@@ -322,10 +315,16 @@ mod cloud {
     pub fn pod_ext_info(pod_id: u64) -> Option<(u64, K8sCluster, Vec<u8>)> {
         let _pod = PODS.get(env(), &pod_id).ok()?;
         let worker_id = WORKER_OF_POD.get(env(), &pod_id).ok()?;
-        let worker: Option<K8sCluster> = subnet_call_decode(SUBNET_WORKER_SELECTOR, &worker_id).ok()?;
-        let worker = worker?;
-        let region: Option<Vec<u8>> = subnet_call_decode(SUBNET_REGION_SELECTOR, &worker.region_id).ok()?;
-        Some((worker_id, worker, region.unwrap_or_default()))
+        let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
+        let worker: K8sCluster = subnet_contract::subnet::interface::worker(&subnet, &worker_id)
+            .ok()
+            .and_then(|o| o)?;
+        let region: Vec<u8> =
+            subnet_contract::subnet::interface::region(&subnet, &worker.region_id)
+                .ok()
+                .and_then(|o| o)
+                .unwrap_or_default();
+        Some((worker_id, worker, region))
     }
 
     /// 按 pod_id 列表批量查询（附带容器与磁盘信息）
@@ -359,7 +358,14 @@ mod cloud {
             let version = POD_VERSION.get(env(), &pod_id).unwrap_or(0);
             let last_mint = LAST_MINT_BLOCK.get(env(), &pod_id).unwrap_or(0);
             let status = POD_STATUS.get(env(), &pod_id).unwrap_or(0);
-            out.push((pod_id, pod, containers_with_disk, version, last_mint, status));
+            out.push((
+                pod_id,
+                pod,
+                containers_with_disk,
+                version,
+                last_mint,
+                status,
+            ));
         }
         out
     }
@@ -411,35 +417,33 @@ mod cloud {
     ) -> Result<(), Error> {
         let caller = env().caller();
 
-        // worker 校验：来自 Subnet 合约
-        let worker: Option<K8sCluster> = subnet_call_decode(SUBNET_WORKER_SELECTOR, &worker_id)?;
-        let worker = worker.ok_or(Error::WorkerNotFound)?;
+        // worker 校验：来自 Subnet 合约（使用 interface 同名函数，返回已 decode 结果）
+        let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
+        let worker: K8sCluster = subnet_contract::subnet::interface::worker(&subnet, &worker_id)
+            .map_err(|_| Error::WorkerNotFound)?
+            .ok_or(Error::WorkerNotFound)?;
         ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
         ensure!(worker.region_id == region_id, Error::RegionNotMatch);
 
-        let side_chain_key: Address = subnet_call_decode(SUBNET_SIDE_CHAIN_KEY_SELECTOR, &())?;
+        let side_chain_key: Address = subnet_contract::subnet::interface::side_chain_key(&subnet)
+            .map_err(|_| Error::NotFound)?;
 
         let pod_id = NEXT_POD_ID.get(env()).unwrap_or(0);
         NEXT_POD_ID.set(env(), &(pod_id + 1));
 
-        // 实例化 Pod 合约：constructor 参数 SCALE 编码（无 selector）
+        // 实例化 Pod 合约：使用 interface 的 instantiate_new，返回 (地址, 已 decode 的 constructor 返回值)
         let transferred = env().value_transferred();
         let code_hash = POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero());
-        let input_data = (pod_id, caller, side_chain_key).encode();
-        let mut addr = [0u8; 20];
-        let r = env().instantiate(
-            pallet_revive_uapi::CallFlags::empty(),
-            code_hash.as_bytes(),
-            10_000_000,
-            10_000_000,
-            U256::ZERO.as_bytes(),
-            transferred.as_bytes(),
-            &input_data,
-            &mut addr,
-            None,
-        );
-        r.map_err(|_| Error::SetCodeFailed)?;
-        let pod_address = Address::from(addr);
+        // 实例化 Pod 合约，若实例化失败统一映射为 SetCodeFailed；忽略构造函数返回值
+        let (pod_address, _ctor_ret) = pod_contract::pod::interface::instantiate_new(
+            &code_hash,
+            &pod_id,
+            &caller,
+            &side_chain_key,
+            &transferred,
+            &U256::ZERO,
+        )
+        .map_err(|_| Error::SetCodeFailed)?;
 
         let now = env().block_number();
         let pod = Pod {
@@ -490,7 +494,9 @@ mod cloud {
         ensure!(pod.owner == caller, Error::NotPodOwner);
 
         POD_STATUS.set(env(), &pod_id, &3u8);
-        let worker_id = WORKER_OF_POD.get(env(), &pod_id).map_err(|_| Error::WorkerNotFound)?;
+        let worker_id = WORKER_OF_POD
+            .get(env(), &pod_id)
+            .map_err(|_| Error::WorkerNotFound)?;
 
         // 在 pods_of_worker 中清掉对应条目（List2D 目前不收缩，仅 clear 产生空洞）
         let all = PODS_OF_WORKER.list_all(env(), &worker_id);
@@ -502,7 +508,9 @@ mod cloud {
             }
         }
         let k2 = found.ok_or(Error::DelFailed)?;
-        PODS_OF_WORKER.clear(env(), &worker_id, k2).ok_or(Error::DelFailed)?;
+        PODS_OF_WORKER
+            .clear(env(), &worker_id, k2)
+            .ok_or(Error::DelFailed)?;
         Ok(())
     }
 
@@ -519,7 +527,9 @@ mod cloud {
         }
 
         if status == 3 {
-            let worker_id = WORKER_OF_POD.get(env(), &pod_id).map_err(|_| Error::WorkerNotFound)?;
+            let worker_id = WORKER_OF_POD
+                .get(env(), &pod_id)
+                .map_err(|_| Error::WorkerNotFound)?;
             POD_STATUS.set(env(), &pod_id, &0u8);
             PODS_OF_WORKER.insert(env(), &worker_id, &pod_id);
             let now = env().block_number();
@@ -561,14 +571,18 @@ mod cloud {
         let worker_id = WORKER_OF_POD
             .get(env(), &pod_id)
             .map_err(|_| Error::WorkerIdNotFound)?;
-        let worker: Option<K8sCluster> = subnet_call_decode(SUBNET_WORKER_SELECTOR, &worker_id)?;
-        let worker = worker.ok_or(Error::WorkerNotFound)?;
+        let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
+        let worker: K8sCluster = subnet_contract::subnet::interface::worker(&subnet, &worker_id)
+            .map_err(|_| Error::WorkerNotFound)?
+            .ok_or(Error::WorkerNotFound)?;
 
         let pod = PODS.get(env(), &pod_id).map_err(|_| Error::PodNotFound)?;
         let containers = POD_CONTAINERS.list_all(env(), &pod_id);
 
-        let level_price: Option<RunPrice> = subnet_call_decode(SUBNET_LEVEL_PRICE_SELECTOR, &pod.level)?;
-        let level_price = level_price.ok_or(Error::LevelPriceNotFound)?;
+        let level_price: RunPrice =
+            subnet_contract::subnet::interface::level_price(&subnet, &pod.level)
+                .map_err(|_| Error::LevelPriceNotFound)?
+                .ok_or(Error::LevelPriceNotFound)?;
 
         let mut pay_value = U256::ZERO;
         for (_cid, c) in containers.iter() {
@@ -582,10 +596,14 @@ mod cloud {
             }
 
             let base = match pod.tee_type {
-                TEEType::SGX => U256::from(c.cpu as u64) * U256::from(level_price.cpu_per)
-                    + U256::from(c.mem as u64) * U256::from(level_price.memory_per),
-                TEEType::CVM => U256::from(c.cpu as u64) * U256::from(level_price.cvm_cpu_per)
-                    + U256::from(c.mem as u64) * U256::from(level_price.cvm_memory_per),
+                TEEType::SGX => {
+                    U256::from(c.cpu as u64) * U256::from(level_price.cpu_per)
+                        + U256::from(c.mem as u64) * U256::from(level_price.memory_per)
+                }
+                TEEType::CVM => {
+                    U256::from(c.cpu as u64) * U256::from(level_price.cvm_cpu_per)
+                        + U256::from(c.mem as u64) * U256::from(level_price.cvm_memory_per)
+                }
             };
 
             let gpu_cost = U256::from(c.gpu as u64) * U256::from(level_price.gpu_per);
@@ -593,8 +611,10 @@ mod cloud {
         }
 
         // Subnet::asset(id) -> Option<(AssetInfo, U256)>
-        let pay_asset: Option<(AssetInfo, U256)> = subnet_call_decode(SUBNET_ASSET_SELECTOR, &pod.pay_asset_id)?;
-        let (asset_info, price) = pay_asset.ok_or(Error::AssetNotFound)?;
+        let (asset_info, price) =
+            subnet_contract::subnet::interface::asset(&subnet, &pod.pay_asset_id)
+                .map_err(|_| Error::AssetNotFound)?
+                .ok_or(Error::AssetNotFound)?;
         if price == U256::ZERO {
             return Err(Error::AssetNotFound);
         }
@@ -602,12 +622,15 @@ mod cloud {
         // 与 ink 一致：pay_value * 1000 / price
         let amount = pay_value * U256::from(1000u64) / price;
 
-        // 调用 Pod 合约支付给 worker.owner
-        let input = encode_message(POD_PAY_FOR_WORKER_SELECTOR, &(worker.owner, asset_info, amount));
-        let raw = call_contract_raw(&pod.pod_address, &input).map_err(|_| Error::PayFailed)?;
-        let mut cur = &raw[..];
-        let r: Result<(), u8> = Result::<(), u8>::decode(&mut cur).map_err(|_| Error::PayFailed)?;
-        r.map_err(|_| Error::PayFailed)?;
+        // 调用 Pod 合约支付给 worker.owner（primitives::AssetInfo 与 Pod 共用同一类型）
+        pod_contract::pod::interface::pay_for_woker(
+            &pod.pod_address,
+            &worker.owner,
+            &asset_info,
+            &amount,
+        )
+        .map_err(|_| Error::PayFailed)?
+        .map_err(|_| Error::PayFailed)?;
         Ok(())
     }
 
@@ -661,22 +684,8 @@ mod cloud {
     }
 
     fn subnet_side_chain_key() -> Address {
-        subnet_call_decode(SUBNET_SIDE_CHAIN_KEY_SELECTOR, &()).unwrap_or(Address::zero())
-    }
-
-    fn subnet_call_decode<R: Decode, A: Encode>(selector: [u8; 4], args: &A) -> Result<R, Error> {
         let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
-        let input = encode_message(selector, args);
-        let raw = call_contract_raw(&subnet, &input)?;
-        let mut cur = &raw[..];
-        R::decode(&mut cur).map_err(|_| Error::NotFound)
-    }
-
-    fn encode_message<A: Encode>(selector: [u8; 4], args: &A) -> Vec<u8> {
-        let mut out = Vec::with_capacity(4 + 32);
-        out.extend_from_slice(&selector);
-        out.extend_from_slice(&args.encode());
-        out
+        subnet_contract::subnet::interface::side_chain_key(&subnet).unwrap_or(Address::zero())
     }
 
     fn add_container(pod_id: u64, container: Container) -> Result<(), Error> {
@@ -696,26 +705,6 @@ mod cloud {
             .clear(env(), &pod_id, container_id)
             .ok_or(Error::DelFailed)?;
         Ok(true)
-    }
-
-    fn call_contract_raw(callee: &Address, input_data: &[u8]) -> Result<Vec<u8>, Error> {
-        let r = env().call(
-            pallet_revive_uapi::CallFlags::empty(),
-            callee,
-            10_000_000,
-            10_000_000,
-            &U256::ZERO,
-            &U256::ZERO,
-            input_data,
-            None,
-        );
-        r.map_err(|_| Error::NotFound)?;
-
-        let size = env().return_data_size() as usize;
-        let mut buf = vec![0u8; size];
-        let mut slice = buf.as_mut_slice();
-        env().return_data_copy(&mut slice, 0);
-        Ok(buf)
     }
 }
 

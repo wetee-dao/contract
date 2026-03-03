@@ -6,14 +6,14 @@
 
 extern crate alloc;
 
-#[cfg(not(test))]
+#[cfg(all(not(test), not(feature = "interface")))]
 #[global_allocator]
 static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::BumpAllocator::new();
 
 mod datas;
 mod errors;
 
-use wrevive_api::{env, Address, BlockNumber, Bytes, H256, ReturnFlags, Storage, U256};
+use wrevive_api::{env, Address, BlockNumber, Bytes, H256, Storage, U256};
 use wrevive_macro::{list, mapping, revive_contract, storage};
 
 pub use datas::{AssetInfo, EpochInfo, Ip, K8sCluster, NodeID, RunPrice, SecretNode};
@@ -21,7 +21,7 @@ pub use errors::Error;
 pub use primitives::{ensure, ok_or_err};
 
 #[revive_contract]
-mod subnet {
+pub mod subnet {
     use super::*;
     use crate::datas::NodeID;
     use crate::{ensure, Error};

@@ -1,50 +1,13 @@
-//! 云合约数据类型（SCALE 编码，使用 wrevive_api 类型）
+//! 云合约数据类型（SCALE 编码），共享类型来自 primitives。
 
 #![allow(unused_imports)]
 extern crate alloc;
 
 use alloc::vec::Vec;
 use parity_scale_codec::{Decode, Encode};
-use wrevive_api::{Address, Bytes, H256, U256};
+use wrevive_api::{Address, Bytes, H256, BlockNumber, U256};
 
-pub type BlockNumber = u32;
-/// 与 ink AccountId 兼容的 32 字节账户标识（用于 pod_key 等）。
-pub type AccountId = [u8; 32];
-
-/// 与 Subnet 合约保持一致的 IP 表示（用于解码 Subnet::worker 返回值）。
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub struct Ip {
-    pub ipv4: Option<u32>,
-    pub ipv6: Option<u128>,
-    pub domain: Option<Bytes>,
-}
-
-/// 与 Subnet 合约保持一致的 K8sCluster（worker）结构（用于跨合约调用解码）。
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub struct K8sCluster {
-    pub name: Bytes,
-    pub owner: Address,
-    pub level: u8,
-    pub region_id: u32,
-    pub start_block: BlockNumber,
-    pub stop_block: Option<BlockNumber>,
-    pub terminal_block: Option<BlockNumber>,
-    pub p2p_id: AccountId,
-    pub ip: Ip,
-    pub port: u32,
-    pub status: u8,
-}
-
-/// 与 Subnet 合约保持一致的运行价格（用于 mint_pod 计算费用）。
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub struct RunPrice {
-    pub cpu_per: u64,
-    pub cvm_cpu_per: u64,
-    pub memory_per: u64,
-    pub cvm_memory_per: u64,
-    pub disk_per: u64,
-    pub gpu_per: u64,
-}
+pub use primitives::{AccountId, AssetInfo, Ip, K8sCluster, RunPrice};
 
 /// Pod 元数据（PolkaVM 下存合约地址，无 PodRef）
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
@@ -159,11 +122,4 @@ impl Default for Secret {
             minted: false,
         }
     }
-}
-
-/// 资产类型（与 Subnet/Pod 一致）
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub enum AssetInfo {
-    Native(Bytes),
-    ERC20(Bytes, H256),
 }

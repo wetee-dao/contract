@@ -1,7 +1,7 @@
 //! Unit tests for Pod contract. Uses off_chain Engine (wrevive_api::with_engine).
 
 use super::*;
-use wrevive_api::{with_engine, Address, U256};
+use wrevive_api::{Address, H256, U256, with_engine};
 
 fn cloud_caller() -> [u8; 20] {
     [1u8; 20]

@@ -29,6 +29,5 @@ wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features =
 primitives = { path = "../../primitives", package = "primitives" }
 
 
-
 [dev-dependencies]
 wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features = false, features = ["off_chain"] }

@@ -22,3 +22,10 @@ resolver = "2"
 scale = { package = "parity-scale-codec", version = "3.7.4", default-features = false }
 scale-info = { version = "2.11", default-features = false }
 primitives = { path = "primitives2" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+overflow-checks = false

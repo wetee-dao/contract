@@ -7,11 +7,15 @@ description = "Pod 合约 PolkaVM/wrevive 版本，供 PolkaVM 部署"
 [features]
 default = []
 # 作为依赖被引入时启用，禁止本 crate 的 global_allocator，避免与主合约冲突
-interface = []
+api = []
 
 [[bin]]
 name = "pod_contract"
-path = "src/lib.rs"
+path = "src/contract.rs"
+
+[lib]
+name = "pod"
+path = "src/contract.rs"
 
 [dependencies]
 pvm-bump-allocator = { git = "https://github.com/paritytech/cargo-pvm-contract", branch = "main" }
@@ -24,12 +28,7 @@ wrevive-macro = { path = "../../../wrevive/crates/wrevive-macro" }
 wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features = false, features = ["on_chain"] }
 primitives = { path = "../../primitives", package = "primitives" }
 
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "z"
-panic = "abort"
-overflow-checks = false
+
 
 [dev-dependencies]
 wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features = false, features = ["off_chain"] }

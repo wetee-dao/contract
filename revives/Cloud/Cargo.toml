@@ -18,15 +18,8 @@ pvm-contract-types = { git = "https://github.com/paritytech/cargo-pvm-contract",
 wrevive-macro = { path = "../../../wrevive/crates/wrevive-macro" }
 wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features = false, features = ["on_chain"] }
 primitives = { path = "../../primitives", package = "primitives" }
-pod_contract = { path = "../Pod", features = ["interface"] }
-subnet_contract = { path = "../Subnet", features = ["interface"] }
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "z"
-panic = "abort"
-overflow-checks = false
+pod_contract = { path = "../Pod", features = ["api"] }
+subnet_contract = { path = "../Subnet", features = ["api"] }
 
 [dev-dependencies]
 wrevive-api = { path = "../../../wrevive/crates/wrevive-api", default-features = false, features = ["off_chain"] }

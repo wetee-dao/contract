@@ -78,7 +78,7 @@ pub mod cloud {
         let code_hash = POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero());
 
         // 调用 Pod 合约的 set_code(code_hash)，返回已 decode 的结果
-        pod_contract::pod::api::set_code(&pod.pod_address, &code_hash)
+        pod::pod::api::set_code(&pod.pod_address, &code_hash)
             .map_err(|_| Error::SetCodeFailed)?
             .map_err(|_| Error::SetCodeFailed)?;
         Ok(())
@@ -316,11 +316,11 @@ pub mod cloud {
         let _pod = PODS.get(env(), &pod_id).ok()?;
         let worker_id = WORKER_OF_POD.get(env(), &pod_id).ok()?;
         let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
-        let worker: K8sCluster = subnet_contract::subnet::api::worker(&subnet, &worker_id)
+        let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
             .ok()
             .and_then(|o| o)?;
         let region: Vec<u8> =
-            subnet_contract::subnet::api::region(&subnet, &worker.region_id)
+            subnet::subnet::api::region(&subnet, &worker.region_id)
                 .ok()
                 .and_then(|o| o)
                 .unwrap_or_default();
@@ -377,17 +377,7 @@ pub mod cloud {
         match asset {
             AssetInfo::Native(_) => {
                 ensure!(env().balance() >= amount, Error::BalanceNotEnough);
-                let r = env().call(
-                    pallet_revive_uapi::CallFlags::empty(),
-                    &to,
-                    1_000_000,
-                    1_000_000,
-                    &U256::ZERO,
-                    &amount,
-                    &[],
-                    None,
-                );
-                r.map_err(|_| Error::PayFailed)?;
+                env().transfer(&to, &amount).map_err(|_| Error::PayFailed)?;
                 Ok(())
             }
             AssetInfo::ERC20(_, _) => Err(Error::PayFailed),
@@ -419,13 +409,13 @@ pub mod cloud {
 
         // worker 校验：来自 Subnet 合约（使用 interface 同名函数，返回已 decode 结果）
         let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
-        let worker: K8sCluster = subnet_contract::subnet::api::worker(&subnet, &worker_id)
+        let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
             .map_err(|_| Error::WorkerNotFound)?
             .ok_or(Error::WorkerNotFound)?;
         ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
         ensure!(worker.region_id == region_id, Error::RegionNotMatch);
 
-        let side_chain_key: Address = subnet_contract::subnet::api::side_chain_key(&subnet)
+        let side_chain_key: Address = subnet::subnet::api::side_chain_key(&subnet)
             .map_err(|_| Error::NotFound)?;
 
         let pod_id = NEXT_POD_ID.get(env()).unwrap_or(0);
@@ -435,7 +425,7 @@ pub mod cloud {
         let transferred = env().value_transferred();
         let code_hash = POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero());
         // 实例化 Pod 合约，若实例化失败统一映射为 SetCodeFailed；忽略构造函数返回值
-        let (pod_address, _ctor_ret) = pod_contract::pod::api::instantiate_new(
+        let (pod_address, _ctor_ret) = pod::pod::api::instantiate_new(
             &code_hash,
             &pod_id,
             &caller,
@@ -572,7 +562,7 @@ pub mod cloud {
             .get(env(), &pod_id)
             .map_err(|_| Error::WorkerIdNotFound)?;
         let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
-        let worker: K8sCluster = subnet_contract::subnet::api::worker(&subnet, &worker_id)
+        let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
             .map_err(|_| Error::WorkerNotFound)?
             .ok_or(Error::WorkerNotFound)?;
 
@@ -580,7 +570,7 @@ pub mod cloud {
         let containers = POD_CONTAINERS.list_all(env(), &pod_id);
 
         let level_price: RunPrice =
-            subnet_contract::subnet::api::level_price(&subnet, &pod.level)
+            subnet::subnet::api::level_price(&subnet, &pod.level)
                 .map_err(|_| Error::LevelPriceNotFound)?
                 .ok_or(Error::LevelPriceNotFound)?;
 
@@ -612,7 +602,7 @@ pub mod cloud {
 
         // Subnet::asset(id) -> Option<(AssetInfo, U256)>
         let (asset_info, price) =
-            subnet_contract::subnet::api::asset(&subnet, &pod.pay_asset_id)
+            subnet::subnet::api::asset(&subnet, &pod.pay_asset_id)
                 .map_err(|_| Error::AssetNotFound)?
                 .ok_or(Error::AssetNotFound)?;
         if price == U256::ZERO {
@@ -623,7 +613,7 @@ pub mod cloud {
         let amount = pay_value * U256::from(1000u64) / price;
 
         // 调用 Pod 合约支付给 worker.owner（primitives::AssetInfo 与 Pod 共用同一类型）
-        pod_contract::pod::api::pay_for_woker(
+        pod::pod::api::pay_for_woker(
             &pod.pod_address,
             &worker.owner,
             &asset_info,
@@ -685,7 +675,7 @@ pub mod cloud {
 
     fn subnet_side_chain_key() -> Address {
         let subnet = SUBNET_ADDRESS.get(env()).unwrap_or(Address::zero());
-        subnet_contract::subnet::api::side_chain_key(&subnet).unwrap_or(Address::zero())
+        subnet::subnet::api::side_chain_key(&subnet).unwrap_or(Address::zero())
     }
 
     fn add_container(pod_id: u64, container: Container) -> Result<(), Error> {

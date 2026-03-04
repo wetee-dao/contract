@@ -6,7 +6,7 @@
 
 extern crate alloc;
 
-#[cfg(all(not(test), not(feature = "interface")))]
+#[cfg(all(not(test), not(feature = "api")))]
 #[global_allocator]
 static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::BumpAllocator::new();
 
@@ -136,19 +136,9 @@ pub mod pod {
         Ok(())
     }
 
-    /// 原生代币转账：通过 call 携带 value 实现（适配 Env::call(callee: &Address, deposit: &U256, value: &U256)）
+    /// 原生代币转账：使用 Env::transfer
     fn transfer_native(to: &Address, amount: U256) -> Result<(), Error> {
-        let result = env().call(
-            pallet_revive_uapi::CallFlags::empty(),
-            to,
-            1_000_000,
-            1_000_000,
-            &U256::ZERO,
-            &amount,
-            &[],
-            None,
-        );
-        match result {
+        match env().transfer(to, &amount) {
             Ok(()) => Ok(()),
             Err(_) => Err(Error::PayFailed),
         }

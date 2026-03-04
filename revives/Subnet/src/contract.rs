@@ -6,7 +6,7 @@
 
 extern crate alloc;
 
-#[cfg(all(not(test), not(feature = "interface")))]
+#[cfg(all(not(test), not(feature = "api")))]
 #[global_allocator]
 static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::BumpAllocator::new();
 
@@ -644,17 +644,7 @@ pub mod subnet {
     }
 
     fn transfer_native(to: &Address, amount: U256) -> Result<(), Error> {
-        let result = env().call(
-            pallet_revive_uapi::CallFlags::empty(),
-            to,
-            1_000_000,
-            1_000_000,
-            &U256::ZERO,
-            &amount,
-            &[],
-            None,
-        );
-        result.map_err(|_| Error::TransferFailed)
+        env().transfer(to, &amount).map_err(|_| Error::TransferFailed)
     }
 }
 

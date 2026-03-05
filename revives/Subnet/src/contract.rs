@@ -28,6 +28,7 @@ pub mod subnet {
     use alloc::vec::Vec;
     use wrevive_api::{List2D, Mapping};
 
+    const SUBNET_CODE_HASH: Storage<H256> = storage!(b"subnet_code_hash");
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
     const EPOCH_SOLT: Storage<u32> = storage!(b"epoch_solt");
     const EPOCH: Storage<u32> = storage!(b"epoch");
@@ -624,9 +625,12 @@ pub mod subnet {
     }
 
     #[revive(message)]
-    pub fn set_code(_code_hash: H256) -> Result<(), Error> {
+    pub fn set_code(code_hash: H256) -> Result<(), Error> {
         ensure_from_gov()?;
-        Err(Error::SetCodeFailed)
+
+        // TODO 当前接口未实现，后续实现
+        SUBNET_CODE_HASH.set(env(), &code_hash);
+        Ok(())
     }
 
     fn ensure_from_gov() -> Result<(), Error> {

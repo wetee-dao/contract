@@ -1,5 +1,5 @@
 [package]
-name = "pod_contract"
+name = "pod"
 version = "0.1.0"
 edition = "2024"
 description = "Pod 合约 PolkaVM/wrevive 版本，供 PolkaVM 部署"
@@ -10,7 +10,7 @@ default = []
 api = []
 
 [[bin]]
-name = "pod_contract"
+name = "pod"
 path = "src/contract.rs"
 
 [lib]

@@ -654,8 +654,11 @@ pub mod cloud {
     }
 
     #[revive(message)]
-    pub fn set_code(_code_hash: H256) -> Result<(), Error> {
+    pub fn set_code(code_hash: H256) -> Result<(), Error> {
         ensure_from_gov()?;
+        
+        // TODO 当前接口未实现，后续实现
+        POD_CONTRACT_CODE_HASH.set(env(), &code_hash);
         Err(Error::SetCodeFailed)
     }
 

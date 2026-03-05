@@ -1,5 +1,5 @@
 [package]
-name = "subnet_contract"
+name = "subnet"
 version = "0.1.0"
 edition = "2024"
 description = "Subnet 合约 PolkaVM/wrevive 版本，供 PolkaVM 部署"
@@ -10,12 +10,12 @@ default = []
 api = []
 
 [[bin]]
-name = "subnet_contract"
+name = "subnet"
 path = "src/contract.rs"
 
 [lib]
 name = "subnet"
-path = "src/lib.rs"
+path = "src/contract.rs"
 
 [dependencies]
 pvm-bump-allocator = { git = "https://github.com/paritytech/cargo-pvm-contract", branch = "main" }

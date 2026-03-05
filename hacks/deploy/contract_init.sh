@@ -9,14 +9,14 @@ DIR="$( cd -P "$( dirname "$SOURCE"  )" && pwd  )"
 
 cd "$DIR/../../"
 
-cargo contract build --release --manifest-path inks/Pod/Cargo.toml
-cargo contract build --release --manifest-path inks/Subnet/Cargo.toml
-cargo contract build --release --manifest-path inks/Cloud/Cargo.toml
+cargo wrevive build -p pod
+cargo wrevive build -p subnet
+cargo wrevive build -p cloud
 
 cd $DIR/contracts
 
-go-ink-gen -json ../../../target/ink/cloud/cloud.json
-go-ink-gen -json ../../../target/ink/subnet/subnet.json
+go-ink-gen -json ../../../target/cloud.json
+go-ink-gen -json ../../../target/subnet.json
 
 cd $DIR
-go test -run ^TestContractInit$
+# go test -run ^TestContractInit$

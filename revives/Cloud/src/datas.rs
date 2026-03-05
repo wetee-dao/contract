@@ -14,6 +14,7 @@ pub use primitives::{AccountId, AssetInfo, Ip, K8sCluster, RunPrice};
 pub struct Pod {
     pub name: Bytes,
     pub owner: Address,
+    
     /// 部署后的 Pod 合约地址
     pub pod_address: Address,
     pub ptype: PodType,

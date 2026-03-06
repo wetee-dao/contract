@@ -5,16 +5,16 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use parity_scale_codec::{Decode, Encode};
-use wrevive_api::{Address, Bytes, H256, BlockNumber, U256};
+use wrevive_api::{AccountId, Address, BlockNumber, Bytes, H256, U256};
 
-pub use primitives::{AccountId, AssetInfo, Ip, K8sCluster, RunPrice};
+pub use primitives::{AssetInfo, Ip, K8sCluster, RunPrice};
 
 /// Pod 元数据（PolkaVM 下存合约地址，无 PodRef）
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 pub struct Pod {
     pub name: Bytes,
     pub owner: Address,
-    
+
     /// 部署后的 Pod 合约地址
     pub pod_address: Address,
     pub ptype: PodType,

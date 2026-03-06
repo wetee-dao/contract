@@ -13,7 +13,7 @@ static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::Bump
 mod datas;
 mod errors;
 
-use wrevive_api::{Address, BlockNumber, H256, Storage, U256, Vec, env};
+use wrevive_api::{Address, AccountId, BlockNumber, H256, Storage, U256, Vec, env};
 use wrevive_macro::{list_2d, mapping, revive_contract, storage};
 
 pub use datas::{
@@ -27,7 +27,7 @@ pub use primitives::{ensure, ok_or_err};
 pub mod cloud {
     use super::*;
     use crate::{Error, ensure};
-    use wrevive_api::{List2D, Mapping};
+    use wrevive_api::{AccountId, List2D, Mapping};
 
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
     const SUBNET_ADDRESS: Storage<Address> = storage!(b"subnet_address");
@@ -40,7 +40,7 @@ pub mod cloud {
     const POD_STATUS: Mapping<u64, u8> = mapping!(b"pod_status");
     const LAST_MINT_BLOCK: Mapping<u64, BlockNumber> = mapping!(b"last_mint_block");
     const POD_REPORT: Mapping<u64, H256> = mapping!(b"pod_report");
-    const POD_KEY: Mapping<u64, H256> = mapping!(b"pod_key");
+    const POD_KEY: Mapping<u64, AccountId> = mapping!(b"pod_key");
     const WORKER_OF_POD: Mapping<u64, u64> = mapping!(b"worker_of_pod");
 
     const POD_OF_USER: List2D<Address, u64, u64> = list_2d!(b"pod_of_user");
@@ -60,7 +60,7 @@ pub mod cloud {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_pod_contract(pod_contract: H256) -> Result<(), Error> {
         ensure_from_gov()?;
         POD_CONTRACT_CODE_HASH.set(env(), &pod_contract);
@@ -72,7 +72,7 @@ pub mod cloud {
         POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero())
     }
 
-    #[revive(message, mutates)]
+    #[revive(message, write)]
     pub fn update_pod_contract(pod_id: u64) -> Result<(), Error> {
         let pod = PODS.get(env(), &pod_id).map_err(|_| Error::PodNotFound)?;
         let code_hash = POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero());
@@ -84,7 +84,7 @@ pub mod cloud {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_mint_interval(t: BlockNumber) -> Result<(), Error> {
         ensure_from_gov()?;
         MINT_INTERVAL.set(env(), &t);
@@ -223,7 +223,7 @@ pub mod cloud {
     }
 
     /// 创建 Secret（owner 调用），返回分配到的 id
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn create_secret(key: Vec<u8>, hash: H256) -> Result<u64, Error> {
         let caller = env().caller();
         let s = Secret {
@@ -237,7 +237,7 @@ pub mod cloud {
     }
 
     /// 侧链标记 Secret 已 mint（仅 side-chain 可调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn mint_secret(user: Address, index: u64) -> Result<(), Error> {
         ensure_from_side_chain()?;
         let mut s = USER_SECRETS
@@ -251,7 +251,7 @@ pub mod cloud {
     }
 
     /// 删除 Secret（owner 调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn del_secret(index: u64) -> Result<(), Error> {
         let caller = env().caller();
         USER_SECRETS
@@ -261,7 +261,7 @@ pub mod cloud {
     }
 
     /// 创建磁盘（owner 调用），返回分配到的 id
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn create_disk(key: Vec<u8>, size: u32) -> Result<u64, Error> {
         let caller = env().caller();
         let d = Disk::SecretSSD(key, Vec::new(), size);
@@ -269,7 +269,7 @@ pub mod cloud {
     }
 
     /// 侧链更新磁盘加密 key（仅 side-chain 可调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn update_disk_key(user: Address, id: u64, hash: H256) -> Result<(), Error> {
         ensure_from_side_chain()?;
         let disk = USER_DISKS.get(env(), &user, id).ok_or(Error::NotFound)?;
@@ -301,7 +301,7 @@ pub mod cloud {
     }
 
     /// 删除磁盘（owner 调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn del_disk(disk_id: u64) -> Result<(), Error> {
         let caller = env().caller();
         USER_DISKS
@@ -371,7 +371,7 @@ pub mod cloud {
     }
 
     /// 从云合约向指定账户转账（仅 gov 可调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn transfer(asset: AssetInfo, to: Address, amount: U256) -> Result<(), Error> {
         ensure_from_gov()?;
         match asset {
@@ -394,7 +394,7 @@ pub mod cloud {
     }
 
     /// 创建 Pod（可支付）：会在链上实例化 `pod-polkadot` 合约并保存 pod 元信息与容器列表。
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn create_pod(
         name: Vec<u8>,
         pod_type: PodType,
@@ -460,8 +460,8 @@ pub mod cloud {
     }
 
     /// side-chain 通知启动 Pod（仅 side_chain_key 可调用）
-    #[revive(message)]
-    pub fn start_pod(pod_id: u64, pod_key: H256) -> Result<(), Error> {
+    #[revive(message, write)]
+    pub fn start_pod(pod_id: u64, pod_key: AccountId) -> Result<(), Error> {
         ensure_from_side_chain()?;
         let status = POD_STATUS.get(env(), &pod_id).unwrap_or(0);
         if status != 0 && status != 1 {
@@ -477,7 +477,7 @@ pub mod cloud {
     }
 
     /// 停止 Pod（仅 owner 可调用）：将状态置为 stopped，并从 worker 列表中移除该 pod。
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn stop_pod(pod_id: u64) -> Result<(), Error> {
         let caller = env().caller();
         let pod = PODS.get(env(), &pod_id).map_err(|_| Error::PodNotFound)?;
@@ -505,7 +505,7 @@ pub mod cloud {
     }
 
     /// 重启 Pod（仅 owner 可调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn restart_pod(pod_id: u64) -> Result<(), Error> {
         let caller = env().caller();
         let pod = PODS.get(env(), &pod_id).map_err(|_| Error::PodNotFound)?;
@@ -531,7 +531,7 @@ pub mod cloud {
     }
 
     /// Mint pod：按 `mint_interval` 扣除资源费用并向 worker 支付（仅 side-chain 可调用）。
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn mint_pod(pod_id: u64, report: H256) -> Result<(), Error> {
         ensure_from_side_chain()?;
 
@@ -631,7 +631,7 @@ pub mod cloud {
     }
 
     /// 批量编辑容器（插入/更新/删除），仅 Pod owner 可调用。
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn edit_container(pod_id: u64, containers: Vec<ContainerInput>) -> Result<(), Error> {
         let caller = env().caller();
         let pod = PODS.get(env(), &pod_id).map_err(|_| Error::PodNotFound)?;
@@ -653,7 +653,7 @@ pub mod cloud {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_code(code_hash: H256) -> Result<(), Error> {
         ensure_from_gov()?;
         

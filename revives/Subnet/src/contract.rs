@@ -13,7 +13,7 @@ static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::Bump
 mod datas;
 mod errors;
 
-use wrevive_api::{env, Address, BlockNumber, Bytes, H256, Storage, U256};
+use wrevive_api::{AccountId, Address, BlockNumber, Bytes, H256, Storage, U256, env};
 use wrevive_macro::{list_2d, mapping, revive_contract, storage};
 
 pub use datas::{AssetDeposit, AssetInfo, EpochInfo, Ip, K8sCluster, NodeID, RunPrice, SecretNode};
@@ -24,7 +24,7 @@ pub use primitives::{ensure, ok_or_err};
 pub mod subnet {
     use super::*;
     use crate::datas::NodeID;
-    use crate::{ensure, Error};
+    use crate::{Error, ensure};
     use alloc::vec::Vec;
     use wrevive_api::{List2D, Mapping};
 
@@ -42,7 +42,7 @@ pub mod subnet {
     const REGIONS: Mapping<u32, Bytes> = mapping!(b"regions");
     const WORKER_STATUS: Mapping<u64, u8> = mapping!(b"worker_status");
     const OWNER_OF_WORKER: Mapping<Address, u64> = mapping!(b"owner_of_worker");
-    const MINT_OF_WORKER: Mapping<[u8; 32], u64> = mapping!(b"mint_of_worker");
+    const MINT_OF_WORKER: Mapping<AccountId, u64> = mapping!(b"mint_of_worker");
     const SECRET_OF_USER: Mapping<Address, u64> = mapping!(b"secret_of_user");
     const SECRET_MORTGAGES: Mapping<u64, U256> = mapping!(b"secret_mortgages");
     const LEVEL_PRICES: Mapping<u8, RunPrice> = mapping!(b"level_prices");
@@ -90,7 +90,7 @@ pub mod subnet {
         }
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_epoch_solt(epoch_solt: u32) -> Result<(), Error> {
         ensure_from_gov()?;
         EPOCH_SOLT.set(env(), &epoch_solt);
@@ -102,7 +102,7 @@ pub mod subnet {
         SIDE_CHAIN_MULTI_KEY.get(env()).unwrap_or(Address::zero())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_region(name: Bytes) -> Result<(), Error> {
         ensure_from_gov()?;
         let id = NEXT_REGION_ID.get(env()).unwrap_or(0);
@@ -133,7 +133,7 @@ pub mod subnet {
         out
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_level_price(level: u8, price: RunPrice) -> Result<(), Error> {
         ensure_from_gov()?;
         LEVEL_PRICES.set(env(), &level, &price);
@@ -145,7 +145,7 @@ pub mod subnet {
         LEVEL_PRICES.get(env(), &level).ok()
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_asset(info: AssetInfo, price: U256) -> Result<(), Error> {
         ensure_from_gov()?;
         let id = NEXT_ASSET_ID.get(env()).unwrap_or(0);
@@ -203,23 +203,25 @@ pub mod subnet {
     }
 
     #[revive(message)]
-    pub fn mint_worker(id: primitives::AccountId) -> Option<(u64, K8sCluster)> {
+    pub fn mint_worker(id: AccountId) -> Option<(u64, K8sCluster)> {
         let worker_id = MINT_OF_WORKER.get(env(), &id).ok()?;
         let mut worker = WORKERS.get(env(), &worker_id).ok()?;
         worker.status = WORKER_STATUS.get(env(), &worker_id).unwrap_or(0);
         Some((worker_id, worker))
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn worker_register(
         name: Bytes,
-        p2p_id: primitives::AccountId,
+        p2p_id: AccountId,
         ip: Ip,
         port: u32,
         level: u8,
         region_id: u32,
     ) -> Result<NodeID, Error> {
-        REGIONS.get(env(), &region_id).map_err(|_| Error::RegionNotExist)?;
+        REGIONS
+            .get(env(), &region_id)
+            .map_err(|_| Error::RegionNotExist)?;
         let caller = env().caller();
         let worker_id = NEXT_WORKER_ID.get(env()).unwrap_or(0);
         let next = worker_id.checked_add(1).ok_or(Error::WorkerNotExist)?;
@@ -245,7 +247,7 @@ pub mod subnet {
         Ok(worker_id)
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn worker_update(id: NodeID, name: Bytes, ip: Ip, port: u32) -> Result<(), Error> {
         let caller = env().caller();
         let mut worker = WORKERS.get(env(), &id).map_err(|_| Error::WorkerNotExist)?;
@@ -257,7 +259,7 @@ pub mod subnet {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn worker_mortgage(
         id: NodeID,
         cpu: u32,
@@ -291,10 +293,12 @@ pub mod subnet {
         Ok(mid)
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn worker_unmortgage(worker_id: NodeID, mortgage_id: u32) -> Result<u32, Error> {
         let caller = env().caller();
-        let worker = WORKERS.get(env(), &worker_id).map_err(|_| Error::WorkerNotExist)?;
+        let worker = WORKERS
+            .get(env(), &worker_id)
+            .map_err(|_| Error::WorkerNotExist)?;
         ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
         ensure!(
             WORKER_STATUS.get(env(), &worker_id).unwrap_or(0) == 0,
@@ -312,14 +316,14 @@ pub mod subnet {
         Ok(mortgage_id)
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn worker_start(id: NodeID) -> Result<(), Error> {
         ensure_from_side_chain()?;
         WORKER_STATUS.set(env(), &id, &1u8);
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn worker_stop(id: NodeID) -> Result<NodeID, Error> {
         let caller = env().caller();
         let worker = WORKERS.get(env(), &id).map_err(|_| Error::WorkerNotExist)?;
@@ -337,7 +341,7 @@ pub mod subnet {
         Ok(id)
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_boot_nodes(nodes: alloc::vec::Vec<u64>) -> Result<(), Error> {
         ensure_from_gov()?;
         let mut lnodes = nodes;
@@ -390,11 +394,11 @@ pub mod subnet {
         out
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn secret_register(
         name: Bytes,
-        validator_id: primitives::AccountId,
-        p2p_id: primitives::AccountId,
+        validator_id: AccountId,
+        p2p_id: AccountId,
         ip: Ip,
         port: u32,
     ) -> Result<NodeID, Error> {
@@ -423,7 +427,7 @@ pub mod subnet {
         Ok(id)
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn secret_update(id: NodeID, name: Bytes, ip: Ip, port: u32) -> Result<(), Error> {
         let caller = env().caller();
         let mut node = SECRETS.get(env(), &id).map_err(|_| Error::NodeNotExist)?;
@@ -435,7 +439,7 @@ pub mod subnet {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn secret_deposit(id: NodeID, deposit: U256) -> Result<(), Error> {
         let caller = env().caller();
         let node = SECRETS.get(env(), &id).map_err(|_| Error::NodeNotExist)?;
@@ -446,7 +450,7 @@ pub mod subnet {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn secret_delete(id: NodeID) -> Result<(), Error> {
         let caller = env().caller();
         let mut node = SECRETS.get(env(), &id).map_err(|_| Error::NodeNotExist)?;
@@ -489,7 +493,7 @@ pub mod subnet {
         out
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn validator_join(id: NodeID) -> Result<(), Error> {
         ensure_from_gov()?;
         SECRETS.get(env(), &id).map_err(|_| Error::NodeNotExist)?;
@@ -516,7 +520,7 @@ pub mod subnet {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn validator_delete(id: NodeID) -> Result<(), Error> {
         ensure_from_gov()?;
         let pending_len = PENDING_SECRETS_LEN.get(env()).unwrap_or(0);
@@ -542,7 +546,7 @@ pub mod subnet {
         Ok(())
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_next_epoch(_node_id: u64) -> Result<(), Error> {
         let caller = env().caller();
         let now = env().block_number();
@@ -592,9 +596,7 @@ pub mod subnet {
         runings.retain(|x| x.1 != 0);
         let out: Vec<(u64, SecretNode, u32)> = runings
             .into_iter()
-            .filter_map(|(id, power)| {
-                SECRETS.get(env(), &id).ok().map(|node| (id, node, power))
-            })
+            .filter_map(|(id, power)| SECRETS.get(env(), &id).ok().map(|node| (id, node, power)))
             .collect();
         Ok(out)
     }
@@ -624,7 +626,7 @@ pub mod subnet {
         PENDING_SECRETS_LEN.set(env(), &0);
     }
 
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_code(code_hash: H256) -> Result<(), Error> {
         ensure_from_gov()?;
 
@@ -648,7 +650,9 @@ pub mod subnet {
     }
 
     fn transfer_native(to: &Address, amount: U256) -> Result<(), Error> {
-        env().transfer(to, &amount).map_err(|_| Error::TransferFailed)
+        env()
+            .transfer(to, &amount)
+            .map_err(|_| Error::TransferFailed)
     }
 }
 

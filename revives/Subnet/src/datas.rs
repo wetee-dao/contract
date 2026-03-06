@@ -1,9 +1,9 @@
 //! 子网合约数据类型（SCALE 编码），共享类型来自 primitives。
 
 use parity_scale_codec::{Decode, Encode};
-use wrevive_api::{Address, Bytes, U256, BlockNumber};
+use wrevive_api::{AccountId, Address, BlockNumber, Bytes, U256};
 
-pub use primitives::{AccountId, AssetInfo, Ip, K8sCluster, NodeID, RunPrice};
+pub use primitives::{AssetInfo, Ip, K8sCluster, NodeID, RunPrice};
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 pub struct SecretNode {

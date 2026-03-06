@@ -412,7 +412,7 @@ type K8sCluster struct { // Composite
 	StartBlock    uint32
 	StopBlock     util.Option[uint32]
 	TerminalBlock util.Option[uint32]
-	P2pId         [32]byte
+	P2pId         util.AccountId
 	Ip            Ip
 	Port          uint32
 	Status        byte
@@ -424,8 +424,8 @@ type Tuple_41 struct { // Tuple
 type SecretNode struct { // Composite
 	Name          []byte
 	Owner         types.H160
-	ValidatorId   [32]byte
-	P2pId         [32]byte
+	ValidatorId   util.AccountId
+	P2pId         util.AccountId
 	StartBlock    uint32
 	TerminalBlock util.Option[uint32]
 	Ip            Ip

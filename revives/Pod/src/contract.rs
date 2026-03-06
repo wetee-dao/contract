@@ -88,7 +88,7 @@ pub mod pod {
     }
 
     /// 向工作节点支付（仅云合约可调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn pay_for_woker(to: Address, asset: AssetInfo, amount: U256) -> Result<(), Error> {
         ensure_from_cloud()?;
         match asset {
@@ -105,7 +105,7 @@ pub mod pod {
     }
 
     /// 提现（仅 owner 可调用）
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn withdraw(asset: AssetInfo, to: Address, amount: U256) -> Result<(), Error> {
         let caller = env().caller();
         let owner = OWNER.get(env()).unwrap_or(Address::zero());
@@ -122,7 +122,7 @@ pub mod pod {
 
     /// 更新合约代码（仅云合约可调用）
     /// 注：pallet-revive Env 当前未暴露 set_code_hash，链上需由 runtime 提供 host fn
-    #[revive(message)]
+    #[revive(message, write)]
     pub fn set_code(_code_hash: H256) -> Result<(), Error> {
         ensure_from_cloud()?;
         // TODO: 若 pallet_revive_uapi 提供 set_code_hash，在此调用

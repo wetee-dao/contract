@@ -1,10 +1,8 @@
 //! 跨合约共享数据类型（SCALE 编码），供 Cloud / Subnet / Pod 等合约统一使用。
 
 use parity_scale_codec::{Decode, Encode};
-use wrevive_api::{Address, BlockNumber, Bytes, H256};
+use wrevive_api::{AccountId, Address, BlockNumber, Bytes, H256};
 
-/// 与 ink AccountId 兼容的 32 字节账户标识
-pub type AccountId = [u8; 32];
 /// Subnet worker 节点 ID
 pub type NodeID = u64;
 

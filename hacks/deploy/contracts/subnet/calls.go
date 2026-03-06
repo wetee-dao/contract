@@ -253,7 +253,7 @@ func (c *Subnet) QueryRegion(
 	return v, gas, nil
 }
 
-func (c *Subnet) DryRunRegions(
+func (c *Subnet) QueryRegions(
 	__ink_params chain.DryRunParams,
 ) (*[]Tuple_16, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -275,46 +275,6 @@ func (c *Subnet) DryRunRegions(
 		return nil, nil, err
 	}
 	return v, gas, nil
-}
-
-func (c *Subnet) ExecRegions(
-	__ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunRegions(_param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xb11965c1",
-			Args:     []any{},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Subnet) CallOfRegions(
-	__ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunRegions(__ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xb11965c1",
-			Args:     []any{},
-		},
-	)
 }
 
 func (c *Subnet) DryRunSetLevelPrice(
@@ -525,7 +485,7 @@ func (c *Subnet) QueryWorker(
 	return v, gas, nil
 }
 
-func (c *Subnet) DryRunWorkers(
+func (c *Subnet) QueryWorkers(
 	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
 ) (*[]Tuple_41, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -547,46 +507,6 @@ func (c *Subnet) DryRunWorkers(
 		return nil, nil, err
 	}
 	return v, gas, nil
-}
-
-func (c *Subnet) ExecWorkers(
-	start util.Option[uint64], size uint64, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunWorkers(start, size, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x38269b2d",
-			Args:     []any{start, size},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Subnet) CallOfWorkers(
-	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunWorkers(start, size, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x38269b2d",
-			Args:     []any{start, size},
-		},
-	)
 }
 
 func (c *Subnet) QueryUserWorker(
@@ -1073,7 +993,7 @@ func (c *Subnet) CallOfSetBootNodes(
 	)
 }
 
-func (c *Subnet) DryRunBootNodes(
+func (c *Subnet) QueryBootNodes(
 	__ink_params chain.DryRunParams,
 ) (*util.Result[[]SecretNode, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -1101,46 +1021,6 @@ func (c *Subnet) DryRunBootNodes(
 	return v, gas, nil
 }
 
-func (c *Subnet) ExecBootNodes(
-	__ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunBootNodes(_param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xa60cc5c0",
-			Args:     []any{},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Subnet) CallOfBootNodes(
-	__ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunBootNodes(__ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xa60cc5c0",
-			Args:     []any{},
-		},
-	)
-}
-
 func (c *Subnet) QueryGetPendingSecrets(
 	__ink_params chain.DryRunParams,
 ) (*[]Tuple_55, *chain.DryRunReturnGas, error) {
@@ -1165,7 +1045,7 @@ func (c *Subnet) QueryGetPendingSecrets(
 	return v, gas, nil
 }
 
-func (c *Subnet) DryRunSecrets(
+func (c *Subnet) QuerySecrets(
 	__ink_params chain.DryRunParams,
 ) (*[]Tuple_58, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -1187,46 +1067,6 @@ func (c *Subnet) DryRunSecrets(
 		return nil, nil, err
 	}
 	return v, gas, nil
-}
-
-func (c *Subnet) ExecSecrets(
-	__ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunSecrets(_param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xf3e23961",
-			Args:     []any{},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Subnet) CallOfSecrets(
-	__ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunSecrets(__ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xf3e23961",
-			Args:     []any{},
-		},
-	)
 }
 
 func (c *Subnet) DryRunSecretRegister(
@@ -1501,7 +1341,7 @@ func (c *Subnet) CallOfSecretDelete(
 	)
 }
 
-func (c *Subnet) DryRunValidators(
+func (c *Subnet) QueryValidators(
 	__ink_params chain.DryRunParams,
 ) (*[]Tuple_61, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -1523,46 +1363,6 @@ func (c *Subnet) DryRunValidators(
 		return nil, nil, err
 	}
 	return v, gas, nil
-}
-
-func (c *Subnet) ExecValidators(
-	__ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunValidators(_param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x9e0b225c",
-			Args:     []any{},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Subnet) CallOfValidators(
-	__ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunValidators(__ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x9e0b225c",
-			Args:     []any{},
-		},
-	)
 }
 
 func (c *Subnet) DryRunValidatorJoin(

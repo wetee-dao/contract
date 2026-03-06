@@ -397,7 +397,7 @@ func (c *Cloud) QueryPodLen(
 	return v, gas, nil
 }
 
-func (c *Cloud) DryRunPods(
+func (c *Cloud) QueryPods(
 	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
 ) (*[]Tuple_36, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -419,46 +419,6 @@ func (c *Cloud) DryRunPods(
 		return nil, nil, err
 	}
 	return v, gas, nil
-}
-
-func (c *Cloud) ExecPods(
-	start util.Option[uint64], size uint64, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunPods(start, size, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x77ffaeb8",
-			Args:     []any{start, size},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Cloud) CallOfPods(
-	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunPods(start, size, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x77ffaeb8",
-			Args:     []any{start, size},
-		},
-	)
 }
 
 func (c *Cloud) QueryUserPodLen(
@@ -485,7 +445,7 @@ func (c *Cloud) QueryUserPodLen(
 	return v, gas, nil
 }
 
-func (c *Cloud) DryRunUserPods(
+func (c *Cloud) QueryUserPods(
 	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
 ) (*[]Tuple_36, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -509,47 +469,7 @@ func (c *Cloud) DryRunUserPods(
 	return v, gas, nil
 }
 
-func (c *Cloud) ExecUserPods(
-	start util.Option[uint64], size uint64, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunUserPods(start, size, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x1474c16c",
-			Args:     []any{start, size},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Cloud) CallOfUserPods(
-	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunUserPods(start, size, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x1474c16c",
-			Args:     []any{start, size},
-		},
-	)
-}
-
-func (c *Cloud) DryRunWorkerPodsVersion(
+func (c *Cloud) QueryWorkerPodsVersion(
 	worker_id uint64, __ink_params chain.DryRunParams,
 ) (*[]Tuple_39, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -573,47 +493,7 @@ func (c *Cloud) DryRunWorkerPodsVersion(
 	return v, gas, nil
 }
 
-func (c *Cloud) ExecWorkerPodsVersion(
-	worker_id uint64, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunWorkerPodsVersion(worker_id, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xe2b186e9",
-			Args:     []any{worker_id},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Cloud) CallOfWorkerPodsVersion(
-	worker_id uint64, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunWorkerPodsVersion(worker_id, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xe2b186e9",
-			Args:     []any{worker_id},
-		},
-	)
-}
-
-func (c *Cloud) DryRunWorkerPods(
+func (c *Cloud) QueryWorkerPods(
 	worker_id uint64, start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
 ) (*[]Tuple_36, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -635,46 +515,6 @@ func (c *Cloud) DryRunWorkerPods(
 		return nil, nil, err
 	}
 	return v, gas, nil
-}
-
-func (c *Cloud) ExecWorkerPods(
-	worker_id uint64, start util.Option[uint64], size uint64, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunWorkerPods(worker_id, start, size, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xd13982c0",
-			Args:     []any{worker_id, start, size},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Cloud) CallOfWorkerPods(
-	worker_id uint64, start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunWorkerPods(worker_id, start, size, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0xd13982c0",
-			Args:     []any{worker_id, start, size},
-		},
-	)
 }
 
 func (c *Cloud) QueryWorkerPodLen(
@@ -1149,7 +989,7 @@ func (c *Cloud) QueryPodExtInfo(
 	return v, gas, nil
 }
 
-func (c *Cloud) DryRunPodsByIds(
+func (c *Cloud) QueryPodsByIds(
 	pod_ids []uint64, __ink_params chain.DryRunParams,
 ) (*[]Tuple_74, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
@@ -1171,46 +1011,6 @@ func (c *Cloud) DryRunPodsByIds(
 		return nil, nil, err
 	}
 	return v, gas, nil
-}
-
-func (c *Cloud) ExecPodsByIds(
-	pod_ids []uint64, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunPodsByIds(pod_ids, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x8a276837",
-			Args:     []any{pod_ids},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Cloud) CallOfPodsByIds(
-	pod_ids []uint64, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunPodsByIds(pod_ids, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x8a276837",
-			Args:     []any{pod_ids},
-		},
-	)
 }
 
 func (c *Cloud) DryRunTransfer(

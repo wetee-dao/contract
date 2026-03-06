@@ -72,7 +72,7 @@ pub mod cloud {
         POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero())
     }
 
-    #[revive(message)]
+    #[revive(message, mutates)]
     pub fn update_pod_contract(pod_id: u64) -> Result<(), Error> {
         let pod = PODS.get(env(), &pod_id).map_err(|_| Error::PodNotFound)?;
         let code_hash = POD_CONTRACT_CODE_HASH.get(env()).unwrap_or(H256::zero());

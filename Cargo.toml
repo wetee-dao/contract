@@ -12,6 +12,7 @@ members = [
   "revives/Pod",
   "revives/Subnet",
   "revives/Cloud",
+  "revives/proxy",
 
   "primitives",
 ]

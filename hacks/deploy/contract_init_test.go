@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"wetee/test/contracts/cloud"
+	"wetee/test/contracts/proxy"
 	"wetee/test/contracts/subnet"
 
 	"github.com/centrifuge/go-substrate-rpc-client/v4/types"
@@ -29,46 +30,25 @@ func TestContractInit(t *testing.T) {
 		panic(err)
 	}
 
-	/// init pod
-	podData, err := os.ReadFile("../../target/ink/pod/pod.polkavm")
+	podData, err := os.ReadFile("../../target/pod.release.polkavm")
 	if err != nil {
 		util.LogWithPurple("read file error", err)
 		panic(err)
 	}
-
-	/// upload pod code
-	podCode, err := client.UploadInkCode(podData, &pk)
+	podCodeHash, err := client.UploadInkCode(podData, &pk)
 	if err != nil {
 		util.LogWithPurple("UploadInkCode", err)
 		panic(err)
 	}
 
-	/// init subnet
-	subnetAddress := DeploySubnetContract(client, pk)
+	subnetImplAddress, _ := DeploySubnetContract(client, pk)
+	cloudProxyAddress, _ := DeployCloudContract(client, *subnetImplAddress, *podCodeHash, pk)
 
-	/// init cloud
-	cloudCode, err := os.ReadFile("../../target/ink/cloud/cloud.polkavm")
-	if err != nil {
-		util.LogWithPurple("read file error", err)
-		panic(err)
-	}
+	InitSubnet(client, pk, subnetImplAddress.Hex())
+	InitWorker(client, pk, subnetImplAddress.Hex())
 
-	salt := genSalt()
-	cloudAddress, err := cloud.DeployCloudWithNew(*subnetAddress, *podCode, chain.DeployParams{
-		Client: client,
-		Signer: &pk,
-		Code:   util.InkCode{Upload: &cloudCode},
-		Salt:   util.NewSome(salt),
-	})
-	if err != nil {
-		util.LogWithPurple("DeployContract", err)
-		panic(err)
-	}
-
-	InitSubnet(client, pk, subnetAddress.Hex())
-	InitWorker(client, pk, subnetAddress.Hex())
-	fmt.Println("subnet address ======> ", subnetAddress.Hex())
-	fmt.Println("cloud  address ======> ", cloudAddress.Hex())
+	fmt.Println("subnet address (proxy2) => ", subnetImplAddress.Hex())
+	fmt.Println("cloud  address (proxy1) => ", cloudProxyAddress.Hex())
 }
 
 func TestInitWorker(t *testing.T) {
@@ -99,31 +79,37 @@ func TestCloudUpdate(t *testing.T) {
 	}
 
 	/// init pod
-	cloudData, err := os.ReadFile("../../target/ink/cloud/cloud.polkavm")
+	cloudData, err := os.ReadFile("../../target/cloud.release.polkavm")
 	if err != nil {
 		util.LogWithPurple("read file error", err)
 		panic(err)
 	}
 
-	code, err := client.UploadInkCode(cloudData, &pk)
-	if err != nil {
-		util.LogWithPurple("UploadInkCode", err)
-		panic(err)
-	}
+	salt := genSalt()
+	res, err := cloud.DeployCloudWithNew(chain.DeployParams{
+		Client: client,
+		Signer: &pk,
+		Code:   util.InkCode{Upload: &cloudData},
+		Salt:   util.NewSome(salt),
+	})
 
-	cloudIns, err := cloud.InitCloudContract(client, CloudAddress)
+	cloudIns, err := proxy.InitProxyContract(client, CloudAddress)
 	if err != nil {
 		util.LogWithPurple("InitCloudContract", err)
 		panic(err)
 	}
 
-	err = cloudIns.ExecSetCode(*code, chain.ExecParams{
+	err = cloudIns.ExecUpgrade(*res, chain.ExecParams{
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	})
 	if err != nil {
-		util.LogWithPurple("ExecSetCode", err)
+		util.LogWithPurple("ExecUpgrade", err)
+		panic(err)
 	}
+
+	fmt.Println("new cloud address: ", res.Hex())
+	fmt.Println("proxy address: ", cloudIns.ContractAddress().Hex())
 }
 
 func TestSubnetUpdate(t *testing.T) {
@@ -138,35 +124,41 @@ func TestSubnetUpdate(t *testing.T) {
 		panic(err)
 	}
 
-	/// init pod
-	netData, err := os.ReadFile("../../target/ink/subnet/subnet.polkavm")
+	netData, err := os.ReadFile("../../target/subnet.release.polkavm")
 	if err != nil {
 		util.LogWithPurple("read file error", err)
 		panic(err)
 	}
 
-	netCode, err := client.UploadInkCode(netData, &pk)
+	salt := genSalt()
+	res, err := subnet.DeploySubnetWithNew(chain.DeployParams{
+		Client: client,
+		Signer: &pk,
+		Code:   util.InkCode{Upload: &netData},
+		Salt:   util.NewSome(salt),
+	})
 	if err != nil {
-		util.LogWithPurple("UploadInkCode", err)
+		util.LogWithPurple("DeploySubnetWithNew", err)
 		panic(err)
 	}
 
-	fmt.Println("cloudAddress: ", CloudAddress)
-
-	subnetIns, err := subnet.InitSubnetContract(client, SubnetAddress)
+	subnetIns, err := proxy.InitProxyContract(client, SubnetAddress)
 	if err != nil {
-		util.LogWithPurple("InitCloudContract", err)
+		util.LogWithPurple("InitSubnetContract", err)
 		panic(err)
 	}
 
-	err = subnetIns.ExecSetCode(*netCode, chain.ExecParams{
+	err = subnetIns.ExecUpgrade(*res, chain.ExecParams{
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	})
-
 	if err != nil {
-		util.LogWithPurple("subnet ExecSetCode", err)
+		util.LogWithPurple("ExecUpgrade", err)
+		panic(err)
 	}
+
+	fmt.Println("new subnet address: ", res.Hex())
+	fmt.Println("proxy address: ", subnetIns.ContractAddress().Hex())
 }
 
 func TestMapAccount(t *testing.T) {
@@ -269,27 +261,107 @@ func TestSetAssetPrice(t *testing.T) {
 	}
 }
 
-func DeploySubnetContract(client *chain.ChainClient, pk chain.Signer) *types.H160 {
-	data, err := os.ReadFile("../../target/ink/subnet/subnet.polkavm")
+func DeploySubnetContract(client *chain.ChainClient, pk chain.Signer) (*types.H160, *subnet.Subnet) {
+	data, err := os.ReadFile("../../target/subnet.release.polkavm")
 	if err != nil {
 		util.LogWithPurple("read file error", err)
 		panic(err)
 	}
 
-	salt := genSalt()
 	res, err := subnet.DeploySubnetWithNew(chain.DeployParams{
 		Client: client,
 		Signer: &pk,
 		Code:   util.InkCode{Upload: &data},
-		Salt:   util.NewSome(salt),
+		Salt:   util.NewSome(genSalt()),
 	})
-
 	if err != nil {
 		util.LogWithPurple("DeployContract", err)
 		panic(err)
 	}
+	fmt.Println("subnet address: ", res.Hex())
 
-	return res
+	proxyCode, err := os.ReadFile("../../target/proxy.release.polkavm")
+	if err != nil {
+		util.LogWithPurple("read proxy file error", err)
+		panic(err)
+	}
+	subnetProxyAddress, err := proxy.DeployProxyWithNew(*res, util.NewSome(pk.H160Address()), chain.DeployParams{
+		Client: client,
+		Signer: &pk,
+		Code:   util.InkCode{Upload: &proxyCode},
+		Salt:   util.NewSome(genSalt()),
+	})
+	if err != nil {
+		util.LogWithPurple("DeployProxyWithNew", err)
+		panic(err)
+	}
+	fmt.Println("subnet proxy address: ", subnetProxyAddress.Hex())
+
+	subnetContract, err := subnet.InitSubnetContract(client, subnetProxyAddress.Hex())
+	if err != nil {
+		panic(err)
+	}
+
+	err = subnetContract.ExecInit(chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	return subnetProxyAddress, subnetContract
+}
+
+func DeployCloudContract(client *chain.ChainClient, subnetAddress types.H160, podCodeHash types.H256, pk chain.Signer) (*types.H160, *cloud.Cloud) {
+	data, err := os.ReadFile("../../target/cloud.release.polkavm")
+	if err != nil {
+		util.LogWithPurple("read file error", err)
+		panic(err)
+	}
+
+	res, err := cloud.DeployCloudWithNew(chain.DeployParams{
+		Client: client,
+		Signer: &pk,
+		Code:   util.InkCode{Upload: &data},
+		Salt:   util.NewSome(genSalt()),
+	})
+	if err != nil {
+		util.LogWithPurple("DeployContract", err)
+		panic(err)
+	}
+	fmt.Println("cloud address: ", res.Hex())
+
+	proxyCode, err := os.ReadFile("../../target/proxy.release.polkavm")
+	if err != nil {
+		util.LogWithPurple("read proxy file error", err)
+		panic(err)
+	}
+	cloudProxyAddress, err := proxy.DeployProxyWithNew(*res, util.NewSome(pk.H160Address()), chain.DeployParams{
+		Client: client,
+		Signer: &pk,
+		Code:   util.InkCode{Upload: &proxyCode},
+		Salt:   util.NewSome(genSalt()),
+	})
+	if err != nil {
+		util.LogWithPurple("DeployProxyWithNew", err)
+		panic(err)
+	}
+	fmt.Println("cloud proxy address: ", cloudProxyAddress.Hex())
+
+	cloudContract, err := cloud.InitCloudContract(client, cloudProxyAddress.Hex())
+	if err != nil {
+		panic(err)
+	}
+	err = cloudContract.ExecInit(subnetAddress, podCodeHash, chain.ExecParams{
+		Signer:    &pk,
+		PayAmount: types.NewU128(*big.NewInt(0)),
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	return cloudProxyAddress, cloudContract
 }
 
 func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string) {
@@ -350,9 +422,20 @@ func InitSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 	)
 	fmt.Println("node2 register result:", err)
 
-	subnetContract.ExecSetBootNodes([]uint64{0, 1, 2}, _call)
-	subnetContract.ExecValidatorJoin(1, _call)
-	subnetContract.ExecValidatorJoin(2, _call)
+	err = subnetContract.ExecSetBootNodes([]uint64{0, 1, 2}, _call)
+	if err != nil {
+		panic(err)
+	}
+
+	err = subnetContract.ExecValidatorJoin(1, _call)
+	if err != nil {
+		panic(err)
+	}
+
+	err = subnetContract.ExecValidatorJoin(2, _call)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func InitWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string) {
@@ -505,7 +588,7 @@ func TestCloudUpdatePodContract(t *testing.T) {
 	}
 
 	/// init pod
-	podData, err := os.ReadFile("../../target/ink/pod/pod.polkavm")
+	podData, err := os.ReadFile("../../target/pod.release.polkavm")
 	if err != nil {
 		util.LogWithPurple("read file error", err)
 		panic(err)

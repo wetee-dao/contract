@@ -25,6 +25,7 @@ type Error struct { // Enum
 	NodeIsRunning             *bool // 13
 	InvalidSideChainCaller    *bool // 14
 	RegionNotExist            *bool // 15
+	AssetNotExist             *bool // 16
 }
 
 func (ty Error) Encode(encoder scale.Encoder) (err error) {
@@ -155,6 +156,14 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		}
 		return nil
 	}
+
+	if ty.AssetNotExist != nil {
+		err = encoder.PushByte(16)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 	return fmt.Errorf("unrecognized enum")
 }
 
@@ -228,6 +237,10 @@ func (ty *Error) Decode(decoder scale.Decoder) (err error) {
 		t := true
 		ty.RegionNotExist = &t
 		return
+	case 16: // Base
+		t := true
+		ty.AssetNotExist = &t
+		return
 	default:
 		return fmt.Errorf("unrecognized enum")
 	}
@@ -295,6 +308,10 @@ func (ty *Error) Error() string {
 
 	if ty.RegionNotExist != nil {
 		return "RegionNotExist"
+	}
+
+	if ty.AssetNotExist != nil {
+		return "AssetNotExist"
 	}
 	return "Unknown"
 }

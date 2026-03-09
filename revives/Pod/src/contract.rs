@@ -11,7 +11,7 @@ extern crate alloc;
 static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::BumpAllocator::new();
 
 use parity_scale_codec::Encode as ScaleEncode;
-use wrevive_api::{Address, H256, Storage, U256, env};
+use wrevive_api::{Address, H256, Storage, U256, Env, env};
 use wrevive_macro::{revive_contract, storage};
 
 pub use primitives::{AssetInfo, ensure, ok_or_err};
@@ -49,10 +49,10 @@ pub mod pod {
     #[revive(constructor)]
     pub fn new(id: u64, owner: Address, side_chain_multi_key: Address) -> Result<(), Error> {
         let caller = env().caller();
-        CLOUD_CONTRACT.set(env(), &caller);
-        SIDE_CHAIN_MULTI_KEY.set(env(), &side_chain_multi_key);
-        POD_ID.set(env(), &id);
-        OWNER.set(env(), &owner);
+        CLOUD_CONTRACT.set(&caller);
+        SIDE_CHAIN_MULTI_KEY.set(&side_chain_multi_key);
+        POD_ID.set(&id);
+        OWNER.set(&owner);
         Ok(())
     }
 
@@ -72,19 +72,19 @@ pub mod pod {
     /// 获取 Pod ID
     #[revive(message)]
     pub fn id() -> u64 {
-        POD_ID.get(env()).unwrap_or(0)
+        POD_ID.get().unwrap_or(0)
     }
 
     /// 获取云合约地址
     #[revive(message)]
     pub fn cloud() -> Address {
-        CLOUD_CONTRACT.get(env()).unwrap_or(Address::zero())
+        CLOUD_CONTRACT.get().unwrap_or(Address::zero())
     }
 
     /// 获取所有者
     #[revive(message)]
     pub fn owner() -> Address {
-        OWNER.get(env()).unwrap_or(Address::zero())
+        OWNER.get().unwrap_or(Address::zero())
     }
 
     /// 向工作节点支付（仅云合约可调用）
@@ -108,7 +108,7 @@ pub mod pod {
     #[revive(message, write)]
     pub fn withdraw(asset: AssetInfo, to: Address, amount: U256) -> Result<(), Error> {
         let caller = env().caller();
-        let owner = OWNER.get(env()).unwrap_or(Address::zero());
+        let owner = OWNER.get().unwrap_or(Address::zero());
         ensure!(caller == owner, Error::NotOwner);
         match asset {
             AssetInfo::Native(_) => {
@@ -131,7 +131,7 @@ pub mod pod {
 
     fn ensure_from_cloud() -> Result<(), Error> {
         let caller = env().caller();
-        let cloud = CLOUD_CONTRACT.get(env()).unwrap_or(Address::zero());
+        let cloud = CLOUD_CONTRACT.get().unwrap_or(Address::zero());
         ensure!(caller == cloud, Error::MustCallByCloudContract);
         Ok(())
     }

@@ -685,6 +685,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "proxy"
+version = "0.1.0"
+dependencies = [
+ "alloy-core",
+ "pallet-revive-uapi",
+ "parity-scale-codec",
+ "polkavm-derive 0.31.0",
+ "primitives",
+ "pvm-bump-allocator",
+ "pvm-contract-types",
+ "wrevive-api",
+ "wrevive-macro",
+]
+
+[[package]]
 name = "pvm-bump-allocator"
 version = "0.3.0"
 source = "git+https://github.com/paritytech/cargo-pvm-contract?branch=main#ab2cbbd87963b14a45b0721f41a98536b06bba10"

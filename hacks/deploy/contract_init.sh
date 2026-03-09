@@ -12,11 +12,13 @@ cd "$DIR/../../"
 cargo wrevive build -p pod
 cargo wrevive build -p subnet
 cargo wrevive build -p cloud
+cargo wrevive build -p proxy
 
 cd $DIR/contracts
 
 go-ink-gen -json ../../../target/cloud.json
 go-ink-gen -json ../../../target/subnet.json
+go-ink-gen -json ../../../target/proxy.json
 
 cd $DIR
-# go test -run ^TestContractInit$
+go test -run ^TestContractInit$

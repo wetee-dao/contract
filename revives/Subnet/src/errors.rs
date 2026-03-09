@@ -20,4 +20,5 @@ pub enum Error {
     NodeIsRunning,
     InvalidSideChainCaller,
     RegionNotExist,
+    AssetNotExist,
 }

@@ -10,12 +10,12 @@ import (
 	"github.com/wetee-dao/ink.go/util"
 )
 
-func DeployCloudWithNew(subnet_addr types.H160, code_hash types.H256, __ink_params chain.DeployParams) (*types.H160, error) {
+func DeployCloudWithNew(__ink_params chain.DeployParams) (*types.H160, error) {
 	return __ink_params.Client.DeployContract(
 		__ink_params.Code, __ink_params.Signer, types.NewU128(*big.NewInt(0)),
 		util.InkContractInput{
 			Selector: "0x00000000",
-			Args:     []any{subnet_addr, code_hash},
+			Args:     []any{},
 		},
 		__ink_params.Salt,
 	)
@@ -43,6 +43,74 @@ func (c *Cloud) Client() *chain.ChainClient {
 
 func (c *Cloud) ContractAddress() types.H160 {
 	return c.Address
+}
+
+func (c *Cloud) DryRunInit(
+	subnet_addr types.H160, pod_code_hash types.H256, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "init")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x25b9ac95",
+			Args:     []any{subnet_addr, pod_code_hash},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Cloud) ExecInit(
+	subnet_addr types.H160, pod_code_hash types.H256, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunInit(subnet_addr, pod_code_hash, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x25b9ac95",
+			Args:     []any{subnet_addr, pod_code_hash},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Cloud) CallOfInit(
+	subnet_addr types.H160, pod_code_hash types.H256, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunInit(subnet_addr, pod_code_hash, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x25b9ac95",
+			Args:     []any{subnet_addr, pod_code_hash},
+		},
+	)
 }
 
 func (c *Cloud) DryRunSetPodContract(
@@ -1613,74 +1681,6 @@ func (c *Cloud) CallOfEditContainer(
 		util.InkContractInput{
 			Selector: "0x52051579",
 			Args:     []any{pod_id, containers},
-		},
-	)
-}
-
-func (c *Cloud) DryRunSetCode(
-	code_hash types.H256, __ink_params chain.DryRunParams,
-) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
-	if c.ChainClient.Debug {
-		fmt.Println()
-		util.LogWithPurple("[ DryRun   method ]", "set_code")
-	}
-	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
-		c,
-		__ink_params.Origin,
-		__ink_params.PayAmount,
-		__ink_params.GasLimit,
-		__ink_params.StorageDepositLimit,
-		util.InkContractInput{
-			Selector: "0x1c8ecd54",
-			Args:     []any{code_hash},
-		},
-	)
-	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
-		return nil, nil, err
-	}
-	if v != nil && v.IsErr {
-		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
-	}
-
-	return v, gas, nil
-}
-
-func (c *Cloud) ExecSetCode(
-	code_hash types.H256, __ink_params chain.ExecParams,
-) error {
-	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
-	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunSetCode(code_hash, _param)
-	if err != nil {
-		return err
-	}
-	return chain.CallInk(
-		c,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x1c8ecd54",
-			Args:     []any{code_hash},
-		},
-		__ink_params,
-	)
-}
-
-func (c *Cloud) CallOfSetCode(
-	code_hash types.H256, __ink_params chain.DryRunParams,
-) (*types.Call, error) {
-	_, gas, err := c.DryRunSetCode(code_hash, __ink_params)
-	if err != nil {
-		return nil, err
-	}
-	return chain.CallOfTransaction(
-		c,
-		__ink_params.PayAmount,
-		gas.GasRequired,
-		gas.StorageDeposit,
-		util.InkContractInput{
-			Selector: "0x1c8ecd54",
-			Args:     []any{code_hash},
 		},
 	)
 }

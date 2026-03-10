@@ -26,7 +26,6 @@ pub mod subnet {
     use crate::datas::NodeID;
     use crate::{Error, ensure};
 
-    const SUBNET_CODE_HASH: Storage<H256> = storage!(b"subnet_code_hash");
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
     const EPOCH_SOLT: Storage<u32> = storage!(b"epoch_solt");
     const EPOCH: Storage<u32> = storage!(b"epoch");

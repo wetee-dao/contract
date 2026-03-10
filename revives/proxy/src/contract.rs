@@ -69,7 +69,6 @@ pub mod proxy {
         if callee == Address::zero() {
             let error = Error::AddressNotFound;
             api.return_value(ReturnFlags::REVERT, &Encode::encode(&error));
-            return;
         }
         let call_data_len = api.call_data_size() as usize;
         let call_data = api.call_data_copy(0, call_data_len);

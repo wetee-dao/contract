@@ -4,7 +4,7 @@ go 1.23.12
 
 require (
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.2.2-0.20240919131012-e3b938563803
-	github.com/wetee-dao/ink.go v0.1.35
+	github.com/wetee-dao/ink.go v0.1.36
 	github.com/wetee-dao/tee-dsecret v0.1.12
 )
 
@@ -111,4 +111,3 @@ require (
 	lukechampine.com/blake3 v1.4.1 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
-

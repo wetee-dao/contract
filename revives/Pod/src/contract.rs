@@ -8,7 +8,7 @@ extern crate alloc;
 
 #[cfg(all(not(test), not(feature = "api")))]
 #[global_allocator]
-static ALLOC: pvm_bump_allocator::BumpAllocator<1024> = pvm_bump_allocator::BumpAllocator::new();
+static ALLOC: pvm_bump_allocator::BumpAllocator<65536> = pvm_bump_allocator::BumpAllocator::new();
 
 use parity_scale_codec::Encode as ScaleEncode;
 use wrevive_api::{Address, H256, Storage, U256, Env, env};

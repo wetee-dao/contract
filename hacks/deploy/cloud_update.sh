@@ -11,7 +11,7 @@ cd "$DIR/../../"
 cargo contract build --release --manifest-path inks/Cloud/Cargo.toml
 
 cd $DIR/contracts
-go-ink-gen -json ../../../target/ink/cloud/cloud.json
+go-ink-gen -json ../../../target/cloud.json
 
 cd $DIR
 go test -run ^TestCloudUpdate$

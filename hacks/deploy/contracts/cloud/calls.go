@@ -1684,3 +1684,27 @@ func (c *Cloud) CallOfEditContainer(
 		},
 	)
 }
+
+func (c *Cloud) QuerySubnetSideChainKey(
+	__ink_params chain.DryRunParams,
+) (*types.H160, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "subnet_side_chain_key")
+	}
+	v, gas, err := chain.DryRunInk[types.H160](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xd99d60f8",
+			Args:     []any{},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}

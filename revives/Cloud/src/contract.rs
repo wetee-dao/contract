@@ -638,6 +638,12 @@ pub mod cloud {
         Ok(())
     }
 
+    #[revive(message)]
+    pub fn subnet_side_chain_key() -> Address {
+        let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
+        subnet::subnet::api::side_chain_key(&subnet).unwrap_or(Address::zero())
+    }
+
     fn ensure_from_gov() -> Result<(), Error> {
         let caller = env().caller();
         let gov = GOV_CONTRACT.get().unwrap_or(Address::zero());
@@ -652,10 +658,6 @@ pub mod cloud {
         Ok(())
     }
 
-    fn subnet_side_chain_key() -> Address {
-        let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
-        subnet::subnet::api::side_chain_key(&subnet).unwrap_or(Address::zero())
-    }
 
     fn add_container(pod_id: u64, container: Container) -> Result<(), Error> {
         POD_CONTAINERS.insert(&pod_id, &container);

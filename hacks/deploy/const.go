@@ -1,7 +1,7 @@
 package contracts
 
-const SubnetAddress = "0xe8a6afcf3804b72cf15124e6a1564cfa031ebcd5"
-const CloudAddress = "0x50a1d081a1301c1fb8466cf44a643d39126e43fa"
+const SubnetAddress = "0x496806883725e8544340dd35fe743b3b8af67b19"
+const CloudAddress = "0x9faed02b7624207dc0fedfded4842be33cad4eb3"
 
 const TestChainUrl = "wss://xiaobai.asyou.me:30001/ws"
 

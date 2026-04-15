@@ -432,31 +432,41 @@ pub mod cloud {
         let transferred = env().value_transferred();
         let code_hash = POD_CONTRACT_CODE_HASH.get().ok_or(Error::PodCodeNotFound)?;
 
-        const SELECTOR_POD_NEW: [u8; 4] = [0x25, 0x7e, 0xf6, 0x72];
-        let mut input_data = Vec::new();
-        input_data.extend_from_slice(&SELECTOR_POD_NEW);
-        input_data.extend_from_slice(&Encode::encode(&(pod_id, caller, side_chain_key)));
+        // 注意：生成的 instantiate_new 参数顺序为 (deposit_limit, value)
+        let (pod_address, _ctor_ret) = pod::pod::api::instantiate_new(
+            &code_hash,
+            &pod_id,
+            &caller,
+            &side_chain_key,
+            &U256::MAX,
+            &transferred,
+        )
+        .map_err(|_| Error::PodInstantiateFailed)?;
+        // const SELECTOR_POD_NEW: [u8; 4] = [0x25, 0x7e, 0xf6, 0x72];
+        // let mut input_data = Vec::new();
+        // input_data.extend_from_slice(&SELECTOR_POD_NEW);
+        // input_data.extend_from_slice(&Encode::encode(&(pod_id, caller, side_chain_key)));
 
-        let mut pod_address_bytes = [0u8; 20];
-        let mut out_buf = [0u8; 256];
-        let mut out_slice = out_buf.as_mut_slice();
-        let mut cursor = &mut out_slice;
-        let ret = env().instantiate(
-            pallet_revive_uapi::CallFlags::empty(),
-            code_hash.as_bytes(),
-            u64::MAX,
-            u64::MAX,
-            U256::MAX.as_bytes(),
-            transferred.as_bytes(),
-            &input_data,
-            &mut pod_address_bytes,
-            Some(&mut cursor),
-        );
-        if let Err(code) = ret {
-            return Err(Error::PodInstantiateFailed);
-        };
+        // let mut pod_address_bytes = [0u8; 20];
+        // let mut out_buf = [0u8; 256];
+        // let mut out_slice = out_buf.as_mut_slice();
+        // let mut cursor = &mut out_slice;
+        // let ret = env().instantiate(
+        //     pallet_revive_uapi::CallFlags::empty(),
+        //     code_hash.as_bytes(),
+        //     u64::MAX,
+        //     u64::MAX,
+        //     U256::MAX.as_bytes(),
+        //     transferred.as_bytes(),
+        //     &input_data,
+        //     &mut pod_address_bytes,
+        //     Some(&mut cursor),
+        // );
+        // if let Err(code) = ret {
+        //     return Err(Error::PodInstantiateFailed);
+        // };
+        // let pod_address = Address::from(pod_address_bytes);
 
-        let pod_address = Address::from(pod_address_bytes);
         let now = env().block_number();
         let pod = Pod {
             name,

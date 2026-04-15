@@ -94,14 +94,26 @@ fn pay_for_woker_only_by_cloud() {
 }
 
 #[test]
-fn set_code_returns_err() {
+fn set_code_returns_err_when_upgrade_needed() {
     with_engine(|e| {
         e.reset();
         e.set_caller(cloud_caller());
     });
     let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
-    let res = pod::set_code(H256::from([0u8; 32]));
-    assert_eq!(res, Err(Error::SetCodeFailed));
+    // 链下 code_hash 恒为 0；传入非零哈希表示“要升级到别的代码”，当前无 host 则失败
+    let res = pod::set_code(H256::from([1u8; 32]));
+    assert_eq!(res, Err(Error::CodeUpgradeNotSupported));
+}
+
+#[test]
+fn set_code_noop_when_hash_matches_current() {
+    with_engine(|e| {
+        e.reset();
+        e.set_caller(cloud_caller());
+    });
+    let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
+    let res = pod::set_code(H256::zero());
+    assert_eq!(res, Ok(()));
 }
 
 #[test]
@@ -112,6 +124,6 @@ fn set_code_non_cloud_reverts() {
     });
     let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
     with_engine(|e| e.set_caller([99u8; 20]));
-    let res = pod::set_code(H256::from([0u8; 32]));
+    let res = pod::set_code(H256::from([1u8; 32]));
     assert_eq!(res, Err(Error::MustCallByCloudContract));
 }

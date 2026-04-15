@@ -8,10 +8,8 @@ done
 DIR="$( cd -P "$( dirname "$SOURCE"  )" && pwd  )"
 
 cd "$DIR/../../"
-cargo wrevive build -p subnet
 
-cd $DIR/contracts
-go-ink-gen -json ../../../target/ink/subnet/subnet.json
+cargo wrevive build -p pod
 
 cd $DIR
-go test -run ^TestSubnetUpdate$
+go test -run ^TestCloudSetPodCode$

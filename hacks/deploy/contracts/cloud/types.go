@@ -9,24 +9,26 @@ import (
 )
 
 type Error struct { // Enum
-	SetCodeFailed          *bool // 0
-	MustCallByGovContract  *bool // 1
-	WorkerLevelNotEnough   *bool // 2
-	RegionNotMatch         *bool // 3
-	WorkerNotOnline        *bool // 4
-	NotPodOwner            *bool // 5
-	PodKeyNotExist         *bool // 6
-	PodStatusError         *bool // 7
-	InvalidSideChainCaller *bool // 8
-	DelFailed              *bool // 9
-	NotFound               *bool // 10
-	PodNotFound            *bool // 11
-	WorkerIdNotFound       *bool // 12
-	WorkerNotFound         *bool // 13
-	LevelPriceNotFound     *bool // 14
-	AssetNotFound          *bool // 15
-	BalanceNotEnough       *bool // 16
-	PayFailed              *bool // 17
+	SetCodeFailed              *bool // 0
+	MustCallByGovContract      *bool // 1
+	WorkerLevelNotEnough       *bool // 2
+	RegionNotMatch             *bool // 3
+	WorkerNotOnline            *bool // 4
+	NotPodOwner                *bool // 5
+	PodKeyNotExist             *bool // 6
+	PodStatusError             *bool // 7
+	InvalidSideChainCaller     *bool // 8
+	DelFailed                  *bool // 9
+	NotFound                   *bool // 10
+	PodNotFound                *bool // 11
+	PodCodeNotFound            *bool // 12
+	WorkerIdNotFound           *bool // 13
+	WorkerNotFound             *bool // 14
+	LevelPriceNotFound         *bool // 15
+	AssetNotFound              *bool // 16
+	BalanceNotEnough           *bool // 17
+	PayFailed                  *bool // 18
+	PodCodeUpgradeNotSupported *bool // 19
 }
 
 func (ty Error) Encode(encoder scale.Encoder) (err error) {
@@ -126,7 +128,7 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.WorkerIdNotFound != nil {
+	if ty.PodCodeNotFound != nil {
 		err = encoder.PushByte(12)
 		if err != nil {
 			return err
@@ -134,7 +136,7 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.WorkerNotFound != nil {
+	if ty.WorkerIdNotFound != nil {
 		err = encoder.PushByte(13)
 		if err != nil {
 			return err
@@ -142,7 +144,7 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.LevelPriceNotFound != nil {
+	if ty.WorkerNotFound != nil {
 		err = encoder.PushByte(14)
 		if err != nil {
 			return err
@@ -150,7 +152,7 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.AssetNotFound != nil {
+	if ty.LevelPriceNotFound != nil {
 		err = encoder.PushByte(15)
 		if err != nil {
 			return err
@@ -158,7 +160,7 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.BalanceNotEnough != nil {
+	if ty.AssetNotFound != nil {
 		err = encoder.PushByte(16)
 		if err != nil {
 			return err
@@ -166,8 +168,24 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.PayFailed != nil {
+	if ty.BalanceNotEnough != nil {
 		err = encoder.PushByte(17)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.PayFailed != nil {
+		err = encoder.PushByte(18)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.PodCodeUpgradeNotSupported != nil {
+		err = encoder.PushByte(19)
 		if err != nil {
 			return err
 		}
@@ -232,27 +250,35 @@ func (ty *Error) Decode(decoder scale.Decoder) (err error) {
 		return
 	case 12: // Base
 		t := true
-		ty.WorkerIdNotFound = &t
+		ty.PodCodeNotFound = &t
 		return
 	case 13: // Base
 		t := true
-		ty.WorkerNotFound = &t
+		ty.WorkerIdNotFound = &t
 		return
 	case 14: // Base
 		t := true
-		ty.LevelPriceNotFound = &t
+		ty.WorkerNotFound = &t
 		return
 	case 15: // Base
 		t := true
-		ty.AssetNotFound = &t
+		ty.LevelPriceNotFound = &t
 		return
 	case 16: // Base
 		t := true
-		ty.BalanceNotEnough = &t
+		ty.AssetNotFound = &t
 		return
 	case 17: // Base
 		t := true
+		ty.BalanceNotEnough = &t
+		return
+	case 18: // Base
+		t := true
 		ty.PayFailed = &t
+		return
+	case 19: // Base
+		t := true
+		ty.PodCodeUpgradeNotSupported = &t
 		return
 	default:
 		return fmt.Errorf("unrecognized enum")
@@ -307,6 +333,10 @@ func (ty *Error) Error() string {
 		return "PodNotFound"
 	}
 
+	if ty.PodCodeNotFound != nil {
+		return "PodCodeNotFound"
+	}
+
 	if ty.WorkerIdNotFound != nil {
 		return "WorkerIdNotFound"
 	}
@@ -329,6 +359,10 @@ func (ty *Error) Error() string {
 
 	if ty.PayFailed != nil {
 		return "PayFailed"
+	}
+
+	if ty.PodCodeUpgradeNotSupported != nil {
+		return "PodCodeUpgradeNotSupported"
 	}
 	return "Unknown"
 }

@@ -7,7 +7,7 @@ use wrevive_api::{AccountId, Address, BlockNumber, Bytes, H256};
 pub type NodeID = u64;
 
 /// IP 表示（IPv4/IPv6/域名）
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, Default)]
 pub struct Ip {
     pub ipv4: Option<u32>,
     pub ipv6: Option<u128>,
@@ -15,7 +15,7 @@ pub struct Ip {
 }
 
 /// K8s worker 节点信息（Subnet::worker 返回值等）
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, Default)]
 pub struct K8sCluster {
     pub name: Bytes,
     pub owner: Address,

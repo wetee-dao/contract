@@ -24,6 +24,21 @@ pub struct Pod {
     pub pay_asset_id: u32,
 }
 
+/// K8s worker 节点信息（Subnet::worker 返回值等）
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, Default)]
+pub struct K8sClusterInfo {
+    pub name: Bytes,
+    pub owner: Address,
+    pub level: u8,
+    pub region_id: u32,
+    pub start_block: BlockNumber,
+    pub stop_block: Option<BlockNumber>,
+    pub terminal_block: Option<BlockNumber>,
+    pub ip: Ip,
+    pub port: u32,
+    pub status: u8,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Encode, Decode)]
 pub enum PodType {
     #[default]

@@ -29,6 +29,8 @@ pub enum Error {
     InvalidSideChainCaller,
     /// PolkaVM 暂不支持 ERC20 预编译
     UnsupportedAsset,
+    /// 目标代码哈希与链上不一致，且 runtime 未提供合约内升级能力（见 set_code）
+    CodeUpgradeNotSupported,
 }
 
 #[revive_contract]
@@ -121,12 +123,16 @@ pub mod pod {
     }
 
     /// 更新合约代码（仅云合约可调用）
-    /// 注：pallet-revive Env 当前未暴露 set_code_hash，链上需由 runtime 提供 host fn
+    /// 若本合约当前代码哈希已与 `code_hash` 相同则直接成功（幂等）。
+    /// 否则在 pallet-revive 未暴露 `set_code_hash` 时无法升级，返回 [Error::CodeUpgradeNotSupported]。
     #[revive(message, write)]
-    pub fn set_code(_code_hash: H256) -> Result<(), Error> {
+    pub fn set_code(code_hash: H256) -> Result<(), Error> {
         ensure_from_cloud()?;
-        // TODO: 若 pallet_revive_uapi 提供 set_code_hash，在此调用
-        Err(Error::SetCodeFailed)
+        let current = env().code_hash(env().address().as_ref());
+        if current == code_hash {
+            return Ok(());
+        }
+        Err(Error::CodeUpgradeNotSupported)
     }
 
     fn ensure_from_cloud() -> Result<(), Error> {

@@ -16,10 +16,12 @@ pub enum Error {
     DelFailed,
     NotFound,
     PodNotFound,
+    PodCodeNotFound,
     WorkerIdNotFound,
     WorkerNotFound,
     LevelPriceNotFound,
     AssetNotFound,
     BalanceNotEnough,
     PayFailed,
+    PodInstantiateFailed,
 }

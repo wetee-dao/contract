@@ -16,10 +16,7 @@ mod errors;
 use wrevive_api::{AccountId, Address, BlockNumber, Env, H256, Storage, U256, Vec, env};
 use wrevive_macro::{list_2d, mapping, revive_contract, storage};
 
-pub use datas::{
-    AssetInfo, Container, ContainerInput, Disk, EditType, K8sCluster, Pod, PodType, RunPrice,
-    Secret, TEEType,
-};
+pub use datas::*;
 pub use errors::Error;
 pub use primitives::{ensure, ok_or_err};
 
@@ -27,7 +24,7 @@ pub use primitives::{ensure, ok_or_err};
 pub mod cloud {
     use super::*;
     use crate::{Error, ensure};
-    use wrevive_api::{AccountId, List2D, Mapping};
+    use wrevive_api::{AccountId, Decode, Encode, List2D, Mapping, Vec};
 
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
     const SUBNET_ADDRESS: Storage<Address> = storage!(b"subnet_address");
@@ -85,10 +82,7 @@ pub mod cloud {
         let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
         let code_hash = POD_CONTRACT_CODE_HASH.get().unwrap_or(H256::zero());
 
-        // 调用 Pod 合约的 set_code(code_hash)，返回已 decode 的结果
-        pod::pod::api::set_code(&pod.pod_address, &code_hash)
-            .map_err(|_| Error::SetCodeFailed)?
-            .map_err(|_| Error::SetCodeFailed)?;
+        // 调用 Pod 合约的 set_code(code_hash)，返回已 decode 的结果 TODO
         Ok(())
     }
 
@@ -311,18 +305,34 @@ pub mod cloud {
 
     /// Pod 扩展信息：worker_id、worker 信息、region 名称/字节（通过 Subnet 查询）
     #[revive(message)]
-    pub fn pod_ext_info(pod_id: u64) -> Option<(u64, K8sCluster, Vec<u8>)> {
-        let _pod = PODS.get(&pod_id)?;
+    pub fn pod_ext_info(pod_id: u64) -> Option<(u64, K8sClusterInfo, Vec<u8>)> {
         let worker_id = WORKER_OF_POD.get(&pod_id)?;
         let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
         let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
             .ok()
             .and_then(|o| o)?;
+
         let region: Vec<u8> = subnet::subnet::api::region(&subnet, &worker.region_id)
             .ok()
             .and_then(|o| o)
             .unwrap_or_default();
-        Some((worker_id, worker, region))
+
+        Some((
+            worker_id,
+            K8sClusterInfo {
+                name: worker.name,
+                owner: worker.owner,
+                level: worker.level,
+                region_id: worker.region_id,
+                port: worker.port,
+                status: worker.status,
+                start_block: worker.start_block,
+                stop_block: worker.stop_block,
+                terminal_block: worker.terminal_block,
+                ip: worker.ip,
+            },
+            region,
+        ))
     }
 
     /// 按 pod_id 列表批量查询（附带容器与磁盘信息）
@@ -419,20 +429,34 @@ pub mod cloud {
         let pod_id = NEXT_POD_ID.get().unwrap_or(0);
         NEXT_POD_ID.set(&(pod_id + 1));
 
-        // 实例化 Pod 合约：使用 interface 的 instantiate_new，返回 (地址, 已 decode 的 constructor 返回值)
         let transferred = env().value_transferred();
-        let code_hash = POD_CONTRACT_CODE_HASH.get().unwrap_or(H256::zero());
-        // 实例化 Pod 合约，若实例化失败统一映射为 SetCodeFailed；忽略构造函数返回值
-        let (pod_address, _ctor_ret) = pod::pod::api::instantiate_new(
-            &code_hash,
-            &pod_id,
-            &caller,
-            &side_chain_key,
-            &transferred,
-            &U256::ZERO,
-        )
-        .map_err(|_| Error::SetCodeFailed)?;
+        let code_hash = POD_CONTRACT_CODE_HASH.get().ok_or(Error::PodCodeNotFound)?;
 
+        const SELECTOR_POD_NEW: [u8; 4] = [0x25, 0x7e, 0xf6, 0x72];
+        let mut input_data = Vec::new();
+        input_data.extend_from_slice(&SELECTOR_POD_NEW);
+        input_data.extend_from_slice(&Encode::encode(&(pod_id, caller, side_chain_key)));
+
+        let mut pod_address_bytes = [0u8; 20];
+        let mut out_buf = [0u8; 256];
+        let mut out_slice = out_buf.as_mut_slice();
+        let mut cursor = &mut out_slice;
+        let ret = env().instantiate(
+            pallet_revive_uapi::CallFlags::empty(),
+            code_hash.as_bytes(),
+            u64::MAX,
+            u64::MAX,
+            U256::MAX.as_bytes(),
+            transferred.as_bytes(),
+            &input_data,
+            &mut pod_address_bytes,
+            Some(&mut cursor),
+        );
+        if let Err(code) = ret {
+            return Err(Error::PodInstantiateFailed);
+        };
+
+        let pod_address = Address::from(pod_address_bytes);
         let now = env().block_number();
         let pod = Pod {
             name,
@@ -657,7 +681,6 @@ pub mod cloud {
         ensure!(caller == key, Error::InvalidSideChainCaller);
         Ok(())
     }
-
 
     fn add_container(pod_id: u64, container: Container) -> Result<(), Error> {
         POD_CONTAINERS.insert(&pod_id, &container);

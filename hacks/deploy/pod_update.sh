@@ -9,7 +9,7 @@ DIR="$( cd -P "$( dirname "$SOURCE"  )" && pwd  )"
 
 cd "$DIR/../../"
 
-cargo contract build --release --manifest-path inks/Pod/Cargo.toml
+cargo wrevive build -p pod
 
 cd $DIR
 go test -run ^TestCloudUpdatePodContract$

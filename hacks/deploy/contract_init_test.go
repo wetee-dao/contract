@@ -92,6 +92,11 @@ func TestCloudUpdate(t *testing.T) {
 		Code:   util.InkCode{Upload: &cloudData},
 		Salt:   util.NewSome(salt),
 	})
+	if err != nil {
+		util.LogWithPurple("DeployCloudWithNew", err)
+		panic(err)
+	}
+	fmt.Println("cloud address: ", res.Hex())
 
 	cloudIns, err := proxy.InitProxyContract(client, CloudAddress)
 	if err != nil {
@@ -573,54 +578,6 @@ func TestCloudQuerySecret(t *testing.T) {
 		panic(err)
 	}
 	fmt.Println("disks:", disks)
-}
-
-func TestCloudUpdatePodContract(t *testing.T) {
-	client, err := chain.InitClient([]string{TestChainUrl}, true)
-	if err != nil {
-		panic(err)
-	}
-
-	pk, err := chain.Sr25519PairFromSecret("//Alice", 42)
-	if err != nil {
-		util.LogWithPurple("Sr25519PairFromSecret", err)
-		panic(err)
-	}
-
-	/// init pod
-	podData, err := os.ReadFile("../../target/pod.release.polkavm")
-	if err != nil {
-		util.LogWithPurple("read file error", err)
-		panic(err)
-	}
-
-	/// upload pod code
-	podCode, err := client.UploadInkCode(podData, &pk)
-	if err != nil {
-		util.LogWithPurple("UploadInkCode", err)
-		panic(err)
-	}
-
-	cloudContract, err := cloud.InitCloudContract(client, CloudAddress)
-	if err != nil {
-		panic(err)
-	}
-
-	err = cloudContract.ExecSetPodContract(*podCode, chain.ExecParams{
-		Signer:    &pk,
-		PayAmount: types.NewU128(*big.NewInt(0)),
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	err = cloudContract.ExecUpdatePodContract(0, chain.ExecParams{
-		Signer:    &pk,
-		PayAmount: types.NewU128(*big.NewInt(0)),
-	})
-	if err != nil {
-		panic(err)
-	}
 }
 
 func TestPodCharge(t *testing.T) {

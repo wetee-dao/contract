@@ -1115,12 +1115,12 @@ func (c *Cloud) CallOfDelDisk(
 
 func (c *Cloud) QueryPodExtInfo(
 	pod_id uint64, __ink_params chain.DryRunParams,
-) (*util.Option[Tuple_66], *chain.DryRunReturnGas, error) {
+) (*util.Option[Tuple_65], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "pod_ext_info")
 	}
-	v, gas, err := chain.DryRunInk[util.Option[Tuple_66]](
+	v, gas, err := chain.DryRunInk[util.Option[Tuple_65]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1139,12 +1139,12 @@ func (c *Cloud) QueryPodExtInfo(
 
 func (c *Cloud) QueryPodsByIds(
 	pod_ids []uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_74, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_73, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "pods_by_ids")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_74](
+	v, gas, err := chain.DryRunInk[[]Tuple_73](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1231,12 +1231,12 @@ func (c *Cloud) CallOfTransfer(
 
 func (c *Cloud) QueryPod(
 	pod_id uint64, __ink_params chain.DryRunParams,
-) (*util.Option[Tuple_77], *chain.DryRunReturnGas, error) {
+) (*util.Option[Tuple_76], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "pod")
 	}
-	v, gas, err := chain.DryRunInk[util.Option[Tuple_77]](
+	v, gas, err := chain.DryRunInk[util.Option[Tuple_76]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,

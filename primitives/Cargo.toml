@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 parity-scale-codec = { version = "3", default-features = false, features = ["derive"] }
-wrevive-api = { path = "../../wrevive/crates/wrevive-api", default-features = false }
+wrevive-api = { workspace = true }

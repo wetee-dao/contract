@@ -22,7 +22,9 @@ resolver = "2"
 [workspace.dependencies]
 scale = { package = "parity-scale-codec", version = "3.7.4", default-features = false }
 scale-info = { version = "2.11", default-features = false }
-primitives = { path = "primitives2" }
+primitives = { path = "primitives" }
+wrevive-macro = { path = "../wrevive/crates/wrevive-macro" }
+wrevive-api = { path = "../wrevive/crates/wrevive-api", default-features = false }
 
 [profile.release]
 codegen-units = 1

@@ -9,26 +9,26 @@ import (
 )
 
 type Error struct { // Enum
-	SetCodeFailed              *bool // 0
-	MustCallByGovContract      *bool // 1
-	WorkerLevelNotEnough       *bool // 2
-	RegionNotMatch             *bool // 3
-	WorkerNotOnline            *bool // 4
-	NotPodOwner                *bool // 5
-	PodKeyNotExist             *bool // 6
-	PodStatusError             *bool // 7
-	InvalidSideChainCaller     *bool // 8
-	DelFailed                  *bool // 9
-	NotFound                   *bool // 10
-	PodNotFound                *bool // 11
-	PodCodeNotFound            *bool // 12
-	WorkerIdNotFound           *bool // 13
-	WorkerNotFound             *bool // 14
-	LevelPriceNotFound         *bool // 15
-	AssetNotFound              *bool // 16
-	BalanceNotEnough           *bool // 17
-	PayFailed                  *bool // 18
-	PodCodeUpgradeNotSupported *bool // 19
+	SetCodeFailed          *bool // 0
+	MustCallByGovContract  *bool // 1
+	WorkerLevelNotEnough   *bool // 2
+	RegionNotMatch         *bool // 3
+	WorkerNotOnline        *bool // 4
+	NotPodOwner            *bool // 5
+	PodKeyNotExist         *bool // 6
+	PodStatusError         *bool // 7
+	InvalidSideChainCaller *bool // 8
+	DelFailed              *bool // 9
+	NotFound               *bool // 10
+	PodNotFound            *bool // 11
+	PodCodeNotFound        *bool // 12
+	WorkerIdNotFound       *bool // 13
+	WorkerNotFound         *bool // 14
+	LevelPriceNotFound     *bool // 15
+	AssetNotFound          *bool // 16
+	BalanceNotEnough       *bool // 17
+	PayFailed              *bool // 18
+	PodInstantiateFailed   *bool // 19
 }
 
 func (ty Error) Encode(encoder scale.Encoder) (err error) {
@@ -184,7 +184,7 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		return nil
 	}
 
-	if ty.PodCodeUpgradeNotSupported != nil {
+	if ty.PodInstantiateFailed != nil {
 		err = encoder.PushByte(19)
 		if err != nil {
 			return err
@@ -278,7 +278,7 @@ func (ty *Error) Decode(decoder scale.Decoder) (err error) {
 		return
 	case 19: // Base
 		t := true
-		ty.PodCodeUpgradeNotSupported = &t
+		ty.PodInstantiateFailed = &t
 		return
 	default:
 		return fmt.Errorf("unrecognized enum")
@@ -361,8 +361,8 @@ func (ty *Error) Error() string {
 		return "PayFailed"
 	}
 
-	if ty.PodCodeUpgradeNotSupported != nil {
-		return "PodCodeUpgradeNotSupported"
+	if ty.PodInstantiateFailed != nil {
+		return "PodInstantiateFailed"
 	}
 	return "Unknown"
 }
@@ -1034,7 +1034,7 @@ type Ip struct { // Composite
 	Ipv6   util.Option[types.U128]
 	Domain util.Option[[]byte]
 }
-type K8sCluster struct { // Composite
+type K8sClusterInfo struct { // Composite
 	Name          []byte
 	Owner         types.H160
 	Level         byte
@@ -1042,33 +1042,32 @@ type K8sCluster struct { // Composite
 	StartBlock    uint32
 	StopBlock     util.Option[uint32]
 	TerminalBlock util.Option[uint32]
-	P2pId         util.AccountId
 	Ip            Ip
 	Port          uint32
 	Status        byte
 }
-type Tuple_66 struct { // Tuple
+type Tuple_65 struct { // Tuple
 	F0 uint64
-	F1 K8sCluster
+	F1 K8sClusterInfo
 	F2 []byte
 }
-type Tuple_71 struct { // Tuple
+type Tuple_70 struct { // Tuple
 	F0 Container
 	F1 []util.Option[Disk]
 }
-type Tuple_72 struct { // Tuple
+type Tuple_71 struct { // Tuple
 	F0 uint64
-	F1 Tuple_71
+	F1 Tuple_70
 }
-type Tuple_74 struct { // Tuple
+type Tuple_73 struct { // Tuple
 	F0 uint64
 	F1 Pod
-	F2 []Tuple_72
+	F2 []Tuple_71
 	F3 uint32
 	F4 uint32
 	F5 byte
 }
-type Tuple_77 struct { // Tuple
+type Tuple_76 struct { // Tuple
 	F0 Pod
 	F1 []Tuple_34
 	F2 uint32

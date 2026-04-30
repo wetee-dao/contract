@@ -7,3 +7,7 @@
 **/nohup.out
 **/out/
 hacks/local-dev
+**/.key.*
+hacks/deploy/deploy-contract
+hacks/deploy/deploy-full
+hacks/deploy/gen-key

@@ -2,9 +2,11 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -20,38 +22,110 @@ import (
 	"github.com/wetee-dao/tee-dsecret/pkg/model"
 )
 
+type NodeConfig struct {
+	Name  string `json:"name"`
+	SS58  string `json:"ss58"`
+	PSS58 string `json:"p_ss58"`
+	Ip    string `json:"ip"`
+	Port  uint32 `json:"port"`
+}
+
+type WorkerConfig struct {
+	Name     string `json:"name"`
+	SS58     string `json:"ss58"`
+	Domain   string `json:"domain"`
+	Port     uint32 `json:"port"`
+	Level    byte   `json:"level"`
+	Region   uint32 `json:"region"`
+	Cpu      uint32 `json:"cpu"`
+	Memory   uint32 `json:"memory"`
+	Disk     uint32 `json:"disk"`
+	Gpu      uint32 `json:"gpu"`
+	Mortgage int64  `json:"mortgage"`
+}
+
+type GenesisConfig struct {
+	Secrets    []NodeConfig   `json:"secrets"`
+	BootNodes  []uint64       `json:"boot_nodes"`
+	Validators []uint64       `json:"validators"`
+	Region     string         `json:"region"`
+	Workers    []WorkerConfig `json:"workers"`
+}
+
+type EnvConfig struct {
+	URL     string        `json:"url"`
+	Suri    string        `json:"suri"`
+	Genesis GenesisConfig `json:"genesis"`
+}
+
+func loadEnvConfig(env string) (EnvConfig, error) {
+	if env == "" {
+		return EnvConfig{}, fmt.Errorf("missing required flag: -env")
+	}
+	path := filepath.Join("configs", env+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return EnvConfig{}, fmt.Errorf("read env config %s: %w", path, err)
+	}
+	var cfg EnvConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return EnvConfig{}, fmt.Errorf("parse env config %s: %w", path, err)
+	}
+	if cfg.URL == "" {
+		return EnvConfig{}, fmt.Errorf("missing url in env config %s", path)
+	}
+	if cfg.Suri == "" {
+		return EnvConfig{}, fmt.Errorf("missing suri in env config %s", path)
+	}
+	return cfg, nil
+}
+
+func ipToUint32(ipStr string) (uint32, error) {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return 0, fmt.Errorf("invalid IP: %s", ipStr)
+	}
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return 0, fmt.Errorf("not an IPv4: %s", ipStr)
+	}
+	return uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3]), nil
+}
+
 func main() {
 	var (
-		chainURL string
-		suri     string
-		network  uint
-		dir      string
+		network uint
+		dir     string
+		env     string
 	)
 
-	flag.StringVar(&chainURL, "url", "", "blockchain websocket url")
-	flag.StringVar(&suri, "suri", "//Alice", "signer secret uri")
 	flag.UintVar(&network, "network", 42, "ss58 network id")
 	flag.StringVar(&dir, "dir", ".", "workspace root directory (contains target/)")
+	flag.StringVar(&env, "env", "", "environment: local | test | main (loads configs/<env>.json)")
 	flag.Parse()
-
-	if chainURL == "" {
-		exitf("missing required flag: -url")
-	}
 
 	rootDir, err := filepath.Abs(dir)
 	if err != nil {
 		exitf("resolve dir: %v", err)
 	}
 
-	client, err := chain.InitClient([]string{chainURL}, true)
+	// Load all config from JSON file
+	envCfg, err := loadEnvConfig(env)
+	if err != nil {
+		exitf("load env config: %v", err)
+	}
+
+	client, err := chain.InitClient([]string{envCfg.URL}, true)
 	if err != nil {
 		exitf("init client: %v", err)
 	}
 
-	pk, err := chain.Sr25519PairFromSecret(suri, uint16(network))
+	pk, err := chain.Sr25519PairFromSecret(envCfg.Suri, uint16(network))
 	if err != nil {
 		exitf("init signer: %v", err)
 	}
+
+	genesisCfg := envCfg.Genesis
 
 	// show account info and ensure map account
 	ensureMapAccount(client, pk)
@@ -72,8 +146,8 @@ func main() {
 	subnetImplAddress, _ := deploySubnetContract(client, pk, targetDir)
 	cloudProxyAddress, _ := deployCloudContract(client, *subnetImplAddress, *podCodeHash, pk, targetDir)
 
-	initSubnet(client, pk, subnetImplAddress.Hex())
-	initWorker(client, pk, subnetImplAddress.Hex())
+	initSubnet(client, pk, subnetImplAddress.Hex(), genesisCfg)
+	initWorker(client, pk, subnetImplAddress.Hex(), genesisCfg)
 
 	fmt.Println("========================================")
 	fmt.Println("subnet address (proxy2) => ", subnetImplAddress.Hex())
@@ -184,7 +258,7 @@ func deployCloudContract(client *chain.ChainClient, subnetAddress types.H160, po
 	return cloudProxyAddress, cloudContract
 }
 
-func initSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string) {
+func initSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string, cfg GenesisConfig) {
 	_call := chain.ExecParams{
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
@@ -194,71 +268,48 @@ func initSubnet(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		panic(err)
 	}
 
-	v1, _ := model.PubKeyFromSS58("5G9jCxcTzRyQAwHKtcbXodVDXfeYTyeMdQxaP7hf1sNQhZ31")
-	p1, _ := model.PubKeyFromSS58("5FKgVaCgpVKD8uC6z2bLFW23JUbQdYbFrX48po9NsZQmze5t")
-	err = subnetContract.ExecSecretRegister(
-		[]byte("node0"),
-		v1.AccountID(),
-		p1.AccountID(),
-		subnet.Ip{
-			Ipv4:   util.NewSome[uint32](3232263885),
-			Ipv6:   util.NewNone[types.U128](),
-			Domain: util.NewNone[[]byte](),
-		},
-		30110,
-		_call,
-	)
-	fmt.Println("node0 register result:", err)
+	for _, node := range cfg.Secrets {
+		v, err := model.PubKeyFromSS58(node.SS58)
+		if err != nil {
+			panic(fmt.Sprintf("invalid ss58 %s: %v", node.SS58, err))
+		}
+		p, err := model.PubKeyFromSS58(node.PSS58)
+		if err != nil {
+			panic(fmt.Sprintf("invalid p_ss58 %s: %v", node.PSS58, err))
+		}
+		ipv4, err := ipToUint32(node.Ip)
+		if err != nil {
+			panic(fmt.Sprintf("invalid ip %s: %v", node.Ip, err))
+		}
+		err = subnetContract.ExecSecretRegister(
+			[]byte(node.Name),
+			v.AccountID(),
+			p.AccountID(),
+			subnet.Ip{
+				Ipv4:   util.NewSome(ipv4),
+				Ipv6:   util.NewNone[types.U128](),
+				Domain: util.NewNone[[]byte](),
+			},
+			node.Port,
+			_call,
+		)
+		fmt.Printf("%s register result: %v\n", node.Name, err)
+	}
 
-	v2, _ := model.PubKeyFromSS58("5GnjKDE6ArHPqaAwETR4TF7XZbjHU4pytXomt57jJrEBjP75")
-	p2, _ := model.PubKeyFromSS58("5EwWfJzsZFs3coDWKjNSWJRsTgXGfYfwoDr6ZH1HufUMzWMs")
-	err = subnetContract.ExecSecretRegister(
-		[]byte("node1"),
-		v2.AccountID(),
-		p2.AccountID(),
-		subnet.Ip{
-			Ipv4:   util.NewSome[uint32](3232263885),
-			Ipv6:   util.NewNone[types.U128](),
-			Domain: util.NewNone[[]byte](),
-		},
-		30120,
-		_call,
-	)
-	fmt.Println("node1 register result:", err)
-
-	v3, _ := model.PubKeyFromSS58("5CQXegBto71RP1duknM8JWPkDZrPrqgxHutPjnvnpaz2qaRx")
-	p3, _ := model.PubKeyFromSS58("5C8ynzqMj1D6a3vUbxds62Vp7iHFCr2Wpbffw6r2HbnWTN6D")
-	err = subnetContract.ExecSecretRegister(
-		[]byte("node2"),
-		v3.AccountID(),
-		p3.AccountID(),
-		subnet.Ip{
-			Ipv4:   util.NewSome[uint32](3232263885),
-			Ipv6:   util.NewNone[types.U128](),
-			Domain: util.NewNone[[]byte](),
-		},
-		30130,
-		_call,
-	)
-	fmt.Println("node2 register result:", err)
-
-	err = subnetContract.ExecSetBootNodes([]uint64{0, 1, 2}, _call)
+	err = subnetContract.ExecSetBootNodes(cfg.BootNodes, _call)
 	if err != nil {
 		panic(err)
 	}
 
-	err = subnetContract.ExecValidatorJoin(1, _call)
-	if err != nil {
-		panic(err)
-	}
-
-	err = subnetContract.ExecValidatorJoin(2, _call)
-	if err != nil {
-		panic(err)
+	for _, v := range cfg.Validators {
+		err = subnetContract.ExecValidatorJoin(v, _call)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
-func initWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string) {
+func initWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string, cfg GenesisConfig) {
 	_call := chain.ExecParams{
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
@@ -269,7 +320,7 @@ func initWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		panic(err)
 	}
 
-	err = subnetContract.ExecSetRegion([]byte("defalut"), _call)
+	err = subnetContract.ExecSetRegion([]byte(cfg.Region), _call)
 	if err != nil {
 		panic(err)
 	}
@@ -297,35 +348,40 @@ func initWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		panic(err)
 	}
 
-	pubkey, _ := model.PubKeyFromSS58("5GSBfdb3PxME3XM4JrkFKAgHH77ADDWXUx6o8KGVmavLnZ44")
-	err = subnetContract.ExecWorkerRegister(
-		[]byte("worker0"),
-		pubkey.AccountID(),
-		subnet.Ip{
-			Ipv4:   util.NewNone[uint32](),
-			Ipv6:   util.NewNone[types.U128](),
-			Domain: util.NewSome([]byte("xiaobai.asyou.me")),
-		},
-		10000,
-		1,
-		0,
-		_call,
-	)
-	if err != nil {
-		panic(err)
-	}
+	for _, w := range cfg.Workers {
+		pubkey, err := model.PubKeyFromSS58(w.SS58)
+		if err != nil {
+			panic(fmt.Sprintf("invalid worker ss58 %s: %v", w.SS58, err))
+		}
+		err = subnetContract.ExecWorkerRegister(
+			[]byte(w.Name),
+			pubkey.AccountID(),
+			subnet.Ip{
+				Ipv4:   util.NewNone[uint32](),
+				Ipv6:   util.NewNone[types.U128](),
+				Domain: util.NewSome([]byte(w.Domain)),
+			},
+			w.Port,
+			w.Level,
+			w.Region,
+			_call,
+		)
+		if err != nil {
+			panic(err)
+		}
 
-	err = subnetContract.ExecWorkerMortgage(
-		0,
-		10000, 10000,
-		0, 0,
-		1000000,
-		0,
-		types.NewU256(*big.NewInt(10000000)),
-		_call,
-	)
-	if err != nil {
-		panic(err)
+		err = subnetContract.ExecWorkerMortgage(
+			0,
+			w.Cpu, w.Memory,
+			w.Disk, w.Gpu,
+			1000000,
+			0,
+			types.NewU256(*big.NewInt(w.Mortgage)),
+			_call,
+		)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 

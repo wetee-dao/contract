@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"math/big"
@@ -15,31 +16,59 @@ import (
 	"github.com/wetee-dao/ink.go/util"
 )
 
+type EnvConfig struct {
+	URL  string `json:"url"`
+	Suri string `json:"suri"`
+}
+
+func loadEnvConfig(env string) (EnvConfig, error) {
+	if env == "" {
+		return EnvConfig{}, fmt.Errorf("missing required flag: -env")
+	}
+	path := filepath.Join("configs", env+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return EnvConfig{}, fmt.Errorf("read env config %s: %w", path, err)
+	}
+	var cfg EnvConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return EnvConfig{}, fmt.Errorf("parse env config %s: %w", path, err)
+	}
+	if cfg.URL == "" {
+		return EnvConfig{}, fmt.Errorf("missing url in env config %s", path)
+	}
+	if cfg.Suri == "" {
+		return EnvConfig{}, fmt.Errorf("missing suri in env config %s", path)
+	}
+	return cfg, nil
+}
+
 func main() {
 	var (
-		chainURL     string
+		env          string
 		contractName string
 		contractDir  string
 		codePath     string
-		suri         string
 		network      uint
 		debug        bool
 	)
 
-	flag.StringVar(&chainURL, "url", "", "blockchain websocket url, e.g. ws://127.0.0.1:9944")
+	flag.StringVar(&env, "env", "", "environment: local | test | main (loads configs/<env>.json)")
 	flag.StringVar(&contractName, "name", "", "contract name, e.g. cloud")
 	flag.StringVar(&contractDir, "dir", ".", "contract workspace root directory")
 	flag.StringVar(&codePath, "code", "", "compiled polkavm file path; defaults to <dir>/target/<name>.release.polkavm")
-	flag.StringVar(&suri, "suri", "//Alice", "signer secret uri")
 	flag.UintVar(&network, "network", 42, "ss58 network id")
 	flag.BoolVar(&debug, "debug", true, "enable client debug logs")
 	flag.Parse()
 
-	if chainURL == "" {
-		exitf("missing required flag: -url")
-	}
 	if contractName == "" {
 		exitf("missing required flag: -name")
+	}
+
+	// Load url and suri from JSON config
+	envCfg, err := loadEnvConfig(env)
+	if err != nil {
+		exitf("load env config: %v", err)
 	}
 
 	rootDir, err := filepath.Abs(contractDir)
@@ -59,12 +88,12 @@ func main() {
 		exitf("read contract code %s: %v", codePath, err)
 	}
 
-	client, err := chain.InitClient([]string{chainURL}, debug)
+	client, err := chain.InitClient([]string{envCfg.URL}, debug)
 	if err != nil {
 		exitf("init client: %v", err)
 	}
 
-	signer, err := chain.Sr25519PairFromSecret(suri, uint16(network))
+	signer, err := chain.Sr25519PairFromSecret(envCfg.Suri, uint16(network))
 	if err != nil {
 		exitf("init signer: %v", err)
 	}
@@ -89,7 +118,7 @@ func main() {
 	fmt.Println("deploy success")
 	fmt.Println("contract:", contractName)
 	fmt.Println("code:", codePath)
-	fmt.Println("chain:", chainURL)
+	fmt.Println("chain:", envCfg.URL)
 	fmt.Println("address:", address.Hex())
 }
 

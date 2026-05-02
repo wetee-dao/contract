@@ -24,4 +24,8 @@ pub enum Error {
     BalanceNotEnough,
     PayFailed,
     PodInstantiateFailed,
+    ArbitrationNotFound,
+    ArbitrationAlreadyResolved,
+    WorkerMortgageCheckFailed,
+    InvalidFeeRate,
 }

@@ -21,4 +21,9 @@ pub enum Error {
     InvalidSideChainCaller,
     RegionNotExist,
     AssetNotExist,
+    DepositNotEnough,
+    MortgageNotEnough,
+    SlashAmountTooLarge,
+    CloudContractNotSet,
+    ResourceNotEnough,
 }

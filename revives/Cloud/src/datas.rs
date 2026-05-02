@@ -139,3 +139,24 @@ impl Default for Secret {
         }
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
+pub enum ArbitrationStatus {
+    Pending,
+    Approved,
+    Rejected,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+pub struct Arbitration {
+    pub id: u64,
+    pub pod_id: u64,
+    pub worker_id: u64,
+    pub claimant: Address,
+    pub amount: U256,
+    pub reason: Vec<u8>,
+    pub status: ArbitrationStatus,
+    pub result_amount: U256,
+    pub created_at: BlockNumber,
+    pub resolved_at: Option<BlockNumber>,
+}

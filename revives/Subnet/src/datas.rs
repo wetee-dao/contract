@@ -38,3 +38,14 @@ pub struct EpochInfo {
     pub now: BlockNumber,
     pub side_chain_pub: Address,
 }
+
+/// 硬件等级最低资源规格要求
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, Default)]
+pub struct LevelRequirement {
+    pub min_cpu: u32,
+    pub min_mem: u32,
+    pub min_cvm_cpu: u32,
+    pub min_cvm_mem: u32,
+    pub min_disk: u32,
+    pub min_gpu: u32,
+}

@@ -13,7 +13,7 @@ members = [
   "revives/Subnet",
   "revives/Cloud",
   "revives/Dao",
-  "revives/proxy",
+  "revives/Proxy",
 
   "primitives",
 ]

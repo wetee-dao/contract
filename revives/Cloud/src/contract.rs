@@ -143,6 +143,12 @@ pub mod cloud {
         let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
         let code_hash = POD_CONTRACT_CODE_HASH.get().unwrap_or(H256::zero());
 
+        // 调用 Pod 子合约的 set_code 升级其代码
+        // Call Pod sub-contract's set_code to upgrade its code
+        pod::pod::api::set_code(&pod.pod_address, &code_hash)
+            .map_err(|_| Error::PodCodeNotFound)?
+            .map_err(|_| Error::PodCodeNotFound)?;
+
         Ok(())
     }
 
@@ -1081,6 +1087,11 @@ pub mod cloud {
         let estimated_amount = estimated_pay * U256::from(1000u64) / price;
 
         let transferred = env().value_transferred();
+        // 当存在实际资源消耗时，防止价格极高导致取整为 0 的零成本攻击
+        // Prevent zero-cost attack when price is extremely high causing rounding to 0 while resources are actually consumed
+        if estimated_pay > U256::ZERO {
+            ensure!(estimated_amount > U256::ZERO, Error::InsufficientPrepayment);
+        }
         ensure!(transferred >= estimated_amount, Error::InsufficientPrepayment);
 
         let pod_id = NEXT_POD_ID.get().unwrap_or(0);
@@ -1099,6 +1110,12 @@ pub mod cloud {
             &estimated_amount,
         )
         .map_err(|_| Error::PodInstantiateFailed)?;
+
+        // 退还用户多付的资金（精确计费金额已转入 Pod 合约）
+        // Refund excess funds to user (exact billing amount already transferred to Pod contract)
+        if transferred > estimated_amount {
+            env().transfer(&caller, &(transferred - estimated_amount)).map_err(|_| Error::PayFailed)?;
+        }
 
         let now = env().block_number();
         let pod = Pod {
@@ -1279,14 +1296,25 @@ pub mod cloud {
         let additional_amount = additional_pay * U256::from(1000u64) / price;
 
         let transferred = env().value_transferred();
+        // 当存在实际资源消耗时，防止价格极高导致取整为 0 的零成本攻击
+        if additional_pay > U256::ZERO {
+            ensure!(additional_amount > U256::ZERO, Error::InsufficientPrepayment);
+        }
         ensure!(transferred >= additional_amount, Error::InsufficientPrepayment);
 
         // 将用户追加的资金从 Cloud 合约转入 Pod 合约锁定
         // Transfer user's additional funds from Cloud contract into Pod contract for locking
-        env().transfer(&pod.pod_address, &transferred).map_err(|_| Error::PayFailed)?;
+        env().transfer(&pod.pod_address, &additional_amount).map_err(|_| Error::PayFailed)?;
+
+        // 退还用户多付的资金
+        // Refund excess funds to user
+        if transferred > additional_amount {
+            env().transfer(&caller, &(transferred - additional_amount)).map_err(|_| Error::PayFailed)?;
+        }
 
         pod.end_block = pod.end_block.saturating_add(additional_blocks);
         pod.prepaid_amount = pod.prepaid_amount + additional_amount;
+        pod.is_settled = false;
         PODS.set(&pod_id, &pod);
 
         Ok(())
@@ -1337,7 +1365,8 @@ pub mod cloud {
             U256::ZERO
         };
         if unsettled > U256::ZERO {
-            let platform_total = unsettled * U256::from(500u64) / U256::from(10000u64);
+            let fee_rate = PLATFORM_FEE_RATE.get().unwrap_or(500u16) as u64;
+            let platform_total = unsettled * U256::from(fee_rate) / U256::from(10000u64);
             let cloud_fee = platform_total / U256::from(2u64);
             let block_reward = platform_total - cloud_fee;
             let worker_amount = unsettled - platform_total;

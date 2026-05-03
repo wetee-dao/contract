@@ -13,7 +13,7 @@ ROOT="$(cd "$DIR/../../" && pwd)"
 ENV="local"
 NETWORK="42"
 NAME=""
-POD_ID="0"
+POD_ID=""
 BUILD="true"
 
 usage() {
@@ -102,6 +102,12 @@ if [[ "$BUILD" == "true" ]]; then
             cargo wrevive build -p pod
             ;;
     esac
+fi
+
+if [[ "$NAME" == "pod-contract" && -z "$POD_ID" ]]; then
+    echo "Error: --pod-id is required when --name=pod-contract" >&2
+    usage
+    exit 1
 fi
 
 ARGS=(

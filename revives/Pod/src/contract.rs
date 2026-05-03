@@ -239,6 +239,9 @@ pub mod pod {
                 // Pod 所有者从 Pod 合约余额中提取资金，用于回收未使用的预付款
                 // Pod owner withdraws funds from Pod contract balance to reclaim unused prepayment
                 ensure!(env().balance() >= amount, Error::InsufficientBalance);
+                // 禁止一次性提取全部余额，至少保留 1 wei，防止在 mint_pod 之前抢跑提光导致支付失败
+                // Disallow withdrawing full balance; keep at least 1 wei to prevent race-condition emptying before mint_pod
+                ensure!(env().balance() > amount, Error::InsufficientBalance);
                 transfer_native(&to, amount)?;
                 Ok(())
             }

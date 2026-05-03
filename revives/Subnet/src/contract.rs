@@ -665,6 +665,7 @@ pub mod subnet {
             .get(&region_id)
             .ok_or(Error::RegionNotExist)?;
         let caller = env().caller();
+        ensure!(OWNER_OF_WORKER.get(&caller).is_none(), Error::WorkerNotExist);
         let worker_id = NEXT_WORKER_ID.get().unwrap_or(0);
         let next = worker_id.checked_add(1).ok_or(Error::WorkerNotExist)?;
         NEXT_WORKER_ID.set(&next);
@@ -905,6 +906,12 @@ pub mod subnet {
                 return Err(Error::WorkerIsUseByUser);
             }
         }
+        // 将 Worker 状态置为已停止（2）
+        // Set Worker status to stopped (2)
+        WORKER_STATUS.set(&id, &2u8);
+        let mut worker = WORKERS.get(&id).ok_or(Error::WorkerNotExist)?;
+        worker.stop_block = Some(env().block_number());
+        WORKERS.set(&id, &worker);
         Ok(id)
     }
 
@@ -1102,8 +1109,10 @@ pub mod subnet {
         let caller = env().caller();
         let node = SECRETS.get(&id).ok_or(Error::NodeNotExist)?;
         ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
+        let transferred = env().value_transferred();
+        ensure!(transferred >= deposit, Error::DepositNotEnough);
         let mut amount = SECRET_MORTGAGES.get(&id).unwrap_or(U256::ZERO);
-        amount = amount.wrapping_add(deposit);
+        amount = amount.wrapping_add(transferred);
         SECRET_MORTGAGES.set(&id, &amount);
         Ok(())
     }

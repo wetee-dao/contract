@@ -57,9 +57,11 @@ func main() {
 		network uint
 	)
 
+	const podIDUnset = ^uint64(0)
+
 	flag.StringVar(&env, "env", "", "environment: local | test | main (loads configs/<env>.json)")
 	flag.StringVar(&name, "name", "", "contract to upgrade: cloud | subnet | pod-code | pod-contract")
-	flag.Uint64Var(&podID, "pod-id", 0, "pod id (required when name=pod-contract)")
+	flag.Uint64Var(&podID, "pod-id", podIDUnset, "pod id (required when name=pod-contract)")
 	flag.StringVar(&dir, "dir", ".", "workspace root directory (contains target/)")
 	flag.UintVar(&network, "network", 42, "ss58 network id")
 	flag.Parse()
@@ -73,7 +75,7 @@ func main() {
 		exitf("invalid contract name: %s (expected cloud, subnet, pod-code, or pod-contract)", name)
 	}
 
-	if name == "pod-contract" && podID == 0 {
+	if name == "pod-contract" && podID == podIDUnset {
 		exitf("missing required flag: -pod-id (required when name=pod-contract)")
 	}
 
@@ -99,7 +101,7 @@ func main() {
 	}
 
 	// show account info and ensure map account
-	ensureMapAccount(client, pk)
+	ensureMapAccount(client, pk, uint16(network))
 
 	targetDir := filepath.Join(rootDir, "target")
 	callParams := chain.ExecParams{
@@ -254,8 +256,8 @@ func upgradePodContract(client *chain.ChainClient, pk chain.Signer, envCfg EnvCo
 	fmt.Println("========================================")
 }
 
-func ensureMapAccount(client *chain.ChainClient, pk chain.Signer) {
-	ss58 := pk.SS58Address(42)
+func ensureMapAccount(client *chain.ChainClient, pk chain.Signer, network uint16) {
+	ss58 := pk.SS58Address(network)
 	h160 := pk.H160Address()
 
 	fmt.Println("Account SS58:", ss58)

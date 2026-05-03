@@ -11,3 +11,4 @@ hacks/local-dev
 hacks/deploy/deploy-contract
 hacks/deploy/deploy-full
 hacks/deploy/gen-key
+hacks/deploy/upgrade-contract

@@ -6,6 +6,7 @@ require (
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.2.2-0.20240919131012-e3b938563803
 	github.com/wetee-dao/ink.go v0.1.36
 	github.com/wetee-dao/tee-dsecret v0.1.12
+	github.com/vedhavyas/go-subkey/v2 v2.0.0
 )
 
 require (
@@ -92,7 +93,6 @@ require (
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/supranational/blst v0.3.13 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220614013038-64ee5596c38a // indirect
-	github.com/vedhavyas/go-subkey/v2 v2.0.0 // indirect
 	go.dedis.ch/fixbuf v1.0.3 // indirect
 	go.dedis.ch/kyber/v4 v4.0.0-pre2.0.20250414164612-66d4dee8d2e6 // indirect
 	go.etcd.io/bbolt v1.4.0-beta.0 // indirect

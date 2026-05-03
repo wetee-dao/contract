@@ -1,6 +1,10 @@
 {
   "url": "wss://asset-hub-paseo-rpc.n.dwellir.com",
   "suri": "0x43c0defe545b31e6f64ee9c17b35c6444a8c3527f0c68160203717c51367512d",
+  "contracts": {
+    "subnet": "0x4ec58c127786d767fdd968ced12f30be5f9a4bac",
+    "cloud": "0x239a33348e8a698cee4eb06af3780dee2ea227e3"
+  },
   "genesis": {
     "secrets": [
       {

@@ -1006,10 +1006,11 @@ pub mod cloud {
 
     /// 创建一个新的 Pod。
     ///
-    /// 调用者需支付一定金额（通过 `value_transferred`），函数会：
+    /// 调用者需一次性预付运行期间的全额费用（通过 `value_transferred`），函数会：
     /// 1. 校验目标 worker 是否满足等级和区域要求；
-    /// 2. 链上实例化一个新的 Pod 子合约（`pod-polkadot`）；
-    /// 3. 保存 Pod 元信息、容器列表，并建立用户与 worker 的索引关系。
+    /// 2. 按容器配置和运行时长计算预估费用，验证预付款充足；
+    /// 3. 链上实例化一个新的 Pod 子合约，锁定预付款；
+    /// 4. 保存 Pod 元信息、容器列表，并建立用户与 worker 的索引关系。
     ///
     /// 调用权限：任何人可调用（需支付转账）。
     ///
@@ -1022,6 +1023,7 @@ pub mod cloud {
     /// - `level`：Pod 要求的 worker 等级。
     /// - `pay_asset`：支付资产的 ID。
     /// - `worker_id`：指定的 worker ID。
+    /// - `duration_blocks`：预计运行时长（区块数）。
     ///
     /// # 返回值
     /// - `Ok(())`：创建成功。
@@ -1030,6 +1032,7 @@ pub mod cloud {
     /// - `Err(Error::RegionNotMatch)`：worker 区域不匹配。
     /// - `Err(Error::PodCodeNotFound)`：Pod 合约代码哈希未设置。
     /// - `Err(Error::PodInstantiateFailed)`：Pod 子合约实例化失败。
+    /// - `Err(Error::InsufficientPrepayment)`：预付款不足以覆盖预估费用。
     #[revive(message, write)]
     pub fn create_pod(
         name: Vec<u8>,
@@ -1040,6 +1043,7 @@ pub mod cloud {
         level: u8,
         pay_asset: u32,
         worker_id: u64,
+        duration_blocks: BlockNumber,
     ) -> Result<(), Error> {
         let caller = env().caller();
 
@@ -1056,23 +1060,43 @@ pub mod cloud {
         let side_chain_key: Address =
             subnet::subnet::api::side_chain_key(&subnet).map_err(|_| Error::NotFound)?;
 
+        // 按容器配置和等级单价计算每区块资源费用
+        // Calculate per-block resource cost from container configs and level unit price
+        let level_price: RunPrice = subnet::subnet::api::level_price(&subnet, &level)
+            .map_err(|_| Error::LevelPriceNotFound)?
+            .ok_or(Error::LevelPriceNotFound)?;
+        let tmp_containers: Vec<(u64, Container)> = containers
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (i as u64, c.clone()))
+            .collect();
+        let per_block_pay = calc_containers_pay_value(&tmp_containers, &caller, &tee_type, &level_price);
+
+        let (asset_info, price) = subnet::subnet::api::asset(&subnet, &pay_asset)
+            .map_err(|_| Error::AssetNotFound)?
+            .ok_or(Error::AssetNotFound)?;
+        ensure!(price > U256::ZERO, Error::AssetNotFound);
+
+        let estimated_pay = per_block_pay * U256::from(duration_blocks as u64);
+        let estimated_amount = estimated_pay * U256::from(1000u64) / price;
+
+        let transferred = env().value_transferred();
+        ensure!(transferred >= estimated_amount, Error::InsufficientPrepayment);
+
         let pod_id = NEXT_POD_ID.get().unwrap_or(0);
         NEXT_POD_ID.set(&(pod_id + 1));
 
-        // 用户创建 Pod 时转入的预付款，随 Pod 子合约实例化传入，作为后续计费的储备金
-        // User's prepaid funds transferred during Pod creation, passed to Pod sub-contract instantiation as billing reserve
-        let transferred = env().value_transferred();
         let code_hash = POD_CONTRACT_CODE_HASH.get().ok_or(Error::PodCodeNotFound)?;
 
-        // 链上实例化 Pod 子合约，每个 Pod 拥有独立的合约地址和资金池，实现资源隔离
-        // Instantiate Pod sub-contract on-chain; each Pod has independent contract address and fund pool for resource isolation
+        // 链上实例化 Pod 子合约，将预估费用传入作为锁定资金
+        // Instantiate Pod sub-contract on-chain, passing estimated amount as locked funds
         let (pod_address, _ctor_ret) = pod::pod::api::instantiate_new(
             &code_hash,
             &pod_id,
             &caller,
             &side_chain_key,
             &U256::MAX,
-            &transferred,
+            &estimated_amount,
         )
         .map_err(|_| Error::PodInstantiateFailed)?;
 
@@ -1086,6 +1110,10 @@ pub mod cloud {
             tee_type,
             level,
             pay_asset_id: pay_asset,
+            prepaid_amount: estimated_amount,
+            end_block: now + duration_blocks,
+            is_settled: false,
+            settled_amount: U256::ZERO,
         };
 
         PODS.set(&pod_id, &pod);
@@ -1093,13 +1121,20 @@ pub mod cloud {
         PODS_OF_WORKER.insert(&worker_id, &pod_id);
         WORKER_OF_POD.set(&pod_id, &worker_id);
         LAST_MINT_BLOCK.set(&pod_id, &now);
+
+        // 保存容器配置到链上存储，供后续计费和查询使用
+        // Save container configurations to on-chain storage for subsequent billing and querying
+        for container in containers.iter() {
+            POD_CONTAINERS.insert(&pod_id, container);
+        }
+
         Ok(())
     }
 
     /// 侧链通知启动指定 Pod。
     ///
     /// 侧链完成 Pod 的调度和初始化后，调用此函数将 Pod 状态置为运行中（status = 1），
-    /// 并记录 Pod 的密钥。
+    /// 并记录 Pod 的密钥。启动前会校验 Pod 未到期且未结算。
     ///
     /// 调用权限：仅侧链（side-chain）可调用。
     ///
@@ -1110,16 +1145,21 @@ pub mod cloud {
     /// # 返回值
     /// - `Ok(())`：启动成功。
     /// - `Err(Error::PodStatusError)`：Pod 状态不允许启动（非 0 或 1）。
+    /// - `Err(Error::PodAlreadySettled)`：Pod 已结算，无法启动。
     /// - `Err(Error::InvalidSideChainCaller)`：调用者非侧链密钥。
     #[revive(message, write)]
     pub fn start_pod(pod_id: u64, pod_key: AccountId) -> Result<(), Error> {
         ensure_from_side_chain()?;
+        let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
+        ensure!(!pod.is_settled, Error::PodAlreadySettled);
+        let now = env().block_number();
+        ensure!(now < pod.end_block, Error::PodStatusError);
+
         let status = POD_STATUS.get(&pod_id).unwrap_or(0);
         if status != 0 && status != 1 {
             return Err(Error::PodStatusError);
         }
         if status == 0 {
-            let now = env().block_number();
             LAST_MINT_BLOCK.set(&pod_id, &now);
             POD_STATUS.set(&pod_id, &1);
         }
@@ -1130,7 +1170,7 @@ pub mod cloud {
     /// 停止指定 Pod。
     ///
     /// 将 Pod 状态置为 stopped（status = 3），并从 worker 的 Pod 列表中移除该 Pod，
-    /// 释放 worker 资源。停止后 Pod 不再计费。
+    /// 释放 worker 资源。资金已在 `mint_pod` 时一次性付清，此处不再处理资金结算。
     ///
     /// 调用权限：仅 Pod 的 owner（调用者）可调用。
     ///
@@ -1169,8 +1209,9 @@ pub mod cloud {
 
     /// 重启指定 Pod。
     ///
-    /// 若 Pod 处于 stopped 状态（status = 3），将其重新加入 worker 列表并恢复计费；
+    /// 若 Pod 处于 stopped 状态（status = 3），将其重新加入 worker 列表；
     /// 若处于运行中状态（status = 1），则仅更新版本号触发重新部署。
+    /// 已结算的 Pod 不允许重启。
     ///
     /// 调用权限：仅 Pod 的 owner（调用者）可调用。
     ///
@@ -1182,12 +1223,14 @@ pub mod cloud {
     /// - `Err(Error::PodNotFound)`：Pod 不存在。
     /// - `Err(Error::NotPodOwner)`：调用者非 Pod owner。
     /// - `Err(Error::PodStatusError)`：Pod 状态不允许重启（非 1 或 3）。
+    /// - `Err(Error::PodAlreadySettled)`：Pod 已结算，无法重启。
     /// - `Err(Error::WorkerNotFound)`：Pod 未绑定 worker。
     #[revive(message, write)]
     pub fn restart_pod(pod_id: u64) -> Result<(), Error> {
         let caller = env().caller();
         let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
         ensure!(pod.owner == caller, Error::NotPodOwner);
+        ensure!(!pod.is_settled, Error::PodAlreadySettled);
 
         let status = POD_STATUS.get(&pod_id).unwrap_or(0);
         if status != 1 && status != 3 {
@@ -1206,23 +1249,65 @@ pub mod cloud {
         Ok(())
     }
 
-    /// 对指定 Pod 执行 mint（计费结算）。
+    /// 为指定 Pod 续费，追加运行时长。
     ///
-    /// 侧链定期调用此函数，按累积的计费周期扣除 Pod 的资源使用费用：
-    /// 1. 检查 Pod 状态是否为运行中（status = 1）；
-    /// 2. 计算从上一次 mint 至今经过了多少个计费周期；
-    /// 3. 根据容器配置（CPU、内存、GPU、磁盘）和 worker 等级价格计算单周期费用；
-    /// 4. 将总费用按资产价格换算后，拆分为：worker 报酬（95%）、平台费（2.5%）、区块奖励池（2.5%）；
-    /// 5. 通过 Pod 子合约分别转账给 worker、Cloud 合约（平台费）和区块奖励池。
+    /// 用户可追加预付金额以延长 Pod 的运行时间。追加的资金转入 Pod 合约锁定，
+    /// 同时更新 `end_block` 和 `prepaid_amount`。
+    ///
+    /// 调用权限：仅 Pod 的 owner（调用者）可调用。
+    ///
+    /// # 参数
+    /// - `pod_id`：待续费的 Pod ID。
+    /// - `additional_blocks`：追加的运行时长（区块数）。
+    ///
+    /// # 返回值
+    /// - `Ok(())`：续费成功。
+    /// - `Err(Error::PodNotFound)`：Pod 不存在。
+    /// - `Err(Error::NotPodOwner)`：调用者非 Pod owner。
+    /// - `Err(Error::PodAlreadySettled)`：Pod 已结算，无法续费。
+    /// - `Err(Error::InsufficientPrepayment)`：追加的转账金额不足。
+    /// - `Err(Error::PayFailed)`：资金转入 Pod 合约失败。
+    #[revive(message, write)]
+    pub fn renew_pod(pod_id: u64, additional_blocks: BlockNumber) -> Result<(), Error> {
+        let caller = env().caller();
+        let mut pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
+        ensure!(pod.owner == caller, Error::NotPodOwner);
+        ensure!(!pod.is_settled, Error::PodAlreadySettled);
+
+        let (per_block_pay, _asset_info, price, _worker_owner) = calc_pod_block_cost(pod_id)?;
+        let additional_pay = per_block_pay * U256::from(additional_blocks as u64);
+        let additional_amount = additional_pay * U256::from(1000u64) / price;
+
+        let transferred = env().value_transferred();
+        ensure!(transferred >= additional_amount, Error::InsufficientPrepayment);
+
+        // 将用户追加的资金从 Cloud 合约转入 Pod 合约锁定
+        // Transfer user's additional funds from Cloud contract into Pod contract for locking
+        env().transfer(&pod.pod_address, &transferred).map_err(|_| Error::PayFailed)?;
+
+        pod.end_block = pod.end_block.saturating_add(additional_blocks);
+        pod.prepaid_amount = pod.prepaid_amount + additional_amount;
+        PODS.set(&pod_id, &pod);
+
+        Ok(())
+    }
+
+    /// 对指定 Pod 执行一次性全额支付。
+    ///
+    /// 侧链在确认 Pod 正常启动后调用此函数，将 Pod 合约中锁定的全部预付款
+    /// 按当前价格一次性分配给工人（95%）、平台费（2.5%）和区块奖励池（2.5%）。
+    /// 由于虚拟币价格波动大，客户在 `create_pod` 时即按当前价格锁定全款，
+    /// 启动后立即付清，避免后续价格波动风险。
     ///
     /// 调用权限：仅侧链（side-chain）可调用。
     ///
     /// # 参数
-    /// - `pod_id`：待计费的 Pod ID。
+    /// - `pod_id`：待支付的 Pod ID。
     /// - `report`：侧链提交的 Pod 运行报告哈希。
     ///
     /// # 返回值
-    /// - `Ok(())`：计费成功或无新周期。
+    /// - `Ok(())`：支付成功。
+    /// - `Err(Error::PodNotFound)`：Pod 不存在。
     /// - `Err(Error::PodStatusError)`：Pod 未处于运行状态。
     /// - `Err(Error::WorkerIdNotFound)`：Pod 未绑定 worker。
     /// - `Err(Error::WorkerNotFound)`：worker 信息获取失败。
@@ -1239,127 +1324,57 @@ pub mod cloud {
             return Err(Error::PodStatusError);
         }
 
-        let now = env().block_number();
-        let last_mint = LAST_MINT_BLOCK.get(&pod_id).unwrap_or(0);
-        let interval = MINT_INTERVAL.get().unwrap_or(14400);
-
-        // 计算从上一次计费至今经过了多少个计费周期，支持按需结算（非固定周期触发）
-        // Calculate billing periods since last settlement; supports on-demand settlement (not fixed-interval triggers)
-        let elapsed = now.saturating_sub(last_mint);
-        if elapsed == 0 {
-            return Ok(());
-        }
-
-        let periods = if interval == 0 {
-            1u64
-        } else {
-            (elapsed as u64) / (interval as u64)
-        };
-
-        if periods == 0 {
-            return Ok(());
-        }
-
         POD_REPORT.set(&pod_id, &report);
 
-        let blocks_to_add = if interval == 0 {
-            elapsed
+        let mut pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
+        let (per_block_pay, asset_info, price, worker_owner) = calc_pod_block_cost(pod_id)?;
+
+        // 将 Pod 合约中未结算的预付款（prepaid - settled）分配给各方，支持续费后再次调用
+        // Distribute unsettled prepayment (prepaid - settled) from Pod contract, supports re-calling after renewal
+        let unsettled = if pod.prepaid_amount > pod.settled_amount {
+            pod.prepaid_amount - pod.settled_amount
         } else {
-            (periods as u32).saturating_mul(interval)
+            U256::ZERO
         };
-        LAST_MINT_BLOCK.set(&pod_id, &last_mint.saturating_add(blocks_to_add));
+        if unsettled > U256::ZERO {
+            let platform_total = unsettled * U256::from(500u64) / U256::from(10000u64);
+            let cloud_fee = platform_total / U256::from(2u64);
+            let block_reward = platform_total - cloud_fee;
+            let worker_amount = unsettled - platform_total;
+            let cloud_address = env().address();
 
-        let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerIdNotFound)?;
-        let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
-        let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
-            .map_err(|_| Error::WorkerNotFound)?
-            .ok_or(Error::WorkerNotFound)?;
-
-        let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
-        let containers = POD_CONTAINERS.list_all(&pod_id);
-
-        // 按 Pod 的 level 查询对应的服务品质单价，level 越高单价越贵（稳定性/网络品质溢价）
-        // Query service quality unit price by Pod's level; higher level = higher unit price (stability/network quality premium)
-        let level_price: RunPrice = subnet::subnet::api::level_price(&subnet, &pod.level)
-            .map_err(|_| Error::LevelPriceNotFound)?
-            .ok_or(Error::LevelPriceNotFound)?;
-
-        // 按容器配置逐条计算资源费用：CPU + 内存 + GPU + 磁盘，区分 SGX/CVM 两种 TEE 类型的不同单价
-        // Calculate resource cost per container config: CPU + memory + GPU + disk; SGX and CVM TEE types have different unit prices
-        let mut pay_value = U256::ZERO;
-        for (_cid, c) in containers.iter() {
-            let mut disk_cost = U256::ZERO;
-            for d in c.disk.iter() {
-                let size_gb = USER_DISKS
-                    .get(&pod.owner, d.id)
-                    .map(|disk| U256::from(disk.size() as u64))
-                    .unwrap_or(U256::ZERO);
-                disk_cost = disk_cost + size_gb * U256::from(level_price.disk_per);
+            // 95% 转给矿工作为任务执行报酬（按创建时锁定的当前价格成交）
+            // 95% transferred to worker as task reward (locked at current price at creation time)
+            if worker_amount > U256::ZERO {
+                pod::pod::api::pay_for_woker(&pod.pod_address, &worker_owner, &asset_info, &worker_amount)
+                    .map_err(|_| Error::PayFailed)?
+                    .map_err(|_| Error::PayFailed)?;
             }
 
-            let base = match pod.tee_type {
-                TEEType::SGX => {
-                    U256::from(c.cpu as u64) * U256::from(level_price.cpu_per)
-                        + U256::from(c.mem as u64) * U256::from(level_price.memory_per)
-                }
-                TEEType::CVM => {
-                    U256::from(c.cpu as u64) * U256::from(level_price.cvm_cpu_per)
-                        + U256::from(c.mem as u64) * U256::from(level_price.cvm_memory_per)
-                }
-            };
+            // 2.5% 平台费转入 Cloud 合约
+            // 2.5% platform fee transferred to Cloud contract
+            if cloud_fee > U256::ZERO {
+                pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &cloud_fee)
+                    .map_err(|_| Error::PayFailed)?
+                    .map_err(|_| Error::PayFailed)?;
+                let current_total = PLATFORM_FEE_TOTAL.get().unwrap_or(U256::ZERO);
+                PLATFORM_FEE_TOTAL.set(&(current_total + cloud_fee));
+            }
 
-            let gpu_cost = U256::from(c.gpu as u64) * U256::from(level_price.gpu_per);
-            pay_value = pay_value + base + gpu_cost + disk_cost;
+            // 2.5% 区块奖励转入 Cloud 合约的 BLOCK_REWARD_POOL
+            // 2.5% block reward transferred to Cloud's BLOCK_REWARD_POOL
+            if block_reward > U256::ZERO {
+                pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &block_reward)
+                    .map_err(|_| Error::PayFailed)?
+                    .map_err(|_| Error::PayFailed)?;
+                let current_pool = BLOCK_REWARD_POOL.get().unwrap_or(U256::ZERO);
+                BLOCK_REWARD_POOL.set(&(current_pool + block_reward));
+            }
         }
 
-        let total_pay_value = pay_value * U256::from(periods);
-
-        let (asset_info, price) = subnet::subnet::api::asset(&subnet, &pod.pay_asset_id)
-            .map_err(|_| Error::AssetNotFound)?
-            .ok_or(Error::AssetNotFound)?;
-        if price == U256::ZERO {
-            return Err(Error::AssetNotFound);
-        }
-
-        // 将资源费用按资产价格换算为实际代币数量（公式：pay_value * 1000 / price）
-        // Convert resource cost to actual token amount using asset price (formula: pay_value * 1000 / price)
-        let total_amount = total_pay_value * U256::from(1000u64) / price;
-
-        // 平台费固定 5%，拆分为 2.5% Cloud 运营费 + 2.5% 区块奖励池（由侧链分配给打包节点）
-        // Platform fee fixed at 5%, split: 2.5% Cloud operations + 2.5% block reward pool (distributed by side-chain to block producers)
-        let platform_total = total_amount * U256::from(500u64) / U256::from(10000u64);
-        let cloud_fee = platform_total / U256::from(2u64);
-        let block_reward = platform_total - cloud_fee;
-        let worker_amount = total_amount - platform_total;
-        let cloud_address = env().address();
-
-        // 95% 转给矿工作为任务执行报酬
-        // 95% transferred to worker as task execution reward
-        if worker_amount > U256::ZERO {
-            pod::pod::api::pay_for_woker(&pod.pod_address, &worker.owner, &asset_info, &worker_amount)
-                .map_err(|_| Error::PayFailed)?
-                .map_err(|_| Error::PayFailed)?;
-        }
-
-        // 2.5% 平台费转入 Cloud 合约，累加到 PLATFORM_FEE_TOTAL 供治理方提现
-        // 2.5% platform fee transferred to Cloud contract, accumulated in PLATFORM_FEE_TOTAL for governance withdrawal
-        if cloud_fee > U256::ZERO {
-            pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &cloud_fee)
-                .map_err(|_| Error::PayFailed)?
-                .map_err(|_| Error::PayFailed)?;
-            let current_total = PLATFORM_FEE_TOTAL.get().unwrap_or(U256::ZERO);
-            PLATFORM_FEE_TOTAL.set(&(current_total + cloud_fee));
-        }
-
-        // 2.5% 区块奖励转入 Cloud 合约的 BLOCK_REWARD_POOL，由侧链验证后分配给打包节点
-        // 2.5% block reward transferred to Cloud's BLOCK_REWARD_POOL, distributed to block producers after side-chain verification
-        if block_reward > U256::ZERO {
-            pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &block_reward)
-                .map_err(|_| Error::PayFailed)?
-                .map_err(|_| Error::PayFailed)?;
-            let current_pool = BLOCK_REWARD_POOL.get().unwrap_or(U256::ZERO);
-            BLOCK_REWARD_POOL.set(&(current_pool + block_reward));
-        }
+        pod.settled_amount = pod.prepaid_amount;
+        pod.is_settled = true;
+        PODS.set(&pod_id, &pod);
 
         Ok(())
     }
@@ -1464,6 +1479,76 @@ pub mod cloud {
             .clear(&pod_id, container_id)
             .ok_or(Error::DelFailed)?;
         Ok(true)
+    }
+
+    /// 计算一组容器配置的每区块资源费用（纯计算函数，无存储写入）。
+    /// 供 create_pod（容器尚未入库）、stop_pod / renew_pod（容器已从存储读取）共用。
+    ///
+    /// Calculate per-block resource cost for a set of containers (pure function, no storage writes).
+    /// Shared by create_pod (containers not yet stored), stop_pod / renew_pod (containers read from storage).
+    fn calc_containers_pay_value(
+        containers: &[(u64, Container)],
+        owner: &Address,
+        tee_type: &TEEType,
+        level_price: &RunPrice,
+    ) -> U256 {
+        let mut pay_value = U256::ZERO;
+        for (_cid, c) in containers.iter() {
+            let mut disk_cost = U256::ZERO;
+            for d in c.disk.iter() {
+                let size_gb = USER_DISKS
+                    .get(owner, d.id)
+                    .map(|disk| U256::from(disk.size() as u64))
+                    .unwrap_or(U256::ZERO);
+                disk_cost = disk_cost + size_gb * U256::from(level_price.disk_per);
+            }
+
+            let base = match tee_type {
+                TEEType::SGX => {
+                    U256::from(c.cpu as u64) * U256::from(level_price.cpu_per)
+                        + U256::from(c.mem as u64) * U256::from(level_price.memory_per)
+                }
+                TEEType::CVM => {
+                    U256::from(c.cpu as u64) * U256::from(level_price.cvm_cpu_per)
+                        + U256::from(c.mem as u64) * U256::from(level_price.cvm_memory_per)
+                }
+            };
+
+            let gpu_cost = U256::from(c.gpu as u64) * U256::from(level_price.gpu_per);
+            pay_value = pay_value + base + gpu_cost + disk_cost;
+        }
+        pay_value
+    }
+
+    /// 计算指定 Pod 的每区块资源费用、资产信息、资产价格和工人地址。
+    /// 从链上存储读取容器配置和定价信息。
+    ///
+    /// Calculate per-block resource cost, asset info, asset price, and worker address for a given Pod.
+    /// Reads container configs and pricing from on-chain storage.
+    fn calc_pod_block_cost(pod_id: u64) -> Result<(U256, AssetInfo, U256, Address), Error> {
+        let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerIdNotFound)?;
+        let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
+        let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
+            .map_err(|_| Error::WorkerNotFound)?
+            .ok_or(Error::WorkerNotFound)?;
+
+        let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
+        let containers = POD_CONTAINERS.list_all(&pod_id);
+
+        let level_price: RunPrice = subnet::subnet::api::level_price(&subnet, &pod.level)
+            .map_err(|_| Error::LevelPriceNotFound)?
+            .ok_or(Error::LevelPriceNotFound)?;
+
+        let pay_value = calc_containers_pay_value(&containers, &pod.owner, &pod.tee_type, &level_price);
+
+        let (asset_info, price) = subnet::subnet::api::asset(&subnet, &pod.pay_asset_id)
+            .map_err(|_| Error::AssetNotFound)?
+            .ok_or(Error::AssetNotFound)?;
+        if price == U256::ZERO {
+            return Err(Error::AssetNotFound);
+        }
+
+        Ok((pay_value, asset_info, price, worker.owner))
     }
 }
 

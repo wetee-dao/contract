@@ -26,7 +26,6 @@ echo "Build Tag: $TAG"
 chmod +x ./target/node
 chmod +x ./target/eth-rpc
 
-
 # 编译
 docker build -f ./node.Dockerfile -t "wetee/wetee-node:$TAG"  . 
 docker push "wetee/wetee-node:$TAG"

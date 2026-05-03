@@ -22,6 +22,18 @@ pub struct Pod {
     pub tee_type: TEEType,
     pub level: u8,
     pub pay_asset_id: u32,
+    /// 用户预付的总金额（创建时锁定在 Pod 合约中）
+    /// Total prepaid amount locked in Pod contract at creation
+    pub prepaid_amount: U256,
+    /// 预计结束区块（= start_block + duration_blocks）
+    /// Expected end block (= start_block + duration_blocks)
+    pub end_block: BlockNumber,
+    /// 是否已完成结算（mint_pod 后标记为 true，防止重复结算）
+    /// Whether settlement is complete (marked true after mint_pod to prevent double settlement)
+    pub is_settled: bool,
+    /// 已结算（已支付给矿工）的金额，用于支持续费后的多次结算
+    /// Amount already settled (paid to worker), supports multiple settlements after renewals
+    pub settled_amount: U256,
 }
 
 /// K8s worker 节点信息（Subnet::worker 返回值等）

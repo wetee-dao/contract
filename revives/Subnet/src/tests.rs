@@ -227,7 +227,10 @@ fn worker_update_by_non_owner_fails() {
 fn worker_mortgage_by_owner() {
     setup_deployed_and_inited();
     let _ = subnet::set_region(b"eu".to_vec());
-    with_engine(|e| e.set_caller([10u8; 20]));
+    with_engine(|e| {
+        e.set_caller([10u8; 20]);
+        e.value_transferred = U256::from(1000u64);
+    });
     let wid = subnet::worker_register(
         b"w".to_vec(),
         account_id_from_u8(1),
@@ -237,6 +240,7 @@ fn worker_mortgage_by_owner() {
         0,
     )
     .unwrap();
+    with_engine(|e| e.value_transferred = U256::from(1000u64));
     let mid = subnet::worker_mortgage(wid, 2, 4, 0, 0, 10, 0, U256::from(1000u64)).unwrap();
     assert_eq!(mid, 0);
 }

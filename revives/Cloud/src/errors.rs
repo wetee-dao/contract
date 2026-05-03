@@ -28,4 +28,6 @@ pub enum Error {
     ArbitrationAlreadyResolved,
     WorkerMortgageCheckFailed,
     InvalidFeeRate,
+    InsufficientPrepayment,
+    PodAlreadySettled,
 }

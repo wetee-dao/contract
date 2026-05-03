@@ -16,6 +16,7 @@ path = "src/contract.rs"
 [lib]
 name = "pod"
 path = "src/contract.rs"
+doctest = false
 
 [dependencies]
 pvm-bump-allocator = { git = "https://github.com/paritytech/cargo-pvm-contract", branch = "main" }

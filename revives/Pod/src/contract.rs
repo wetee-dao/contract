@@ -11,7 +11,7 @@ extern crate alloc;
 static ALLOC: pvm_bump_allocator::BumpAllocator<65536> = pvm_bump_allocator::BumpAllocator::new();
 
 use parity_scale_codec::Encode as ScaleEncode;
-use wrevive_api::{Address, H256, Storage, U256, Env, env};
+use wrevive_api::{Address, Env, H256, Storage, U256, env};
 use wrevive_macro::{revive_contract, storage};
 
 pub use primitives::{AssetInfo, ensure, ok_or_err};
@@ -31,6 +31,8 @@ pub enum Error {
     UnsupportedAsset,
     /// 目标代码哈希与链上不一致，且 runtime 未提供合约内升级能力（见 set_code）
     CodeUpgradeNotSupported,
+    /// initialize 已被调用过，不允许重复初始化
+    AlreadyInitialized,
 }
 
 #[revive_contract]
@@ -47,24 +49,28 @@ pub mod pod {
     /// Pod 所有者地址
     const OWNER: Storage<Address> = storage!(b"owner");
 
-    /// 创建新的 Pod 合约实例。
+    /// Pod 实现合约的构造函数。
     ///
-    /// 该函数为合约构造函数，在合约部署时由运行时自动调用。
-    /// 调用者（云合约）将被记录为父合约地址，同时初始化 Pod ID、所有者和侧链多重签名账户。
+    /// 采用 Proxy 模式后，实现合约只部署一次，无需初始化任何 Pod 小实例状态。
+    /// 每个 Pod Proxy 的实际状态由 `initialize` 消息独立初始化。
+    #[revive(constructor)]
+    pub fn new() -> Result<(), Error> {
+        // 实现合约无需状态初始化；各 Proxy 实例通过 initialize() 独立初始化
+        Ok(())
+    }
+
+    /// 初始化 Pod Proxy 实例的状态（替代构造函数）。
     ///
-    /// # 调用权限
-    /// 由部署流程触发，通常由云合约调用部署。
+    /// 必须通过 Proxy 合约调用，执行时状态存入 Proxy 存储。
+    /// 仅允许调用一次：`CLOUD_CONTRACT` 已设则拒绝重入。
     ///
     /// # 参数
     /// - `id`：Pod 的唯一标识 ID。
-    /// - `owner`：Pod 的所有者地址，拥有提现等高级权限。
-    /// - `side_chain_multi_key`：侧链多重签名账户地址，用于跨链相关操作。
-    ///
-    /// # 返回值
-    /// - `Ok(())`：初始化成功。
-    /// - `Err(Error)`：初始化失败（当前实现不会返回错误，保持与未来兼容）。
-    #[revive(constructor)]
-    pub fn new(id: u64, owner: Address, side_chain_multi_key: Address) -> Result<(), Error> {
+    /// - `owner`：Pod 的所有者地址。
+    /// - `side_chain_multi_key`：侧链多重签名地址。
+    #[revive(message, write)]
+    pub fn initialize(id: u64, owner: Address, side_chain_multi_key: Address) -> Result<(), Error> {
+        ensure!(CLOUD_CONTRACT.get().is_none(), Error::AlreadyInitialized);
         let caller = env().caller();
         CLOUD_CONTRACT.set(&caller);
         SIDE_CHAIN_MULTI_KEY.set(&side_chain_multi_key);
@@ -238,9 +244,8 @@ pub mod pod {
             AssetInfo::Native(_) => {
                 // Pod 所有者从 Pod 合约余额中提取资金，用于回收未使用的预付款
                 // Pod owner withdraws funds from Pod contract balance to reclaim unused prepayment
-                ensure!(env().balance() >= amount, Error::InsufficientBalance);
-                // 禁止一次性提取全部余额，至少保留 1 wei，防止在 mint_pod 之前抢跑提光导致支付失败
-                // Disallow withdrawing full balance; keep at least 1 wei to prevent race-condition emptying before mint_pod
+                // 要求 balance > amount（严格大于）：至少保留 1 wei，防止在 mint_pod 之前抢跑提光导致支付失败
+                // Require balance > amount (strict greater-than): keep at least 1 wei to prevent race-condition emptying before mint_pod
                 ensure!(env().balance() > amount, Error::InsufficientBalance);
                 transfer_native(&to, amount)?;
                 Ok(())

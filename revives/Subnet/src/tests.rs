@@ -1,7 +1,7 @@
 //! Unit tests for Subnet contract. Uses off_chain Engine (wrevive_api::with_engine).
 
 use super::*;
-use wrevive_api::{with_engine, AccountId, Address, U256};
+use wrevive_api::{AccountId, Address, U256, with_engine};
 
 fn gov_caller() -> [u8; 20] {
     [1u8; 20]
@@ -246,9 +246,11 @@ fn worker_mortgage_by_owner() {
 }
 
 #[test]
-fn worker_stop_by_owner_no_mortgages_in_use() {
+fn worker_stop_by_owner_when_running() {
     setup_deployed_and_inited();
     let _ = subnet::set_region(b"eu".to_vec());
+
+    // 注册 Worker
     with_engine(|e| e.set_caller([10u8; 20]));
     let wid = subnet::worker_register(
         b"w".to_vec(),
@@ -259,8 +261,24 @@ fn worker_stop_by_owner_no_mortgages_in_use() {
         0,
     )
     .unwrap();
+
+    // 抵押资源（status 必须为 0 才能抵押）
+    with_engine(|e| {
+        e.set_caller([10u8; 20]);
+        e.value_transferred = U256::from(1000u64);
+    });
+    let _ = subnet::worker_mortgage(wid, 2, 4, 0, 0, 10, 0, U256::from(1000u64)).unwrap();
+
+    // 以侧链地址（Address::zero() = [0u8;20]）启动 Worker
+    with_engine(|e| e.set_caller([0u8; 20]));
+    subnet::worker_start(wid).expect("worker_start should succeed");
+    assert_eq!(subnet::worker(wid).unwrap().status, 1);
+
+    // Owner 停止 Worker
+    with_engine(|e| e.set_caller([10u8; 20]));
     let got = subnet::worker_stop(wid).unwrap();
     assert_eq!(got, wid);
+    assert_eq!(subnet::worker(wid).unwrap().status, 2);
 }
 
 #[test]

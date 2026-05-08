@@ -16,11 +16,11 @@ fn deploy_and_getters() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
     assert_eq!(cloud::subnet_address(), subnet_addr);
     assert_eq!(cloud::mint_interval(), 14400);
     assert_eq!(cloud::pod_len(), 0);
-    assert_eq!(cloud::pod_contract(), code_hash);
+    assert_eq!(cloud::proxy_code_hash(), code_hash);
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn set_mint_interval_only_by_gov() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
 
     let _ = cloud::set_mint_interval(10000);
     assert_eq!(cloud::mint_interval(), 10000);
@@ -45,22 +45,34 @@ fn set_mint_interval_only_by_gov() {
 }
 
 #[test]
-fn set_pod_contract_only_by_gov() {
+fn set_pod_impl_and_proxy_hash_only_by_gov() {
     let subnet_addr = Address::from([1u8; 20]);
-    let code_hash = H256::from([2u8; 32]);
+    let proxy_hash = H256::from([2u8; 32]);
+    let pod_impl = Address::from([3u8; 20]);
     with_engine(|e| {
         e.reset();
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, pod_impl, proxy_hash);
 
-    let new_hash = H256::from([5u8; 32]);
-    let _ = cloud::set_pod_contract(new_hash);
-    assert_eq!(cloud::pod_contract(), new_hash);
+    // 测试 set_pod_impl / pod_impl
+    let new_impl = Address::from([5u8; 20]);
+    let _ = cloud::set_pod_impl(new_impl);
+    assert_eq!(cloud::pod_impl(), new_impl);
 
     with_engine(|e| e.set_caller([99u8; 20]));
-    let res = cloud::set_pod_contract(H256::from([6u8; 32]));
+    let res = cloud::set_pod_impl(Address::from([6u8; 20]));
+    assert_eq!(res, Err(Error::MustCallByGovContract));
+
+    // 测试 set_proxy_code_hash / proxy_code_hash
+    with_engine(|e| e.set_caller(gov_caller()));
+    let new_hash = H256::from([7u8; 32]);
+    let _ = cloud::set_proxy_code_hash(new_hash);
+    assert_eq!(cloud::proxy_code_hash(), new_hash);
+
+    with_engine(|e| e.set_caller([99u8; 20]));
+    let res = cloud::set_proxy_code_hash(H256::from([8u8; 32]));
     assert_eq!(res, Err(Error::MustCallByGovContract));
 }
 
@@ -74,7 +86,7 @@ fn create_secret_and_user_secrets() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
 
     with_engine(|e| e.set_caller([10u8; 20]));
     let key = b"my_secret_key".to_vec();
@@ -102,7 +114,7 @@ fn del_secret() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
 
     with_engine(|e| e.set_caller([11u8; 20]));
     let _ = cloud::create_secret(b"k".to_vec(), H256::zero());
@@ -119,7 +131,7 @@ fn charge_and_balance() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
     let _ = cloud::charge();
     let bal = cloud::balance(AssetInfo::Native(Default::default()));
     assert_eq!(bal, U256::ZERO);
@@ -134,7 +146,7 @@ fn pods_empty_and_user_pod_len() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
     let list = cloud::pods(None, 10);
     assert!(list.is_empty());
     assert_eq!(cloud::user_pod_len(), 0);
@@ -149,7 +161,7 @@ fn update_pod_contract_returns_err_when_pod_not_found() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, code_hash);
+    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
     let res = cloud::update_pod_contract(999);
     assert_eq!(res, Err(Error::PodNotFound));
 }
@@ -182,11 +194,30 @@ fn setup_cloud_subnet_worker() {
         e.set_caller(gov_caller());
     });
     let _ = cloud::new();
-    let _ = cloud::init(subnet_addr(), H256::from([2u8; 32]));
+    let _ = cloud::init(
+        subnet_addr(),
+        Address::from([3u8; 20]),
+        H256::from([2u8; 32]),
+    );
 
     // Register Subnet dispatcher so Cloud can call Subnet messages
     with_engine(|e| {
         e.register_contract(subnet_addr(), || subnet::call());
+    });
+
+    // Register Pod dispatcher at pod_impl_addr so delegate_call works
+    with_engine(|e| {
+        e.register_contract(Address::from([3u8; 20]), || pod::call());
+    });
+
+    // Pre-register Pod dispatcher at the address that instantiate will allocate.
+    // Off-chain instantiate just increments next_address_counter (starts at 0 after reset_all);
+    // first call gives counter=1 → address = [0,0,...,0,0,0,0,1].
+    // This makes pod::api::initialize succeed inside create_pod.
+    let mut expected_proxy = [0u8; 20];
+    expected_proxy[19] = 1;
+    with_engine(|e| {
+        e.register_contract(Address::from(expected_proxy), || pod::call());
     });
 
     // Initialize Subnet contract
@@ -241,15 +272,24 @@ fn setup_cloud_subnet_worker() {
         ipv6: None,
         domain: None,
     };
-    let _ = subnet::subnet::worker_register(
-        b"worker-0".to_vec(),
-        p2p_id,
-        ip,
-        30333,
-        1,
-        0,
-    )
-    .expect("worker_register should succeed");
+    let _ = subnet::subnet::worker_register(b"worker-0".to_vec(), p2p_id, ip, 30333, 1, 0)
+        .expect("worker_register should succeed");
+
+    // 为 Worker 抵押资源（status 0 时才能抵押）
+    with_engine(|e| {
+        e.set_contract(subnet_addr());
+        e.set_caller(*alice().as_ref());
+        e.value_transferred = U256::from(1000u64);
+    });
+    let _ = subnet::subnet::worker_mortgage(0, 2, 4, 0, 0, 10, 0, U256::from(1000u64))
+        .expect("worker_mortgage should succeed");
+
+    // 以侧链地址（Address::zero()）启动 Worker（SIDE_CHAIN_MULTI_KEY = Address::zero() from init）
+    with_engine(|e| {
+        e.set_contract(subnet_addr());
+        e.set_caller([0u8; 20]);
+    });
+    let _ = subnet::subnet::worker_start(0).expect("worker_start should succeed");
 }
 
 fn create_pod_basic() {
@@ -280,25 +320,16 @@ fn start_pod_basic() {
     assert!(result.is_ok(), "start_pod failed: {:?}", result);
 }
 
-/// Manually initialize Pod contract storage after off_chain instantiate.
-/// Returns the Pod contract address.
+/// Ensures Pod dispatcher is registered for the pod address and restores Cloud context.
+/// Pod state (CLOUD_CONTRACT, OWNER, etc.) was already initialized inside create_pod via
+/// pod::api::initialize, so no manual initialization is needed here.
 fn init_pod_contract() -> Address {
     let pod_addr = cloud::pod(0).unwrap().0.pod_address;
 
-    // Register Pod dispatcher so Cloud can call Pod messages
+    // Ensure Pod dispatcher is registered (may already be from pre-registration in setup)
     with_engine(|e| {
         e.register_contract(pod_addr, || pod::call());
-    });
-
-    // Manually initialize Pod storage (off_chain instantiate does not call deploy)
-    with_engine(|e| {
-        e.set_contract(pod_addr);
-        e.set_caller(*cloud_addr().as_ref());
-    });
-    let _ = pod::pod::new(0, alice(), side_chain_key());
-
-    // Restore Cloud contract context
-    with_engine(|e| {
+        // Restore Cloud contract context
         e.set_contract(cloud_addr());
     });
     pod_addr
@@ -423,7 +454,10 @@ fn pod_stop_allows_settled_pod() {
         e.set_caller(*alice().as_ref());
     });
     let result = cloud::stop_pod(0);
-    assert!(result.is_ok(), "stop_pod should succeed even after settlement");
+    assert!(
+        result.is_ok(),
+        "stop_pod should succeed even after settlement"
+    );
     let pod_info = cloud::pod(0).unwrap();
     assert_eq!(pod_info.3, 3); // status = stopped
 }

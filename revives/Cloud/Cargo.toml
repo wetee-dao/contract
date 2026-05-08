@@ -20,6 +20,7 @@ wrevive-api = { workspace = true, features = ["on_chain"] }
 primitives = { workspace = true }
 pod = { path = "../Pod", features = ["api"] }
 subnet = { path = "../Subnet", features = ["api"] }
+proxy = { path = "../Proxy", features = ["api"] }
 
 [dev-dependencies]
 wrevive-api = { workspace = true, features = ["off_chain"] }

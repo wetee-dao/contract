@@ -6,9 +6,9 @@ use parity_scale_codec::{Decode, Encode};
 pub enum Error {
     SetCodeFailed,
     MustCallByGovContract,
+    WorkerNotOnline,
     WorkerLevelNotEnough,
     RegionNotMatch,
-    WorkerNotOnline,
     NotPodOwner,
     PodKeyNotExist,
     PodStatusError,

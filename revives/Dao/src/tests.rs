@@ -43,7 +43,7 @@ fn public_join_and_leave() {
     assert_eq!(dao::balance_of(alice()), U256::ZERO);
     assert_eq!(dao::list(), vec![alice()]);
 
-    assert_eq!(dao::levae(), Ok(()));
+    assert_eq!(dao::leave(), Ok(()));
     assert_eq!(dao::list(), Vec::<Address>::new());
 }
 
@@ -106,7 +106,10 @@ fn approve_and_transfer_from() {
     assert_eq!(dao::allowance(alice(), bob()), U256::from(40u64));
 
     with_engine(|e| e.set_caller([2u8; 20]));
-    assert_eq!(dao::transfer_from(alice(), bob(), U256::from(25u64)), Ok(()));
+    assert_eq!(
+        dao::transfer_from(alice(), bob(), U256::from(25u64)),
+        Ok(())
+    );
     assert_eq!(dao::allowance(alice(), bob()), U256::from(15u64));
     assert_eq!(dao::balance_of(alice()), U256::from(75u64));
     assert_eq!(dao::balance_of(bob()), U256::from(75u64));
@@ -192,12 +195,23 @@ fn track_management() {
         min_enactment_period: 1,
         decision_deposit: U256::from(1u64),
         max_balance: U256::from(1u64),
-        min_approval: Curve::LinearDecreasing { begin: 10000, end: 5000, length: 30 },
-        min_support: Curve::LinearDecreasing { begin: 10000, end: 50, length: 30 },
+        min_approval: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 5000,
+            length: 30,
+        },
+        min_support: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 50,
+            length: 30,
+        },
     };
     let tid = dao::add_track(track.clone()).unwrap();
     assert_eq!(dao::track(tid), Some(track.clone()));
-    assert_eq!(dao::track_list(), vec![(0, dao::track(0).unwrap()), (tid, track.clone())]);
+    assert_eq!(
+        dao::track_list(),
+        vec![(0, dao::track(0).unwrap()), (tid, track.clone())]
+    );
 
     assert_eq!(dao::set_defalut_track(tid), Ok(()));
     assert_eq!(dao::defalut_track(), Some(tid));
@@ -225,8 +239,16 @@ fn set_track_rule_and_lookup() {
         min_enactment_period: 1,
         decision_deposit: U256::from(1u64),
         max_balance: U256::from(1u64),
-        min_approval: Curve::LinearDecreasing { begin: 10000, end: 5000, length: 30 },
-        min_support: Curve::LinearDecreasing { begin: 10000, end: 50, length: 30 },
+        min_approval: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 5000,
+            length: 30,
+        },
+        min_support: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 50,
+            length: 30,
+        },
     };
     let tid = dao::add_track(track).unwrap();
     let contract = Some(Address::from([9u8; 20]));
@@ -253,7 +275,7 @@ fn member_not_existed_for_leave() {
     let _ = dao::new_with_default_track(users, true, Some(Address::from(gov())));
 
     with_engine(|e| e.set_caller([1u8; 20]));
-    assert_eq!(dao::levae(), Err(Error::MemberNotExisted));
+    assert_eq!(dao::leave(), Err(Error::MemberNotExisted));
 }
 
 #[test]

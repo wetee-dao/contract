@@ -92,7 +92,7 @@ pub enum EditType<T> {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub enum Env {
+pub enum PodEnv {
     Env(Bytes, Bytes),
     File(Bytes, Bytes),
     Encrypt(Bytes, u64),
@@ -119,7 +119,7 @@ pub struct Container {
     pub mem: u32,
     pub disk: Vec<ContainerDisk>,
     pub gpu: u32,
-    pub env: Vec<Env>,
+    pub env: Vec<PodEnv>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]

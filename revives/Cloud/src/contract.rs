@@ -24,11 +24,14 @@ pub use primitives::{ensure, ok_or_err};
 pub mod cloud {
     use super::*;
     use crate::{Error, ensure};
-    use wrevive_api::{AccountId, Decode, Encode, List2D, Mapping, Vec};
+    use wrevive_api::{AccountId, List2D, Mapping, Vec};
 
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
     const SUBNET_ADDRESS: Storage<Address> = storage!(b"subnet_address");
-    const POD_CONTRACT_CODE_HASH: Storage<H256> = storage!(b"pod_contract_code_hash");
+    /// Proxy 合约的代码哈希，创建新 Pod 时用于实例化 Proxy
+    const PROXY_CODE_HASH: Storage<H256> = storage!(b"proxy_code_hash");
+    /// Pod 实现合约的部署地址，所有 Proxy 共享这一个实现
+    const POD_IMPL_ADDRESS: Storage<Address> = storage!(b"pod_impl_address");
     const MINT_INTERVAL: Storage<BlockNumber> = storage!(b"mint_interval");
     const NEXT_POD_ID: Storage<u64> = storage!(b"next_pod_id");
 
@@ -75,17 +78,27 @@ pub mod cloud {
     /// - `subnet_addr`：Subnet 合约地址，用于查询 worker、region、侧链密钥等信息。
     /// - `pod_code_hash`：Pod 合约的代码哈希，创建 Pod 时用于链上实例化。
     ///
+    /// # 参数
+    /// - `subnet_addr`：Subnet 合约地址。
+    /// - `pod_impl_addr`：Pod 实现合约的部署地址，所有 Proxy 共享此实现。
+    /// - `proxy_code_hash`：Proxy 合约的代码哈希，用于每次创建新 Pod 时实例化 Proxy。
+    ///
     /// # 返回值
     /// - `Ok(())`：初始化成功或已初始化。
     #[revive(message, write)]
-    pub fn init(subnet_addr: Address, pod_code_hash: H256) -> Result<(), Error> {
-        if let Some(_) = GOV_CONTRACT.get() {
+    pub fn init(
+        subnet_addr: Address,
+        pod_impl_addr: Address,
+        proxy_code_hash: H256,
+    ) -> Result<(), Error> {
+        if GOV_CONTRACT.get().is_some() {
             return Ok(());
         }
         let caller = env().caller();
         GOV_CONTRACT.set(&caller);
         SUBNET_ADDRESS.set(&subnet_addr);
-        POD_CONTRACT_CODE_HASH.set(&pod_code_hash);
+        POD_IMPL_ADDRESS.set(&pod_impl_addr);
+        PROXY_CODE_HASH.set(&proxy_code_hash);
         MINT_INTERVAL.set(&14400u32);
         NEXT_POD_ID.set(&0u64);
         PLATFORM_FEE_RATE.set(&500u16);
@@ -95,57 +108,65 @@ pub mod cloud {
         Ok(())
     }
 
-    /// 设置 Pod 合约的代码哈希。
+    /// 设置 Pod 实现合约的部署地址（用于升级 Pod 逻辑）。
     ///
-    /// 用于升级或更换 Pod 合约模板，后续新创建的 Pod 将使用新的代码哈希进行实例化。
+    /// 更新后，调用 `update_pod_contract` 可将已有 Pod 的 Proxy 指向新实现。
+    /// 新创建的 Pod Proxy 也将自动使用最新实现地址。
     ///
     /// 调用权限：仅治理合约（gov）可调用。
-    ///
-    /// # 参数
-    /// - `pod_contract`：新的 Pod 合约代码哈希。
-    ///
-    /// # 返回值
-    /// - `Ok(())`：设置成功。
-    /// - `Err(Error::MustCallByGovContract)`：调用者非治理合约。
     #[revive(message, write)]
-    pub fn set_pod_contract(pod_contract: H256) -> Result<(), Error> {
+    pub fn set_pod_impl(addr: Address) -> Result<(), Error> {
         ensure_from_gov()?;
-        POD_CONTRACT_CODE_HASH.set(&pod_contract);
+        POD_IMPL_ADDRESS.set(&addr);
         Ok(())
     }
 
-    /// 获取当前设置的 Pod 合约代码哈希。
-    ///
-    /// 调用权限：任何人可调用。
-    ///
-    /// # 返回值
-    /// - `H256`：当前 Pod 合约代码哈希；若未设置则返回 `H256::zero()`。
+    /// 获取当前 Pod 实现合约的部署地址。
     #[revive(message)]
-    pub fn pod_contract() -> H256 {
-        POD_CONTRACT_CODE_HASH.get().unwrap_or(H256::zero())
+    pub fn pod_impl() -> Address {
+        POD_IMPL_ADDRESS.get().unwrap_or(Address::zero())
     }
 
-    /// 更新指定 Pod 的合约代码。
+    /// 设置 Proxy 合约的代码哈希（用于实例化新 Pod Proxy）。
     ///
-    /// 获取当前 Pod 合约代码哈希，后续可通过调用 Pod 合约的 `set_code` 实现代码升级。
-    /// 当前为占位实现，待完善 TODO。
+    /// 调用权限：仅治理合约（gov）可调用。
+    #[revive(message, write)]
+    pub fn set_proxy_code_hash(hash: H256) -> Result<(), Error> {
+        ensure_from_gov()?;
+        PROXY_CODE_HASH.set(&hash);
+        Ok(())
+    }
+
+    /// 获取当前 Proxy 合约的代码哈希。
+    #[revive(message)]
+    pub fn proxy_code_hash() -> H256 {
+        PROXY_CODE_HASH.get().unwrap_or(H256::zero())
+    }
+
+    /// 将指定 Pod 的 Proxy 升级到当前最新 Pod 实现合约。
     ///
-    /// 调用权限：任何人可调用（写操作）。
+    /// 通过调用 Pod Proxy 合约的 `upgrade` 方法，将代理指向的实现地址切换为
+    /// `POD_IMPL_ADDRESS` 中存储的最新地址，实现不停机热升级。
+    ///
+    /// 调用权限：仅治理合约（gov）可调用。
     ///
     /// # 参数
     /// - `pod_id`：目标 Pod 的唯一标识。
     ///
     /// # 返回值
-    /// - `Ok(())`：操作成功（当前为占位）。
+    /// - `Ok(())`：升级成功。
     /// - `Err(Error::PodNotFound)`：Pod 不存在。
+    /// - `Err(Error::PodCodeNotFound)`：Pod 实现地址未配置或升级调用失败。
     #[revive(message, write)]
     pub fn update_pod_contract(pod_id: u64) -> Result<(), Error> {
+        ensure_from_gov()?;
         let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
-        let code_hash = POD_CONTRACT_CODE_HASH.get().unwrap_or(H256::zero());
+        let new_impl = POD_IMPL_ADDRESS.get().unwrap_or(Address::zero());
+        ensure!(new_impl != Address::zero(), Error::PodCodeNotFound);
 
-        // 调用 Pod 子合约的 set_code 升级其代码
-        // Call Pod sub-contract's set_code to upgrade its code
-        pod::pod::api::set_code(&pod.pod_address, &code_hash)
+        // 调用 Pod Proxy 的 upgrade，将实现地址切换到最新 Pod 逻辑合约
+        // Call Pod Proxy's upgrade to switch implementation to latest Pod logic contract
+        proxy::proxy::api::upgrade(&pod.pod_address, &new_impl)
             .map_err(|_| Error::PodCodeNotFound)?
             .map_err(|_| Error::PodCodeNotFound)?;
 
@@ -260,7 +281,10 @@ pub mod cloud {
         ensure_from_side_chain()?;
         let pool = BLOCK_REWARD_POOL.get().unwrap_or(U256::ZERO);
         ensure!(pool >= amount, Error::BalanceNotEnough);
-        // 从区块奖励池扣减并转账给目标地址（由侧链链下验证出块节点后调用）
+        // 校验合约实际余额，防止账务与实际余额背离导致转账失败
+        // Check actual contract balance to prevent accounting divergence causing transfer failure
+        ensure!(env().balance() >= amount, Error::BalanceNotEnough);
+        // 从区块奖励池扣减并转账给目标地址（由侧链钉下验证出块节点后调用）
         // Deduct from block reward pool and transfer to target address (called by side-chain after off-chain block producer verification)
         BLOCK_REWARD_POOL.set(&(pool - amount));
         env().transfer(&to, &amount).map_err(|_| Error::PayFailed)?;
@@ -287,6 +311,9 @@ pub mod cloud {
         ensure_from_gov()?;
         let total = PLATFORM_FEE_TOTAL.get().unwrap_or(U256::ZERO);
         ensure!(total >= amount, Error::BalanceNotEnough);
+        // 校验合约实际余额，防止账务与实际余额背离导致转账失败
+        // Check actual contract balance to prevent accounting divergence causing transfer failure
+        ensure!(env().balance() >= amount, Error::BalanceNotEnough);
         PLATFORM_FEE_TOTAL.set(&(total - amount));
         env().transfer(&to, &amount).map_err(|_| Error::PayFailed)?;
         Ok(())
@@ -973,11 +1000,7 @@ pub mod cloud {
     /// # 返回值
     /// - `Vec<(u64, Arbitration)>`：仲裁 ID 与详情列表。
     #[revive(message)]
-    pub fn pod_arbitrations(
-        pod_id: u64,
-        start: Option<u64>,
-        size: u64,
-    ) -> Vec<(u64, Arbitration)> {
+    pub fn pod_arbitrations(pod_id: u64, start: Option<u64>, size: u64) -> Vec<(u64, Arbitration)> {
         let ids = POD_ARBITRATIONS.desc_list(&pod_id, start, size as u32);
         let mut out = Vec::new();
         for (_k2, id) in ids.into_iter() {
@@ -1051,15 +1074,22 @@ pub mod cloud {
         worker_id: u64,
         duration_blocks: BlockNumber,
     ) -> Result<(), Error> {
+        // 向下子合约转入资金前，必须确保运行时长大于零。duration_blocks == 0 时
+        // end_block == start_block，start_pod 的 now < end_block 必然失败，Pod 永远无法启动
+        // Require duration_blocks > 0: if 0, end_block == start_block and start_pod
+        // check (now < end_block) will always fail, making the Pod unlaunchable
+        ensure!(duration_blocks > 0, Error::InsufficientPrepayment);
+
         let caller = env().caller();
 
         let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
 
-        // 通过 Subnet 合约查询目标 Worker 信息，校验 Worker 等级 >= Pod 等级，且区域匹配
-        // Query target Worker info via Subnet contract; verify Worker level >= Pod level and region matches
+        // 通过 Subnet 合约查询目标 Worker 信息，校验 Worker 在线、等级 >= Pod 等级，且区域匹配
+        // Query target Worker info via Subnet contract; verify Worker is online, level >= Pod level, region matches
         let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
             .map_err(|_| Error::WorkerNotFound)?
             .ok_or(Error::WorkerNotFound)?;
+        ensure!(worker.status == 1, Error::WorkerNotOnline);
         ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
         ensure!(worker.region_id == region_id, Error::RegionNotMatch);
 
@@ -1076,9 +1106,10 @@ pub mod cloud {
             .enumerate()
             .map(|(i, c)| (i as u64, c.clone()))
             .collect();
-        let per_block_pay = calc_containers_pay_value(&tmp_containers, &caller, &tee_type, &level_price);
+        let per_block_pay =
+            calc_containers_pay_value(&tmp_containers, &caller, &tee_type, &level_price);
 
-        let (asset_info, price) = subnet::subnet::api::asset(&subnet, &pay_asset)
+        let (_asset_info, price) = subnet::subnet::api::asset(&subnet, &pay_asset)
             .map_err(|_| Error::AssetNotFound)?
             .ok_or(Error::AssetNotFound)?;
         ensure!(price > U256::ZERO, Error::AssetNotFound);
@@ -1092,29 +1123,47 @@ pub mod cloud {
         if estimated_pay > U256::ZERO {
             ensure!(estimated_amount > U256::ZERO, Error::InsufficientPrepayment);
         }
-        ensure!(transferred >= estimated_amount, Error::InsufficientPrepayment);
+        ensure!(
+            transferred >= estimated_amount,
+            Error::InsufficientPrepayment
+        );
 
         let pod_id = NEXT_POD_ID.get().unwrap_or(0);
         NEXT_POD_ID.set(&(pod_id + 1));
 
-        let code_hash = POD_CONTRACT_CODE_HASH.get().ok_or(Error::PodCodeNotFound)?;
+        let proxy_hash = PROXY_CODE_HASH.get().ok_or(Error::PodCodeNotFound)?;
+        let pod_impl = POD_IMPL_ADDRESS.get().unwrap_or(Address::zero());
+        ensure!(pod_impl != Address::zero(), Error::PodCodeNotFound);
 
-        // 链上实例化 Pod 子合约，将预估费用传入作为锁定资金
-        // Instantiate Pod sub-contract on-chain, passing estimated amount as locked funds
-        let (pod_address, _ctor_ret) = pod::pod::api::instantiate_new(
-            &code_hash,
-            &pod_id,
-            &caller,
-            &side_chain_key,
+        // Cloud 合约自身作为 Proxy 的 admin，后续可通过 update_pod_contract 升级实现
+        // Cloud contract itself is the Proxy admin, enabling future upgrades via update_pod_contract
+        let cloud_addr = env().address();
+
+        // 1. 实例化 Proxy 合约，指向 Pod 实现，预付款锁定在 Proxy 存储中
+        //    Instantiate Proxy contract pointing to Pod implementation; prepayment locked in Proxy storage
+        let (proxy_address, _) = proxy::proxy::api::instantiate_new(
+            &proxy_hash,
+            &pod_impl,
+            &Some(cloud_addr),
             &U256::MAX,
             &estimated_amount,
         )
         .map_err(|_| Error::PodInstantiateFailed)?;
 
+        // 2. 通过 Proxy 调用 Pod 的 initialize 完成状态初始化（delegate_call 到 Pod 实现）
+        //    Initialize Pod state via Proxy (delegate_calls to Pod implementation)
+        pod::pod::api::initialize(&proxy_address, &pod_id, &caller, &side_chain_key)
+            .map_err(|_| Error::PodInstantiateFailed)?
+            .map_err(|_| Error::PodInstantiateFailed)?;
+
+        let pod_address = proxy_address;
+
         // 退还用户多付的资金（精确计费金额已转入 Pod 合约）
         // Refund excess funds to user (exact billing amount already transferred to Pod contract)
         if transferred > estimated_amount {
-            env().transfer(&caller, &(transferred - estimated_amount)).map_err(|_| Error::PayFailed)?;
+            env()
+                .transfer(&caller, &(transferred - estimated_amount))
+                .map_err(|_| Error::PayFailed)?;
         }
 
         let now = env().block_number();
@@ -1128,7 +1177,9 @@ pub mod cloud {
             level,
             pay_asset_id: pay_asset,
             prepaid_amount: estimated_amount,
-            end_block: now + duration_blocks,
+            // saturating_add 防止 release 模式下 overflow-checks=false 时 u32 静默回绕
+            // saturating_add prevents silent u32 wrap-around in release mode (overflow-checks=false)
+            end_block: now.saturating_add(duration_blocks),
             is_settled: false,
             settled_amount: U256::ZERO,
         };
@@ -1298,18 +1349,28 @@ pub mod cloud {
         let transferred = env().value_transferred();
         // 当存在实际资源消耗时，防止价格极高导致取整为 0 的零成本攻击
         if additional_pay > U256::ZERO {
-            ensure!(additional_amount > U256::ZERO, Error::InsufficientPrepayment);
+            ensure!(
+                additional_amount > U256::ZERO,
+                Error::InsufficientPrepayment
+            );
         }
-        ensure!(transferred >= additional_amount, Error::InsufficientPrepayment);
+        ensure!(
+            transferred >= additional_amount,
+            Error::InsufficientPrepayment
+        );
 
         // 将用户追加的资金从 Cloud 合约转入 Pod 合约锁定
         // Transfer user's additional funds from Cloud contract into Pod contract for locking
-        env().transfer(&pod.pod_address, &additional_amount).map_err(|_| Error::PayFailed)?;
+        env()
+            .transfer(&pod.pod_address, &additional_amount)
+            .map_err(|_| Error::PayFailed)?;
 
         // 退还用户多付的资金
         // Refund excess funds to user
         if transferred > additional_amount {
-            env().transfer(&caller, &(transferred - additional_amount)).map_err(|_| Error::PayFailed)?;
+            env()
+                .transfer(&caller, &(transferred - additional_amount))
+                .map_err(|_| Error::PayFailed)?;
         }
 
         pod.end_block = pod.end_block.saturating_add(additional_blocks);
@@ -1352,10 +1413,14 @@ pub mod cloud {
             return Err(Error::PodStatusError);
         }
 
-        POD_REPORT.set(&pod_id, &report);
-
         let mut pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
-        let (per_block_pay, asset_info, price, worker_owner) = calc_pod_block_cost(pod_id)?;
+
+        // 校验 Pod 未过期，防止对已过期 Pod 进行结算
+        // Verify Pod has not expired; prevent settling an already-expired Pod
+        ensure!(env().block_number() <= pod.end_block, Error::PodStatusError);
+
+        POD_REPORT.set(&pod_id, &report);
+        let (_per_block_pay, asset_info, _price, worker_owner) = calc_pod_block_cost(pod_id)?;
 
         // 将 Pod 合约中未结算的预付款（prepaid - settled）分配给各方，支持续费后再次调用
         // Distribute unsettled prepayment (prepaid - settled) from Pod contract, supports re-calling after renewal
@@ -1375,17 +1440,27 @@ pub mod cloud {
             // 95% 转给矿工作为任务执行报酬（按创建时锁定的当前价格成交）
             // 95% transferred to worker as task reward (locked at current price at creation time)
             if worker_amount > U256::ZERO {
-                pod::pod::api::pay_for_woker(&pod.pod_address, &worker_owner, &asset_info, &worker_amount)
-                    .map_err(|_| Error::PayFailed)?
-                    .map_err(|_| Error::PayFailed)?;
+                pod::pod::api::pay_for_woker(
+                    &pod.pod_address,
+                    &worker_owner,
+                    &asset_info,
+                    &worker_amount,
+                )
+                .map_err(|_| Error::PayFailed)?
+                .map_err(|_| Error::PayFailed)?;
             }
 
             // 2.5% 平台费转入 Cloud 合约
             // 2.5% platform fee transferred to Cloud contract
             if cloud_fee > U256::ZERO {
-                pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &cloud_fee)
-                    .map_err(|_| Error::PayFailed)?
-                    .map_err(|_| Error::PayFailed)?;
+                pod::pod::api::pay_for_woker(
+                    &pod.pod_address,
+                    &cloud_address,
+                    &asset_info,
+                    &cloud_fee,
+                )
+                .map_err(|_| Error::PayFailed)?
+                .map_err(|_| Error::PayFailed)?;
                 let current_total = PLATFORM_FEE_TOTAL.get().unwrap_or(U256::ZERO);
                 PLATFORM_FEE_TOTAL.set(&(current_total + cloud_fee));
             }
@@ -1393,9 +1468,14 @@ pub mod cloud {
             // 2.5% 区块奖励转入 Cloud 合约的 BLOCK_REWARD_POOL
             // 2.5% block reward transferred to Cloud's BLOCK_REWARD_POOL
             if block_reward > U256::ZERO {
-                pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &block_reward)
-                    .map_err(|_| Error::PayFailed)?
-                    .map_err(|_| Error::PayFailed)?;
+                pod::pod::api::pay_for_woker(
+                    &pod.pod_address,
+                    &cloud_address,
+                    &asset_info,
+                    &block_reward,
+                )
+                .map_err(|_| Error::PayFailed)?
+                .map_err(|_| Error::PayFailed)?;
                 let current_pool = BLOCK_REWARD_POOL.get().unwrap_or(U256::ZERO);
                 BLOCK_REWARD_POOL.set(&(current_pool + block_reward));
             }
@@ -1568,7 +1648,8 @@ pub mod cloud {
             .map_err(|_| Error::LevelPriceNotFound)?
             .ok_or(Error::LevelPriceNotFound)?;
 
-        let pay_value = calc_containers_pay_value(&containers, &pod.owner, &pod.tee_type, &level_price);
+        let pay_value =
+            calc_containers_pay_value(&containers, &pod.owner, &pod.tee_type, &level_price);
 
         let (asset_info, price) = subnet::subnet::api::asset(&subnet, &pod.pay_asset_id)
             .map_err(|_| Error::AssetNotFound)?

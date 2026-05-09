@@ -10,7 +10,7 @@ static ALLOC: pvm_bump_allocator::BumpAllocator<65536> = pvm_bump_allocator::Bum
 mod errors;
 
 use pallet_revive_uapi::CallFlags;
-use wrevive_api::{Address, Encode, ReturnFlags, Storage, U256, Env, env};
+use wrevive_api::{Address, Encode, Env, ReturnFlags, Storage, U256, env};
 use wrevive_macro::{revive_contract, storage};
 
 pub use errors::Error;

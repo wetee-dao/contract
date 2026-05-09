@@ -16,7 +16,10 @@ mod errors;
 use wrevive_api::*;
 use wrevive_macro::{list_2d, mapping, revive_contract, storage};
 
-pub use datas::{AssetDeposit, AssetInfo, EpochInfo, Ip, K8sCluster, LevelRequirement, NodeID, RunPrice, SecretNode};
+pub use datas::{
+    AssetDeposit, AssetInfo, EpochInfo, Ip, K8sCluster, LevelRequirement, NodeID, RunPrice,
+    SecretNode,
+};
 pub use errors::Error;
 pub use primitives::{ensure, ok_or_err};
 
@@ -408,7 +411,8 @@ pub mod subnet {
     /// - `U256`：该等级的最小抵押金额。
     #[revive(message)]
     pub fn level_min_mortgage(level: u8) -> U256 {
-        LEVEL_MIN_MORTGAGES.get(&level)
+        LEVEL_MIN_MORTGAGES
+            .get(&level)
             .or_else(|| MIN_MORTGAGE_AMOUNT.get())
             .unwrap_or(U256::ZERO)
     }
@@ -445,7 +449,14 @@ pub mod subnet {
                 total_gpu = total_gpu.saturating_add(dep.gpu);
             }
         }
-        (total_cpu, total_mem, total_cvm_cpu, total_cvm_mem, total_disk, total_gpu)
+        (
+            total_cpu,
+            total_mem,
+            total_cvm_cpu,
+            total_cvm_mem,
+            total_disk,
+            total_gpu,
+        )
     }
 
     /// 计算指定 Worker 已抵押的总资产金额。
@@ -494,7 +505,11 @@ pub mod subnet {
     /// - `Err(Error::WorkerMortgageNotExist)`：抵押记录不存在。
     /// - `Err(Error::TransferFailed)`：转账失败。
     #[revive(message, write)]
-    pub fn slash_worker_mortgage(worker_id: NodeID, amount: U256, to: Address) -> Result<(), Error> {
+    pub fn slash_worker_mortgage(
+        worker_id: NodeID,
+        amount: U256,
+        to: Address,
+    ) -> Result<(), Error> {
         ensure_from_cloud()?;
 
         let mut remaining = amount;
@@ -661,12 +676,16 @@ pub mod subnet {
         level: u8,
         region_id: u32,
     ) -> Result<NodeID, Error> {
-        REGIONS
-            .get(&region_id)
-            .ok_or(Error::RegionNotExist)?;
+        REGIONS.get(&region_id).ok_or(Error::RegionNotExist)?;
         let caller = env().caller();
-        ensure!(OWNER_OF_WORKER.get(&caller).is_none(), Error::WorkerNotExist);
+        // 每个地址仅可注册一个 Worker，已注册则返回 WorkerNotOwnedByCaller 作为「已存在」语义
+        // Each address can only register one Worker; return WorkerNotOwnedByCaller as "already exists"
+        ensure!(
+            OWNER_OF_WORKER.get(&caller).is_none(),
+            Error::WorkerNotOwnedByCaller
+        );
         let worker_id = NEXT_WORKER_ID.get().unwrap_or(0);
+        // Worker ID 溢出时返回 WorkerNotExist（触发概率极低，但需防止 panic）
         let next = worker_id.checked_add(1).ok_or(Error::WorkerNotExist)?;
         NEXT_WORKER_ID.set(&next);
         let now = env().block_number();
@@ -758,10 +777,10 @@ pub mod subnet {
         let caller = env().caller();
         let worker = WORKERS.get(&id).ok_or(Error::WorkerNotExist)?;
         ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
-        ensure!(
-            WORKER_STATUS.get(&id).unwrap_or(0) == 0,
-            Error::WorkerStatusNotReady
-        );
+        // 允许在未启动（0）或已停止（2）状态下抵押，运行中（1）不可抵押
+        // Allow mortgage when not started (0) or stopped (2); not allowed while running (1)
+        let status = WORKER_STATUS.get(&id).unwrap_or(0);
+        ensure!(status == 0 || status == 2, Error::WorkerStatusNotReady);
 
         // 校验实际随交易转入的金额 >= 声明的质押金额，确保保证金真实到账
         // Verify actual transferred amount >= declared deposit, ensuring real funds are received
@@ -809,15 +828,13 @@ pub mod subnet {
     #[revive(message, write)]
     pub fn worker_unmortgage(worker_id: NodeID, mortgage_id: u32) -> Result<u32, Error> {
         let caller = env().caller();
-        let worker = WORKERS
-            .get(&worker_id)
-            .ok_or(Error::WorkerNotExist)?;
+        let worker = WORKERS.get(&worker_id).ok_or(Error::WorkerNotExist)?;
         ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
-        ensure!(
-            WORKER_STATUS.get(&worker_id).unwrap_or(0) == 0,
-            Error::WorkerStatusNotReady
-        );
-        
+        // 允许在未启动（0）或已停止（2）状态下解除抵押，运行中（1）不可解抵押
+        // Allow unmortgage when not started (0) or stopped (2); not allowed while running (1)
+        let status = WORKER_STATUS.get(&worker_id).unwrap_or(0);
+        ensure!(status == 0 || status == 2, Error::WorkerStatusNotReady);
+
         let mut mortgage = WORKER_MORTGAGES
             .get(&worker_id, mortgage_id)
             .ok_or(Error::WorkerMortgageNotExist)?;
@@ -856,7 +873,8 @@ pub mod subnet {
         // 校验抵押金额：优先使用 level 专属最低要求，未设置则回退到全局默认值
         // Verify mortgage amount: priority to level-specific minimum, fallback to global default if unset
         let total = worker_total_mortgage(id);
-        let min = LEVEL_MIN_MORTGAGES.get(&worker.level)
+        let min = LEVEL_MIN_MORTGAGES
+            .get(&worker.level)
             .or_else(|| MIN_MORTGAGE_AMOUNT.get())
             .unwrap_or(U256::ZERO);
         ensure!(total >= min, Error::MortgageNotEnough);
@@ -875,9 +893,10 @@ pub mod subnet {
 
     /// 申请停止 Worker。
     ///
-    /// Worker 拥有者可以请求停止 Worker。停止前会检查 Worker 当前状态为未启动（status == 0），
-    /// 且没有任何有效抵押记录（所有抵押必须已先解除）。
-    /// 注意：此函数仅做停止校验并返回 Worker ID，实际状态清除由外部逻辑处理。
+    /// Worker 拥有者可以停止运行中的 Worker（status == 1），将状态置为已停止（status == 2）。
+    /// 停止后抵押金可通过 `worker_unmortgage` 逐笔解除并退还。
+    /// 注意：停止并不自动退还抵押金，需调用方后续手动解除；
+    /// Slash 机制在 Worker 停止后仍可对剩余抵押金执行罚没。
     ///
     /// # 调用权限
     /// 仅 Worker 拥有者可调用。
@@ -886,26 +905,21 @@ pub mod subnet {
     /// - `id`：要停止的 Worker ID。
     ///
     /// # 返回值
-    /// - `Ok(NodeID)`：校验通过，返回 Worker ID。
+    /// - `Ok(NodeID)`：停止成功，返回 Worker ID。
     /// - `Err(Error::WorkerNotExist)`：Worker 不存在。
     /// - `Err(Error::WorkerNotOwnedByCaller)`：调用者不是拥有者。
-    /// - `Err(Error::WorkerStatusNotReady)`：Worker 处于启动状态，无法停止。
-    /// - `Err(Error::WorkerIsUseByUser)`：Worker 仍有有效抵押记录，不可停止。
+    /// - `Err(Error::WorkerStatusNotReady)`：Worker 未处于运行状态（status != 1），无法停止。
     #[revive(message, write)]
     pub fn worker_stop(id: NodeID) -> Result<NodeID, Error> {
         let caller = env().caller();
         let worker = WORKERS.get(&id).ok_or(Error::WorkerNotExist)?;
         ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
+        // 仅允许运行中（status == 1）的 Worker 停止，防止重复停止已停止节点
+        // Only allow stopping a running Worker (status == 1), preventing double-stop
         ensure!(
-            WORKER_STATUS.get(&id).unwrap_or(0) == 0,
+            WORKER_STATUS.get(&id).unwrap_or(0) == 1,
             Error::WorkerStatusNotReady
         );
-        let list = WORKER_MORTGAGES.list_all(&id);
-        for (_, dep) in list {
-            if dep.deleted.is_none() {
-                return Err(Error::WorkerIsUseByUser);
-            }
-        }
         // 将 Worker 状态置为已停止（2）
         // Set Worker status to stopped (2)
         WORKER_STATUS.set(&id, &2u8);
@@ -978,10 +992,8 @@ pub mod subnet {
     /// - `Vec<(u64, u32)>`：待处理 Secret 节点 ID 与权重的列表。
     #[revive(message)]
     pub fn get_pending_secrets() -> Vec<(u64, u32)> {
-        let ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
-        ids.into_iter()
-            .filter_map(|id| PENDING_VALIDATORS.get(&id).map(|pow| (id, pow)))
-            .collect()
+        let len = PENDING_SECRETS_LEN.get().unwrap_or(0);
+        (0..len).filter_map(|i| PENDING_SECRETS.get(&i)).collect()
     }
 
     /// 列出所有已注册的 Secret 节点。
@@ -1114,7 +1126,14 @@ pub mod subnet {
         let transferred = env().value_transferred();
         ensure!(transferred >= deposit, Error::DepositNotEnough);
         let mut amount = SECRET_MORTGAGES.get(&id).unwrap_or(U256::ZERO);
-        amount = amount.wrapping_add(transferred);
+        // 防止 U256 充务溢出回绕：wrapping_add 后若结果小于加数，说明已进位溢出，饱和到 MAX
+        // Prevent U256 deposit overflow wrap-around: if wrapping_add result < operand, overflow occurred; saturate at MAX
+        let new_amount = amount.wrapping_add(transferred);
+        amount = if new_amount < amount {
+            U256::MAX
+        } else {
+            new_amount
+        };
         SECRET_MORTGAGES.set(&id, &amount);
         Ok(())
     }
@@ -1217,7 +1236,12 @@ pub mod subnet {
             ids.push(id);
             PENDING_VALIDATOR_IDS.set(&ids);
         }
-        PENDING_VALIDATORS.set(&id, &1u32);
+        let new_len = nodes.len() as u32;
+        for (idx, (nid, pow)) in nodes.into_iter().enumerate() {
+            PENDING_SECRETS.set(&(idx as u32), &(nid, pow));
+        }
+
+        PENDING_SECRETS_LEN.set(&new_len);
         Ok(())
     }
 

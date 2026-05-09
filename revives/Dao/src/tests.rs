@@ -105,7 +105,10 @@ fn approve_and_transfer_from() {
     assert_eq!(dao::allowance(alice(), bob()), U256::from(40u64));
 
     with_engine(|e| e.set_caller([2u8; 20]));
-    assert_eq!(dao::transfer_from(alice(), bob(), U256::from(25u64)), Ok(()));
+    assert_eq!(
+        dao::transfer_from(alice(), bob(), U256::from(25u64)),
+        Ok(())
+    );
     assert_eq!(dao::allowance(alice(), bob()), U256::from(15u64));
     assert_eq!(dao::balance_of(alice()), U256::from(75u64));
     assert_eq!(dao::balance_of(bob()), U256::from(75u64));
@@ -191,12 +194,23 @@ fn track_management() {
         min_enactment_period: 1,
         decision_deposit: U256::from(1u64),
         max_balance: U256::from(1u64),
-        min_approval: Curve::LinearDecreasing { begin: 10000, end: 5000, length: 30 },
-        min_support: Curve::LinearDecreasing { begin: 10000, end: 50, length: 30 },
+        min_approval: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 5000,
+            length: 30,
+        },
+        min_support: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 50,
+            length: 30,
+        },
     };
     let tid = dao::add_track(track.clone()).unwrap();
     assert_eq!(dao::track(tid), Some(track.clone()));
-    assert_eq!(dao::track_list(), vec![(0, dao::track(0).unwrap()), (tid, track.clone())]);
+    assert_eq!(
+        dao::track_list(),
+        vec![(0, dao::track(0).unwrap()), (tid, track.clone())]
+    );
 
     assert_eq!(dao::set_default_track(tid), Ok(()));
     assert_eq!(dao::default_track(), Some(tid));
@@ -224,8 +238,16 @@ fn set_track_rule_and_lookup() {
         min_enactment_period: 1,
         decision_deposit: U256::from(1u64),
         max_balance: U256::from(1u64),
-        min_approval: Curve::LinearDecreasing { begin: 10000, end: 5000, length: 30 },
-        min_support: Curve::LinearDecreasing { begin: 10000, end: 50, length: 30 },
+        min_approval: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 5000,
+            length: 30,
+        },
+        min_support: Curve::LinearDecreasing {
+            begin: 10000,
+            end: 50,
+            length: 30,
+        },
     };
     let tid = dao::add_track(track).unwrap();
     let contract = Some(Address::from([9u8; 20]));

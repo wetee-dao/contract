@@ -16,11 +16,13 @@ mod datas;
 mod errors;
 
 use pallet_revive_uapi::CallFlags;
-use wrevive_api::{env, Address, Env, Mapping, Storage, U256, Vec};
+use wrevive_api::{Address, Env, Mapping, Storage, U256, Vec, env};
 use wrevive_macro::{mapping, revive_contract, storage};
 
-pub use curve::{arg_to_curve, Curve, CurveArg, Percent};
-pub use datas::{Call, CallInput, CallId, Opinion, PropStatus, Selector, Spend, TokenInfo, Track, VoteInfo};
+pub use curve::{Curve, CurveArg, Percent, arg_to_curve};
+pub use datas::{
+    Call, CallInput, CalllId, Opinion, PropStatus, Selector, Spend, TokenInfo, Track, VoteInfo,
+};
 pub use errors::Error;
 pub use primitives::{ensure, ok_or_err};
 
@@ -83,8 +85,16 @@ pub mod dao {
             min_enactment_period: 1,
             decision_deposit: U256::from(1u64),
             max_balance: U256::from(1u64),
-            min_approval: Curve::LinearDecreasing { begin: 10000, end: 5000, length: 30 },
-            min_support: Curve::LinearDecreasing { begin: 10000, end: 50, length: 30 },
+            min_approval: Curve::LinearDecreasing {
+                begin: 10000,
+                end: 5000,
+                length: 30,
+            },
+            min_support: Curve::LinearDecreasing {
+                begin: 10000,
+                end: 50,
+                length: 30,
+            },
         };
         init_state(users, public_join, sudo_account, Some(track))
     }
@@ -101,7 +111,10 @@ pub mod dao {
 
     #[revive(message, write)]
     pub fn public_join() -> Result<(), Error> {
-        ensure!(PUBLIC_JOIN.get().unwrap_or(false), Error::PublicJoinNotAllowed);
+        ensure!(
+            PUBLIC_JOIN.get().unwrap_or(false),
+            Error::PublicJoinNotAllowed
+        );
         let caller = env().caller();
         ensure!(MEMBER_BALANCES.get(&caller).is_none(), Error::MemberExisted);
         MEMBER_BALANCES.set(&caller, &U256::ZERO);
@@ -123,7 +136,10 @@ pub mod dao {
     #[revive(message, write)]
     pub fn join(new_user: Address, balance: U256) -> Result<(), Error> {
         ensure_from_gov()?;
-        ensure!(MEMBER_BALANCES.get(&new_user).is_none(), Error::MemberExisted);
+        ensure!(
+            MEMBER_BALANCES.get(&new_user).is_none(),
+            Error::MemberExisted
+        );
         MEMBER_BALANCES.set(&new_user, &balance);
         MEMBER_LOCK_BALANCES.set(&new_user, &U256::ZERO);
         TOTAL_ISSUANCE.set(&(TOTAL_ISSUANCE.get().unwrap_or(U256::ZERO) + balance));
@@ -136,9 +152,18 @@ pub mod dao {
     #[revive(message, write)]
     pub fn leave() -> Result<(), Error> {
         let caller = env().caller();
-        ensure!(MEMBER_BALANCES.get(&caller).is_some(), Error::MemberNotExisted);
-        ensure!(MEMBER_BALANCES.get(&caller).unwrap_or(U256::ZERO) == U256::ZERO, Error::MemberBalanceNotZero);
-        ensure!(MEMBER_LOCK_BALANCES.get(&caller).unwrap_or(U256::ZERO) == U256::ZERO, Error::MemberBalanceNotZero);
+        ensure!(
+            MEMBER_BALANCES.get(&caller).is_some(),
+            Error::MemberNotExisted
+        );
+        ensure!(
+            MEMBER_BALANCES.get(&caller).unwrap_or(U256::ZERO) == U256::ZERO,
+            Error::MemberBalanceNotZero
+        );
+        ensure!(
+            MEMBER_LOCK_BALANCES.get(&caller).unwrap_or(U256::ZERO) == U256::ZERO,
+            Error::MemberBalanceNotZero
+        );
         MEMBER_BALANCES.clear(&caller);
         MEMBER_LOCK_BALANCES.clear(&caller);
         let mut members = MEMBERS.get().unwrap_or_default();
@@ -150,7 +175,10 @@ pub mod dao {
     #[revive(message, write)]
     pub fn leave_with_burn() -> Result<(), Error> {
         let caller = env().caller();
-        ensure!(MEMBER_BALANCES.get(&caller).is_some(), Error::MemberNotExisted);
+        ensure!(
+            MEMBER_BALANCES.get(&caller).is_some(),
+            Error::MemberNotExisted
+        );
         let amount = MEMBER_BALANCES.get(&caller).unwrap_or(U256::ZERO)
             + MEMBER_LOCK_BALANCES.get(&caller).unwrap_or(U256::ZERO);
         let total = TOTAL_ISSUANCE.get().unwrap_or(U256::ZERO);
@@ -167,7 +195,10 @@ pub mod dao {
     #[revive(message, write)]
     pub fn delete(user: Address) -> Result<(), Error> {
         ensure_from_gov()?;
-        ensure!(MEMBER_BALANCES.get(&user).is_some(), Error::MemberNotExisted);
+        ensure!(
+            MEMBER_BALANCES.get(&user).is_some(),
+            Error::MemberNotExisted
+        );
         let amount = MEMBER_BALANCES.get(&user).unwrap_or(U256::ZERO)
             + MEMBER_LOCK_BALANCES.get(&user).unwrap_or(U256::ZERO);
         let total = TOTAL_ISSUANCE.get().unwrap_or(U256::ZERO);
@@ -204,20 +235,29 @@ pub mod dao {
     #[revive(message, write)]
     pub fn approve(spender: Address, value: U256) -> Result<(), Error> {
         let caller = env().caller();
-        ensure!(MEMBER_BALANCES.get(&caller).is_some(), Error::MemberNotExisted);
+        ensure!(
+            MEMBER_BALANCES.get(&caller).is_some(),
+            Error::MemberNotExisted
+        );
         ALLOWANCES.set(&(caller, spender), &value);
         Ok(())
     }
 
     #[revive(message, write)]
     pub fn transfer(to: Address, value: U256) -> Result<(), Error> {
-        ensure!(TRANSFER_ENABLED.get().unwrap_or(true), Error::TransferDisable);
+        ensure!(
+            TRANSFER_ENABLED.get().unwrap_or(true),
+            Error::TransferDisable
+        );
         transfer_from_to(env().caller(), to, value)
     }
 
     #[revive(message, write)]
     pub fn transfer_from(from: Address, to: Address, value: U256) -> Result<(), Error> {
-        ensure!(TRANSFER_ENABLED.get().unwrap_or(true), Error::TransferDisable);
+        ensure!(
+            TRANSFER_ENABLED.get().unwrap_or(true),
+            Error::TransferDisable
+        );
         let caller = env().caller();
         let allowance = ALLOWANCES.get(&(from, caller)).unwrap_or(U256::ZERO);
         ensure!(allowance >= value, Error::InsufficientAllowance);
@@ -228,12 +268,16 @@ pub mod dao {
     #[revive(message, write)]
     pub fn burn(value: U256) -> Result<(), Error> {
         let caller = env().caller();
+        // --- Checks ---
+        // 先完成所有校验，再修改状态（CEI 原则）
+        // Complete all checks before modifying state (CEI pattern)
         let free = free_balance(caller);
         ensure!(free >= value, Error::LowBalance);
-        let balance = MEMBER_BALANCES.get(&caller).unwrap_or(U256::ZERO);
-        MEMBER_BALANCES.set(&caller, &(balance - value));
         let total = TOTAL_ISSUANCE.get().unwrap_or(U256::ZERO);
         ensure!(total >= value, Error::LowBalance);
+        // --- Effects ---
+        let balance = MEMBER_BALANCES.get(&caller).unwrap_or(U256::ZERO);
+        MEMBER_BALANCES.set(&caller, &(balance - value));
         TOTAL_ISSUANCE.set(&(total - value));
         Ok(())
     }
@@ -246,9 +290,16 @@ pub mod dao {
     #[revive(message, write)]
     pub fn sudo(call: Call) -> Result<Vec<u8>, Error> {
         let caller = env().caller();
+<<<<<<< HEAD
         ensure!(SUDO_ACCOUNT.get().unwrap_or(None) == Some(caller), Error::MustCallByGov);
         ensure!(!REENTRANCY_GUARD.get().unwrap_or(false), Error::ReentrantCall);
         REENTRANCY_GUARD.set(&true);
+=======
+        ensure!(
+            SUDO_ACCOUNT.get().unwrap_or(None) == Some(caller),
+            Error::MustCallByGov
+        );
+>>>>>>> origin/main
         let call_id = NEXT_SUDO_CALL_ID.get().unwrap_or(0);
         NEXT_SUDO_CALL_ID.set(&(call_id + 1));
         SUDO_CALLS.set(&call_id, &call);
@@ -260,7 +311,10 @@ pub mod dao {
     #[revive(message, write)]
     pub fn remove_sudo() -> Result<(), Error> {
         let caller = env().caller();
-        ensure!(SUDO_ACCOUNT.get().unwrap_or(None) == Some(caller), Error::MustCallByGov);
+        ensure!(
+            SUDO_ACCOUNT.get().unwrap_or(None) == Some(caller),
+            Error::MustCallByGov
+        );
         SUDO_ACCOUNT.set(&None);
         Ok(())
     }
@@ -315,7 +369,11 @@ pub mod dao {
     }
 
     #[revive(message, write)]
-    pub fn set_track_rule(contract: Option<Address>, selector: Option<Selector>, track_id: u16) -> Result<(), Error> {
+    pub fn set_track_rule(
+        contract: Option<Address>,
+        selector: Option<Selector>,
+        track_id: u16,
+    ) -> Result<(), Error> {
         ensure_from_gov()?;
         ensure!(TRACKS.get(&track_id).is_some(), Error::NoTrack);
         TRACK_RULES.set(&(contract, selector), &track_id);
@@ -394,14 +452,32 @@ pub mod dao {
     }
 
     fn transfer_from_to(from: Address, to: Address, value: U256) -> Result<(), Error> {
+<<<<<<< HEAD
         ensure!(MEMBER_BALANCES.get(&from).is_some(), Error::MemberNotExisted);
         ensure!(MEMBER_BALANCES.get(&to).is_some(), Error::MemberNotExisted);
+=======
+        ensure!(
+            MEMBER_BALANCES.get(&from).is_some(),
+            Error::MemberNotExisted
+        );
+>>>>>>> origin/main
         let free = free_balance(from);
         ensure!(free >= value, Error::LowBalance);
         let from_balance = MEMBER_BALANCES.get(&from).unwrap_or(U256::ZERO);
         MEMBER_BALANCES.set(&from, &(from_balance - value));
         let to_balance = MEMBER_BALANCES.get(&to).unwrap_or(U256::ZERO);
         MEMBER_BALANCES.set(&to, &(to_balance + value));
+<<<<<<< HEAD
+=======
+        let mut members = MEMBERS.get().unwrap_or_default();
+        if !members.iter().any(|x| *x == to) {
+            // 初始化新成员的锁仓余额，保持与 join()/public_join() 状态一致
+            // Initialize lock balance for new member to keep state consistent with join()/public_join()
+            MEMBER_LOCK_BALANCES.set(&to, &U256::ZERO);
+            members.push(to);
+            MEMBERS.set(&members);
+        }
+>>>>>>> origin/main
         Ok(())
     }
 

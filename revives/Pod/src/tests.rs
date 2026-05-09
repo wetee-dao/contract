@@ -16,19 +16,36 @@ fn deploy_and_getters() {
         e.reset();
         e.set_caller(cloud_caller());
     });
-    let _ = pod::new(id, owner, side_chain);
+    let _ = pod::new();
+    let _ = pod::initialize(id, owner, side_chain);
     assert_eq!(pod::id(), 1);
     assert_eq!(pod::owner(), owner);
     assert_eq!(pod::cloud(), Address::from(cloud_caller()));
 }
 
 #[test]
+<<<<<<< HEAD
+=======
+fn charge_succeeds() {
+    with_engine(|e| {
+        e.reset();
+        e.set_caller(cloud_caller());
+    });
+    let _ = pod::new();
+    let _ = pod::initialize(1, Address::from([2u8; 20]), Address::from([3u8; 20]));
+    let res = pod::charge();
+    assert!(res.is_ok());
+}
+
+#[test]
+>>>>>>> origin/main
 fn account_id_off_chain() {
     with_engine(|e| {
         e.reset();
         e.set_caller(cloud_caller());
     });
-    let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
+    let _ = pod::new();
+    let _ = pod::initialize(1, Address::from([2u8; 20]), Address::zero());
     assert_eq!(pod::account_id(), Address::zero());
 }
 
@@ -39,7 +56,8 @@ fn withdraw_as_owner_insufficient_balance() {
         e.set_caller(cloud_caller());
     });
     let owner = Address::from([2u8; 20]);
-    let _ = pod::new(1, owner, Address::zero());
+    let _ = pod::new();
+    let _ = pod::initialize(1, owner, Address::zero());
     with_engine(|e| e.set_caller([2u8; 20]));
     let res = pod::withdraw(
         AssetInfo::Native(Default::default()),
@@ -56,7 +74,8 @@ fn withdraw_as_non_owner_reverts() {
         e.set_caller(cloud_caller());
     });
     let owner = Address::from([2u8; 20]);
-    let _ = pod::new(1, owner, Address::zero());
+    let _ = pod::new();
+    let _ = pod::initialize(1, owner, Address::zero());
     with_engine(|e| e.set_caller([99u8; 20]));
     let res = pod::withdraw(
         AssetInfo::Native(Default::default()),
@@ -72,7 +91,8 @@ fn pay_for_worker_only_by_cloud() {
         e.reset();
         e.set_caller(cloud_caller());
     });
-    let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
+    let _ = pod::new();
+    let _ = pod::initialize(1, Address::from([2u8; 20]), Address::zero());
     with_engine(|e| e.set_caller([99u8; 20]));
     let res = pod::pay_for_worker(
         Address::from([5u8; 20]),
@@ -88,8 +108,9 @@ fn set_code_returns_err_when_upgrade_needed() {
         e.reset();
         e.set_caller(cloud_caller());
     });
-    let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
-    // 链下 code_hash 恒为 0；传入非零哈希表示“要升级到别的代码”，当前无 host 则失败
+    let _ = pod::new();
+    let _ = pod::initialize(1, Address::from([2u8; 20]), Address::zero());
+    // 链下 code_hash 恒为 0；传入非零哈希表示"要升级到别的代码"，当前无 host 则失败
     let res = pod::set_code(H256::from([1u8; 32]));
     assert_eq!(res, Err(Error::CodeUpgradeNotSupported));
 }
@@ -100,7 +121,8 @@ fn set_code_noop_when_hash_matches_current() {
         e.reset();
         e.set_caller(cloud_caller());
     });
-    let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
+    let _ = pod::new();
+    let _ = pod::initialize(1, Address::from([2u8; 20]), Address::zero());
     let res = pod::set_code(H256::zero());
     assert_eq!(res, Ok(()));
 }
@@ -111,8 +133,24 @@ fn set_code_non_cloud_reverts() {
         e.reset();
         e.set_caller(cloud_caller());
     });
-    let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
+    let _ = pod::new();
+    let _ = pod::initialize(1, Address::from([2u8; 20]), Address::zero());
     with_engine(|e| e.set_caller([99u8; 20]));
     let res = pod::set_code(H256::from([1u8; 32]));
     assert_eq!(res, Err(Error::MustCallByCloudContract));
+}
+
+#[test]
+fn initialize_twice_fails() {
+    with_engine(|e| {
+        e.reset();
+        e.set_caller(cloud_caller());
+    });
+    let _ = pod::new();
+    let owner = Address::from([2u8; 20]);
+    let side_chain = Address::from([3u8; 20]);
+    let _ = pod::initialize(1, owner, side_chain);
+    // 第二次调用应该失败
+    let res = pod::initialize(2, owner, side_chain);
+    assert_eq!(res, Err(Error::AlreadyInitialized));
 }

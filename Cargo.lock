@@ -172,6 +172,7 @@ dependencies = [
  "pod",
  "polkavm-derive 0.31.0",
  "primitives",
+ "proxy",
  "pvm-bump-allocator",
  "pvm-contract-types",
  "subnet",

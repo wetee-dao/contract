@@ -23,7 +23,7 @@ pub struct VoteInfo {
     pub opinion: Opinion,
     pub vote_weight: U256,
     pub unlock_block: BlockNumber,
-    pub call_id: CalllId,
+    pub call_id: CallId,
     pub calller: Address,
     pub vote_block: BlockNumber,
     pub deleted: bool,
@@ -53,7 +53,7 @@ pub enum PropStatus {
     Canceled,
 }
 
-pub type CalllId = u32;
+pub type CallId = u32;
 pub type Selector = [u8; 4];
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]

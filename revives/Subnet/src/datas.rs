@@ -33,7 +33,7 @@ pub struct AssetDeposit {
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 pub struct EpochInfo {
     pub epoch: u32,
-    pub epoch_solt: u32,
+    pub epoch_slot: u32,
     pub last_epoch_block: BlockNumber,
     pub now: BlockNumber,
     pub side_chain_pub: Address,

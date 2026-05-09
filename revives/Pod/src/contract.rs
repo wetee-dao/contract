@@ -73,25 +73,6 @@ pub mod pod {
         Ok(())
     }
 
-    /// 向 Pod 充值原生代币。
-    ///
-    /// 该函数允许外部账户向当前 Pod 合约转入原生代币。
-    /// 转入金额由运行时通过 `value_transferred` 提供，本函数仅做确认并返回成功。
-    ///
-    /// # 调用权限
-    /// 任何人都可以调用，调用时需附加转账金额。
-    ///
-    /// # 参数
-    /// 无显式参数，转账金额通过交易附加。
-    ///
-    /// # 返回值
-    /// - `Ok(())`：充值成功。
-    #[revive(message)]
-    pub fn charge() -> Result<(), Error> {
-        let _ = env().value_transferred();
-        Ok(())
-    }
-
     /// 获取当前合约的链上地址。
     ///
     /// 返回本 Pod 合约在区块链上的唯一地址标识，功能上类似于 ink! 中的 `account_id`。
@@ -186,7 +167,7 @@ pub mod pod {
     ///    - 原生代币：检查余额充足后执行转账。
     ///    - ERC20：直接返回不支持错误。
     #[revive(message, write)]
-    pub fn pay_for_woker(to: Address, asset: AssetInfo, amount: U256) -> Result<(), Error> {
+    pub fn pay_for_worker(to: Address, asset: AssetInfo, amount: U256) -> Result<(), Error> {
         ensure_from_cloud()?;
         match asset {
             AssetInfo::Native(_) => {

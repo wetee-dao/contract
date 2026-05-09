@@ -24,7 +24,7 @@ pub use primitives::{ensure, ok_or_err};
 pub mod cloud {
     use super::*;
     use crate::{Error, ensure};
-    use wrevive_api::{AccountId, Decode, Encode, List2D, Mapping, Vec};
+    use wrevive_api::{AccountId, List2D, Mapping, Vec};
 
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
     const SUBNET_ADDRESS: Storage<Address> = storage!(b"subnet_address");
@@ -33,10 +33,8 @@ pub mod cloud {
     const NEXT_POD_ID: Storage<u64> = storage!(b"next_pod_id");
 
     const PODS: Mapping<u64, Pod> = mapping!(b"pods");
-    const POD_VERSION: Mapping<u64, BlockNumber> = mapping!(b"pod_version");
-    const POD_STATUS: Mapping<u64, u8> = mapping!(b"pod_status");
+    const POD_STATE: Mapping<u64, PodState> = mapping!(b"pod_state");
     const LAST_MINT_BLOCK: Mapping<u64, BlockNumber> = mapping!(b"last_mint_block");
-    const POD_REPORT: Mapping<u64, H256> = mapping!(b"pod_report");
     const POD_KEY: Mapping<u64, AccountId> = mapping!(b"pod_key");
     const WORKER_OF_POD: Mapping<u64, u64> = mapping!(b"worker_of_pod");
 
@@ -127,8 +125,7 @@ pub mod cloud {
 
     /// 更新指定 Pod 的合约代码。
     ///
-    /// 获取当前 Pod 合约代码哈希，后续可通过调用 Pod 合约的 `set_code` 实现代码升级。
-    /// 当前为占位实现，待完善 TODO。
+    /// 获取当前 Pod 合约代码哈希并调用 Pod 子合约的 `set_code` 完成代码升级。
     ///
     /// 调用权限：任何人可调用（写操作）。
     ///
@@ -146,7 +143,7 @@ pub mod cloud {
         // 调用 Pod 子合约的 set_code 升级其代码
         // Call Pod sub-contract's set_code to upgrade its code
         pod::pod::api::set_code(&pod.pod_address, &code_hash)
-            .map_err(|_| Error::PodCodeNotFound)?
+            .map_err(|_| Error::CallFailed)?
             .map_err(|_| Error::PodCodeNotFound)?;
 
         Ok(())
@@ -303,21 +300,6 @@ pub mod cloud {
         SUBNET_ADDRESS.get().unwrap_or(Address::zero())
     }
 
-    /// 接收转账的占位函数。
-    ///
-    /// 用于接收用户向 Cloud 合约转账（充值），目前仅记录转账事件（读取 `value_transferred`），
-    /// 不做额外处理。实际业务中转账金额可能用于后续创建 Pod 或其他付费操作。
-    ///
-    /// 调用权限：任何人可调用。
-    ///
-    /// # 返回值
-    /// - `Ok(())`：接收成功。
-    #[revive(message)]
-    pub fn charge() -> Result<(), Error> {
-        let _ = env().value_transferred();
-        Ok(())
-    }
-
     /// 查询 Cloud 合约的账户余额。
     ///
     /// 调用权限：任何人可调用。
@@ -333,6 +315,16 @@ pub mod cloud {
             AssetInfo::Native(_) => env().balance(),
             AssetInfo::ERC20(_, _) => U256::ZERO,
         }
+    }
+
+    /// 根据 pod_id 获取 Pod 元信息、容器列表及状态。
+    ///
+    /// 内部辅助函数，用于消除查询接口中的重复存储读取逻辑。
+    fn get_pod_detail(pod_id: u64) -> Option<(u64, Pod, Vec<(u64, Container)>, u8)> {
+        let pod = PODS.get(&pod_id)?;
+        let containers = POD_CONTAINERS.desc_list(&pod_id, None, 20);
+        let state = POD_STATE.get(&pod_id).unwrap_or_default();
+        Some((pod_id, pod, containers, state.status))
     }
 
     /// 获取已创建的 Pod 总数量。
@@ -374,10 +366,8 @@ pub mod cloud {
         }
 
         for _ in 0..size {
-            if let Some(pod) = PODS.get(&cur) {
-                let containers = POD_CONTAINERS.desc_list(&cur, None, 20);
-                let status = POD_STATUS.get(&cur).unwrap_or(0);
-                out.push((cur, pod, containers, status));
+            if let Some(detail) = get_pod_detail(cur) {
+                out.push(detail);
             }
             if cur == 0 {
                 break;
@@ -417,10 +407,8 @@ pub mod cloud {
         let ids = POD_OF_USER.desc_list(&caller, start, size as u32);
         let mut out = Vec::new();
         for (_k2, pod_id) in ids.into_iter() {
-            if let Some(pod) = PODS.get(&pod_id) {
-                let containers = POD_CONTAINERS.desc_list(&pod_id, None, 20);
-                let status = POD_STATUS.get(&pod_id).unwrap_or(0);
-                out.push((pod_id, pod, containers, status));
+            if let Some(detail) = get_pod_detail(pod_id) {
+                out.push(detail);
             }
         }
         out
@@ -443,10 +431,9 @@ pub mod cloud {
         let ids = PODS_OF_WORKER.desc_list(&worker_id, None, u32::MAX);
         let mut out = Vec::new();
         for (_k2, pod_id) in ids.into_iter() {
-            let version = POD_VERSION.get(&pod_id).unwrap_or(0);
+            let state = POD_STATE.get(&pod_id).unwrap_or_default();
             let last_mint = LAST_MINT_BLOCK.get(&pod_id).unwrap_or(0);
-            let status = POD_STATUS.get(&pod_id).unwrap_or(0);
-            out.push((pod_id, version, last_mint, status));
+            out.push((pod_id, state.version, last_mint, state.status));
         }
         out
     }
@@ -473,10 +460,8 @@ pub mod cloud {
         let ids = PODS_OF_WORKER.desc_list(&worker_id, start, size as u32);
         let mut out = Vec::new();
         for (_k2, pod_id) in ids.into_iter() {
-            if let Some(pod) = PODS.get(&pod_id) {
-                let containers = POD_CONTAINERS.desc_list(&pod_id, None, 20);
-                let status = POD_STATUS.get(&pod_id).unwrap_or(0);
-                out.push((pod_id, pod, containers, status));
+            if let Some(detail) = get_pod_detail(pod_id) {
+                out.push(detail);
             }
         }
         out
@@ -786,16 +771,15 @@ pub mod cloud {
                     .collect::<Vec<_>>();
                 containers_with_disk.push((container_id, (container, disks)));
             }
-            let version = POD_VERSION.get(&pod_id).unwrap_or(0);
+            let state = POD_STATE.get(&pod_id).unwrap_or_default();
             let last_mint = LAST_MINT_BLOCK.get(&pod_id).unwrap_or(0);
-            let status = POD_STATUS.get(&pod_id).unwrap_or(0);
             out.push((
                 pod_id,
                 pod,
                 containers_with_disk,
-                version,
+                state.version,
                 last_mint,
-                status,
+                state.status,
             ));
         }
         out
@@ -930,7 +914,7 @@ pub mod cloud {
                     &deduction_amount,
                     &pod.pod_address,
                 )
-                .map_err(|_| Error::WorkerMortgageCheckFailed)?
+                .map_err(|_| Error::CallFailed)?
                 .map_err(|_| Error::WorkerMortgageCheckFailed)?;
             }
 
@@ -1005,9 +989,8 @@ pub mod cloud {
     pub fn pod(pod_id: u64) -> Option<(Pod, Vec<(u64, Container)>, BlockNumber, u8)> {
         let pod = PODS.get(&pod_id)?;
         let containers = POD_CONTAINERS.list(&pod_id, 0, 20);
-        let version = POD_VERSION.get(&pod_id).unwrap_or(0);
-        let status = POD_STATUS.get(&pod_id).unwrap_or(0);
-        Some((pod, containers, version, status))
+        let state = POD_STATE.get(&pod_id).unwrap_or_default();
+        Some((pod, containers, state.version, state.status))
     }
 
     /// 创建一个新的 Pod。
@@ -1058,18 +1041,18 @@ pub mod cloud {
         // 通过 Subnet 合约查询目标 Worker 信息，校验 Worker 等级 >= Pod 等级，且区域匹配
         // Query target Worker info via Subnet contract; verify Worker level >= Pod level and region matches
         let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
-            .map_err(|_| Error::WorkerNotFound)?
+            .map_err(|_| Error::CallFailed)?
             .ok_or(Error::WorkerNotFound)?;
         ensure!(worker.level >= level, Error::WorkerLevelNotEnough);
         ensure!(worker.region_id == region_id, Error::RegionNotMatch);
 
         let side_chain_key: Address =
-            subnet::subnet::api::side_chain_key(&subnet).map_err(|_| Error::NotFound)?;
+            subnet::subnet::api::side_chain_key(&subnet).map_err(|_| Error::CallFailed)?;
 
         // 按容器配置和等级单价计算每区块资源费用
         // Calculate per-block resource cost from container configs and level unit price
         let level_price: RunPrice = subnet::subnet::api::level_price(&subnet, &level)
-            .map_err(|_| Error::LevelPriceNotFound)?
+            .map_err(|_| Error::CallFailed)?
             .ok_or(Error::LevelPriceNotFound)?;
         let tmp_containers: Vec<(u64, Container)> = containers
             .iter()
@@ -1078,8 +1061,8 @@ pub mod cloud {
             .collect();
         let per_block_pay = calc_containers_pay_value(&tmp_containers, &caller, &tee_type, &level_price);
 
-        let (asset_info, price) = subnet::subnet::api::asset(&subnet, &pay_asset)
-            .map_err(|_| Error::AssetNotFound)?
+        let (_asset_info, price) = subnet::subnet::api::asset(&subnet, &pay_asset)
+            .map_err(|_| Error::CallFailed)?
             .ok_or(Error::AssetNotFound)?;
         ensure!(price > U256::ZERO, Error::AssetNotFound);
 
@@ -1109,7 +1092,7 @@ pub mod cloud {
             &U256::MAX,
             &estimated_amount,
         )
-        .map_err(|_| Error::PodInstantiateFailed)?;
+        .map_err(|_| Error::CallFailed)?;
 
         // 退还用户多付的资金（精确计费金额已转入 Pod 合约）
         // Refund excess funds to user (exact billing amount already transferred to Pod contract)
@@ -1172,13 +1155,14 @@ pub mod cloud {
         let now = env().block_number();
         ensure!(now < pod.end_block, Error::PodStatusError);
 
-        let status = POD_STATUS.get(&pod_id).unwrap_or(0);
-        if status != 0 && status != 1 {
+        let mut state = POD_STATE.get(&pod_id).unwrap_or_default();
+        if state.status != 0 && state.status != 1 {
             return Err(Error::PodStatusError);
         }
-        if status == 0 {
+        if state.status == 0 {
             LAST_MINT_BLOCK.set(&pod_id, &now);
-            POD_STATUS.set(&pod_id, &1);
+            state.status = 1;
+            POD_STATE.set(&pod_id, &state);
         }
         POD_KEY.set(&pod_id, &pod_key);
         Ok(())
@@ -1206,20 +1190,13 @@ pub mod cloud {
         let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
         ensure!(pod.owner == caller, Error::NotPodOwner);
 
-        POD_STATUS.set(&pod_id, &3u8);
+        let mut state = POD_STATE.get(&pod_id).unwrap_or_default();
+        state.status = 3;
+        POD_STATE.set(&pod_id, &state);
         let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerNotFound)?;
 
-        let all = PODS_OF_WORKER.list_all(&worker_id);
-        let mut found = None;
-        for (k2, v) in all {
-            if v == pod_id {
-                found = Some(k2);
-                break;
-            }
-        }
-        let k2 = found.ok_or(Error::DelFailed)?;
         PODS_OF_WORKER
-            .clear(&worker_id, k2)
+            .clear(&worker_id, pod_id)
             .ok_or(Error::DelFailed)?;
         Ok(())
     }
@@ -1249,20 +1226,21 @@ pub mod cloud {
         ensure!(pod.owner == caller, Error::NotPodOwner);
         ensure!(!pod.is_settled, Error::PodAlreadySettled);
 
-        let status = POD_STATUS.get(&pod_id).unwrap_or(0);
-        if status != 1 && status != 3 {
+        let mut state = POD_STATE.get(&pod_id).unwrap_or_default();
+        if state.status != 1 && state.status != 3 {
             return Err(Error::PodStatusError);
         }
 
-        if status == 3 {
+        if state.status == 3 {
             let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerNotFound)?;
-            POD_STATUS.set(&pod_id, &0u8);
+            state.status = 0;
             PODS_OF_WORKER.insert(&worker_id, &pod_id);
             let now = env().block_number();
             LAST_MINT_BLOCK.set(&pod_id, &now);
         }
 
-        POD_VERSION.set(&pod_id, &env().block_number());
+        state.version = env().block_number();
+        POD_STATE.set(&pod_id, &state);
         Ok(())
     }
 
@@ -1347,15 +1325,16 @@ pub mod cloud {
     pub fn mint_pod(pod_id: u64, report: H256) -> Result<(), Error> {
         ensure_from_side_chain()?;
 
-        let status = POD_STATUS.get(&pod_id).unwrap_or(0);
-        if status != 1 {
+        let mut state = POD_STATE.get(&pod_id).unwrap_or_default();
+        if state.status != 1 {
             return Err(Error::PodStatusError);
         }
 
-        POD_REPORT.set(&pod_id, &report);
+        state.report = report;
+        POD_STATE.set(&pod_id, &state);
 
         let mut pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
-        let (per_block_pay, asset_info, price, worker_owner) = calc_pod_block_cost(pod_id)?;
+        let (_per_block_pay, asset_info, _price, worker_owner) = calc_pod_block_cost(pod_id)?;
 
         // 将 Pod 合约中未结算的预付款（prepaid - settled）分配给各方，支持续费后再次调用
         // Distribute unsettled prepayment (prepaid - settled) from Pod contract, supports re-calling after renewal
@@ -1375,16 +1354,16 @@ pub mod cloud {
             // 95% 转给矿工作为任务执行报酬（按创建时锁定的当前价格成交）
             // 95% transferred to worker as task reward (locked at current price at creation time)
             if worker_amount > U256::ZERO {
-                pod::pod::api::pay_for_woker(&pod.pod_address, &worker_owner, &asset_info, &worker_amount)
-                    .map_err(|_| Error::PayFailed)?
+                pod::pod::api::pay_for_worker(&pod.pod_address, &worker_owner, &asset_info, &worker_amount)
+                    .map_err(|_| Error::CallFailed)?
                     .map_err(|_| Error::PayFailed)?;
             }
 
             // 2.5% 平台费转入 Cloud 合约
             // 2.5% platform fee transferred to Cloud contract
             if cloud_fee > U256::ZERO {
-                pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &cloud_fee)
-                    .map_err(|_| Error::PayFailed)?
+                pod::pod::api::pay_for_worker(&pod.pod_address, &cloud_address, &asset_info, &cloud_fee)
+                    .map_err(|_| Error::CallFailed)?
                     .map_err(|_| Error::PayFailed)?;
                 let current_total = PLATFORM_FEE_TOTAL.get().unwrap_or(U256::ZERO);
                 PLATFORM_FEE_TOTAL.set(&(current_total + cloud_fee));
@@ -1393,8 +1372,8 @@ pub mod cloud {
             // 2.5% 区块奖励转入 Cloud 合约的 BLOCK_REWARD_POOL
             // 2.5% block reward transferred to Cloud's BLOCK_REWARD_POOL
             if block_reward > U256::ZERO {
-                pod::pod::api::pay_for_woker(&pod.pod_address, &cloud_address, &asset_info, &block_reward)
-                    .map_err(|_| Error::PayFailed)?
+                pod::pod::api::pay_for_worker(&pod.pod_address, &cloud_address, &asset_info, &block_reward)
+                    .map_err(|_| Error::CallFailed)?
                     .map_err(|_| Error::PayFailed)?;
                 let current_pool = BLOCK_REWARD_POOL.get().unwrap_or(U256::ZERO);
                 BLOCK_REWARD_POOL.set(&(current_pool + block_reward));
@@ -1422,7 +1401,7 @@ pub mod cloud {
     /// - `None`：未记录报告。
     #[revive(message)]
     pub fn pod_report(pod_id: u64) -> Option<H256> {
-        POD_REPORT.get(&pod_id)
+        POD_STATE.get(&pod_id).map(|s| s.report)
     }
 
     /// 批量编辑指定 Pod 的容器配置。
@@ -1459,7 +1438,9 @@ pub mod cloud {
             }
         }
 
-        POD_VERSION.set(&pod_id, &env().block_number());
+        let mut state = POD_STATE.get(&pod_id).unwrap_or_default();
+        state.version = env().block_number();
+        POD_STATE.set(&pod_id, &state);
         Ok(())
     }
 
@@ -1510,11 +1491,11 @@ pub mod cloud {
         Ok(true)
     }
 
-    /// 计算一组容器配置的每区块资源费用（纯计算函数，无存储写入）。
-    /// 供 create_pod（容器尚未入库）、stop_pod / renew_pod（容器已从存储读取）共用。
+    /// 计算一组容器配置的每区块资源费用。
+    /// 供 create_pod 使用（此时容器尚未入库，无法从存储读取）。
     ///
-    /// Calculate per-block resource cost for a set of containers (pure function, no storage writes).
-    /// Shared by create_pod (containers not yet stored), stop_pod / renew_pod (containers read from storage).
+    /// Calculate per-block resource cost for a set of containers.
+    /// Used by create_pod where containers are not yet stored.
     fn calc_containers_pay_value(
         containers: &[(u64, Container)],
         owner: &Address,
@@ -1550,28 +1531,52 @@ pub mod cloud {
     }
 
     /// 计算指定 Pod 的每区块资源费用、资产信息、资产价格和工人地址。
-    /// 从链上存储读取容器配置和定价信息。
+    /// 从链上存储读取容器配置和定价信息，并直接内联计算资源费用。
     ///
     /// Calculate per-block resource cost, asset info, asset price, and worker address for a given Pod.
-    /// Reads container configs and pricing from on-chain storage.
+    /// Reads container configs and pricing from on-chain storage; inlines the resource cost calculation.
     fn calc_pod_block_cost(pod_id: u64) -> Result<(U256, AssetInfo, U256, Address), Error> {
         let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerIdNotFound)?;
         let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
         let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
-            .map_err(|_| Error::WorkerNotFound)?
+            .map_err(|_| Error::CallFailed)?
             .ok_or(Error::WorkerNotFound)?;
 
         let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
         let containers = POD_CONTAINERS.list_all(&pod_id);
 
         let level_price: RunPrice = subnet::subnet::api::level_price(&subnet, &pod.level)
-            .map_err(|_| Error::LevelPriceNotFound)?
+            .map_err(|_| Error::CallFailed)?
             .ok_or(Error::LevelPriceNotFound)?;
 
-        let pay_value = calc_containers_pay_value(&containers, &pod.owner, &pod.tee_type, &level_price);
+        let mut pay_value = U256::ZERO;
+        for (_cid, c) in containers.iter() {
+            let mut disk_cost = U256::ZERO;
+            for d in c.disk.iter() {
+                let size_gb = USER_DISKS
+                    .get(&pod.owner, d.id)
+                    .map(|disk| U256::from(disk.size() as u64))
+                    .unwrap_or(U256::ZERO);
+                disk_cost = disk_cost + size_gb * U256::from(level_price.disk_per);
+            }
+
+            let base = match pod.tee_type {
+                TEEType::SGX => {
+                    U256::from(c.cpu as u64) * U256::from(level_price.cpu_per)
+                        + U256::from(c.mem as u64) * U256::from(level_price.memory_per)
+                }
+                TEEType::CVM => {
+                    U256::from(c.cpu as u64) * U256::from(level_price.cvm_cpu_per)
+                        + U256::from(c.mem as u64) * U256::from(level_price.cvm_memory_per)
+                }
+            };
+
+            let gpu_cost = U256::from(c.gpu as u64) * U256::from(level_price.gpu_per);
+            pay_value = pay_value + base + gpu_cost + disk_cost;
+        }
 
         let (asset_info, price) = subnet::subnet::api::asset(&subnet, &pod.pay_asset_id)
-            .map_err(|_| Error::AssetNotFound)?
+            .map_err(|_| Error::CallFailed)?
             .ok_or(Error::AssetNotFound)?;
         if price == U256::ZERO {
             return Err(Error::AssetNotFound);

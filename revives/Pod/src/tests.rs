@@ -23,17 +23,6 @@ fn deploy_and_getters() {
 }
 
 #[test]
-fn charge_succeeds() {
-    with_engine(|e| {
-        e.reset();
-        e.set_caller(cloud_caller());
-    });
-    let _ = pod::new(1, Address::from([2u8; 20]), Address::from([3u8; 20]));
-    let res = pod::charge();
-    assert!(res.is_ok());
-}
-
-#[test]
 fn account_id_off_chain() {
     with_engine(|e| {
         e.reset();
@@ -78,14 +67,14 @@ fn withdraw_as_non_owner_reverts() {
 }
 
 #[test]
-fn pay_for_woker_only_by_cloud() {
+fn pay_for_worker_only_by_cloud() {
     with_engine(|e| {
         e.reset();
         e.set_caller(cloud_caller());
     });
     let _ = pod::new(1, Address::from([2u8; 20]), Address::zero());
     with_engine(|e| e.set_caller([99u8; 20]));
-    let res = pod::pay_for_woker(
+    let res = pod::pay_for_worker(
         Address::from([5u8; 20]),
         AssetInfo::Native(Default::default()),
         U256::from(1u64),

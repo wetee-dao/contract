@@ -98,6 +98,13 @@ pub enum Env {
     Encrypt(Bytes, u64),
 }
 
+#[derive(Clone, PartialEq, Eq, Debug, Default, Encode, Decode)]
+pub struct PodState {
+    pub version: BlockNumber,
+    pub status: u8,
+    pub report: H256,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
 pub struct ContainerDisk {
     pub id: u64,

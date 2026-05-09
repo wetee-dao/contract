@@ -20,7 +20,7 @@ use wrevive_api::{env, Address, Env, Mapping, Storage, U256, Vec};
 use wrevive_macro::{mapping, revive_contract, storage};
 
 pub use curve::{arg_to_curve, Curve, CurveArg, Percent};
-pub use datas::{Call, CallInput, CalllId, Opinion, PropStatus, Selector, Spend, TokenInfo, Track, VoteInfo};
+pub use datas::{Call, CallInput, CallId, Opinion, PropStatus, Selector, Spend, TokenInfo, Track, VoteInfo};
 pub use errors::Error;
 pub use primitives::{ensure, ok_or_err};
 
@@ -45,8 +45,9 @@ pub mod dao {
     const MEMBER_TOKENS: Mapping<(Address, u32), U256> = mapping!(b"member_tokens");
     const TRACKS: Mapping<u16, Track> = mapping!(b"tracks");
     const TRACK_RULES: Mapping<(Option<Address>, Option<Selector>), u16> = mapping!(b"track_rules");
-    const SUDO_CALLS: Mapping<CalllId, Call> = mapping!(b"sudo_calls");
-    const NEXT_SUDO_CALL_ID: Storage<CalllId> = storage!(b"next_sudo_call_id");
+    const SUDO_CALLS: Mapping<CallId, Call> = mapping!(b"sudo_calls");
+    const NEXT_SUDO_CALL_ID: Storage<CallId> = storage!(b"next_sudo_call_id");
+    const REENTRANCY_GUARD: Storage<bool> = storage!(b"reentrancy_guard");
 
     #[revive(constructor)]
     pub fn new(
@@ -133,7 +134,7 @@ pub mod dao {
     }
 
     #[revive(message, write)]
-    pub fn levae() -> Result<(), Error> {
+    pub fn leave() -> Result<(), Error> {
         let caller = env().caller();
         ensure!(MEMBER_BALANCES.get(&caller).is_some(), Error::MemberNotExisted);
         ensure!(MEMBER_BALANCES.get(&caller).unwrap_or(U256::ZERO) == U256::ZERO, Error::MemberBalanceNotZero);
@@ -147,7 +148,7 @@ pub mod dao {
     }
 
     #[revive(message, write)]
-    pub fn levae_with_burn() -> Result<(), Error> {
+    pub fn leave_with_burn() -> Result<(), Error> {
         let caller = env().caller();
         ensure!(MEMBER_BALANCES.get(&caller).is_some(), Error::MemberNotExisted);
         let amount = MEMBER_BALANCES.get(&caller).unwrap_or(U256::ZERO)
@@ -246,10 +247,14 @@ pub mod dao {
     pub fn sudo(call: Call) -> Result<Vec<u8>, Error> {
         let caller = env().caller();
         ensure!(SUDO_ACCOUNT.get().unwrap_or(None) == Some(caller), Error::MustCallByGov);
+        ensure!(!REENTRANCY_GUARD.get().unwrap_or(false), Error::ReentrantCall);
+        REENTRANCY_GUARD.set(&true);
         let call_id = NEXT_SUDO_CALL_ID.get().unwrap_or(0);
         NEXT_SUDO_CALL_ID.set(&(call_id + 1));
         SUDO_CALLS.set(&call_id, &call);
-        exec_call_internal(call)
+        let result = exec_call_internal(call);
+        REENTRANCY_GUARD.set(&false);
+        result
     }
 
     #[revive(message, write)]
@@ -261,7 +266,7 @@ pub mod dao {
     }
 
     #[revive(message)]
-    pub fn defalut_track() -> Option<u16> {
+    pub fn default_track() -> Option<u16> {
         DEFAULT_TRACK.get().unwrap_or(None)
     }
 
@@ -294,7 +299,7 @@ pub mod dao {
     }
 
     #[revive(message, write)]
-    pub fn set_defalut_track(track_id: u16) -> Result<(), Error> {
+    pub fn set_default_track(track_id: u16) -> Result<(), Error> {
         ensure_from_gov()?;
         ensure!(TRACKS.get(&track_id).is_some(), Error::NoTrack);
         DEFAULT_TRACK.set(&Some(track_id));
@@ -379,23 +384,24 @@ pub mod dao {
     }
 
     fn free_balance(owner: Address) -> U256 {
-        MEMBER_BALANCES.get(&owner).unwrap_or(U256::ZERO)
-            - MEMBER_LOCK_BALANCES.get(&owner).unwrap_or(U256::ZERO)
+        let balance = MEMBER_BALANCES.get(&owner).unwrap_or(U256::ZERO);
+        let lock = MEMBER_LOCK_BALANCES.get(&owner).unwrap_or(U256::ZERO);
+        if balance >= lock {
+            balance - lock
+        } else {
+            U256::ZERO
+        }
     }
 
     fn transfer_from_to(from: Address, to: Address, value: U256) -> Result<(), Error> {
         ensure!(MEMBER_BALANCES.get(&from).is_some(), Error::MemberNotExisted);
+        ensure!(MEMBER_BALANCES.get(&to).is_some(), Error::MemberNotExisted);
         let free = free_balance(from);
         ensure!(free >= value, Error::LowBalance);
         let from_balance = MEMBER_BALANCES.get(&from).unwrap_or(U256::ZERO);
         MEMBER_BALANCES.set(&from, &(from_balance - value));
         let to_balance = MEMBER_BALANCES.get(&to).unwrap_or(U256::ZERO);
         MEMBER_BALANCES.set(&to, &(to_balance + value));
-        let mut members = MEMBERS.get().unwrap_or_default();
-        if !members.iter().any(|x| *x == to) {
-            members.push(to);
-            MEMBERS.set(&members);
-        }
         Ok(())
     }
 

@@ -43,7 +43,7 @@ fn public_join_and_leave() {
     assert_eq!(dao::balance_of(alice()), U256::ZERO);
     assert_eq!(dao::list(), vec![alice()]);
 
-    assert_eq!(dao::levae(), Ok(()));
+    assert_eq!(dao::leave(), Ok(()));
     assert_eq!(dao::list(), Vec::<Address>::new());
 }
 
@@ -83,16 +83,15 @@ fn transfer_between_members() {
 }
 
 #[test]
-fn transfer_to_non_member_adds_them() {
+fn transfer_to_non_member_fails() {
     setup();
     let users = vec![(alice(), U256::from(100u64))];
     let _ = dao::new_with_default_track(users, true, Some(Address::from(gov())));
 
     with_engine(|e| e.set_caller([1u8; 20]));
     let charlie = Address::from([3u8; 20]);
-    assert_eq!(dao::transfer(charlie, U256::from(10u64)), Ok(()));
-    assert_eq!(dao::balance_of(charlie), U256::from(10u64));
-    assert!(dao::list().contains(&charlie));
+    assert_eq!(dao::transfer(charlie, U256::from(10u64)), Err(Error::MemberNotExisted));
+    assert_eq!(dao::balance_of(charlie), U256::ZERO);
 }
 
 #[test]
@@ -199,8 +198,8 @@ fn track_management() {
     assert_eq!(dao::track(tid), Some(track.clone()));
     assert_eq!(dao::track_list(), vec![(0, dao::track(0).unwrap()), (tid, track.clone())]);
 
-    assert_eq!(dao::set_defalut_track(tid), Ok(()));
-    assert_eq!(dao::defalut_track(), Some(tid));
+    assert_eq!(dao::set_default_track(tid), Ok(()));
+    assert_eq!(dao::default_track(), Some(tid));
 
     with_engine(|e| e.set_caller(e.current_contract));
     let mut edited = track.clone();
@@ -253,7 +252,7 @@ fn member_not_existed_for_leave() {
     let _ = dao::new_with_default_track(users, true, Some(Address::from(gov())));
 
     with_engine(|e| e.set_caller([1u8; 20]));
-    assert_eq!(dao::levae(), Err(Error::MemberNotExisted));
+    assert_eq!(dao::leave(), Err(Error::MemberNotExisted));
 }
 
 #[test]

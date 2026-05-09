@@ -36,4 +36,5 @@ pub enum Error {
     SpendNotFound,
     SpendAlreadyExecuted,
     SpendTransferError,
+    ReentrantCall,
 }

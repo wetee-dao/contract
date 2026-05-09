@@ -120,7 +120,6 @@ fn charge_and_balance() {
     });
     let _ = cloud::new();
     let _ = cloud::init(subnet_addr, code_hash);
-    let _ = cloud::charge();
     let bal = cloud::balance(AssetInfo::Native(Default::default()));
     assert_eq!(bal, U256::ZERO);
 }

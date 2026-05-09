@@ -30,4 +30,5 @@ pub enum Error {
     InvalidFeeRate,
     InsufficientPrepayment,
     PodAlreadySettled,
+    CallFailed,
 }

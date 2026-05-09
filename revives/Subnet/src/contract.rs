@@ -27,7 +27,7 @@ pub mod subnet {
     use crate::{Error, ensure};
 
     const GOV_CONTRACT: Storage<Address> = storage!(b"gov_contract");
-    const EPOCH_SOLT: Storage<u32> = storage!(b"epoch_solt");
+    const EPOCH_SLOT: Storage<u32> = storage!(b"epoch_slot");
     const EPOCH: Storage<u32> = storage!(b"epoch");
     const LAST_EPOCH_BLOCK: Storage<BlockNumber> = storage!(b"last_epoch_block");
     const SIDE_CHAIN_MULTI_KEY: Storage<Address> = storage!(b"side_chain_multi_key");
@@ -58,10 +58,10 @@ pub mod subnet {
     const BOOT_NODES: Mapping<u32, u64> = mapping!(b"boot_nodes");
     const BOOT_NODES_LEN: Storage<u32> = storage!(b"boot_nodes_len");
 
-    const RUNING_SECRETS: Mapping<u32, (u64, u32)> = mapping!(b"runing_secrets");
-    const RUNING_SECRETS_LEN: Storage<u32> = storage!(b"runing_secrets_len");
-    const PENDING_SECRETS: Mapping<u32, (u64, u32)> = mapping!(b"pending_secrets");
-    const PENDING_SECRETS_LEN: Storage<u32> = storage!(b"pending_secrets_len");
+    const RUNNING_VALIDATORS: Mapping<u64, u32> = mapping!(b"running_validators");
+    const RUNNING_VALIDATOR_IDS: Storage<Vec<u64>> = storage!(b"running_validator_ids");
+    const PENDING_VALIDATORS: Mapping<u64, u32> = mapping!(b"pending_validators");
+    const PENDING_VALIDATOR_IDS: Storage<Vec<u64>> = storage!(b"pending_validator_ids");
 
     /// Subnet 合约构造函数。
     ///
@@ -95,7 +95,7 @@ pub mod subnet {
         }
         let caller = env().caller();
         GOV_CONTRACT.set(&caller);
-        EPOCH_SOLT.set(&72000u32);
+        EPOCH_SLOT.set(&72000u32);
         EPOCH.set(&0u32);
         LAST_EPOCH_BLOCK.set(&0u32);
         SIDE_CHAIN_MULTI_KEY.set(&Address::zero());
@@ -116,13 +116,13 @@ pub mod subnet {
     /// 任何人（只读查询）。
     ///
     /// # 返回值
-    /// - `EpochInfo`：包含 epoch 编号、epoch_solt、last_epoch_block、now、side_chain_pub 的结构体。
+    /// - `EpochInfo`：包含 epoch 编号、epoch_slot、last_epoch_block、now、side_chain_pub 的结构体。
     #[revive(message)]
     pub fn epoch_info() -> EpochInfo {
         let now = env().now();
         EpochInfo {
             epoch: EPOCH.get().unwrap_or(0),
-            epoch_solt: EPOCH_SOLT.get().unwrap_or(72000),
+            epoch_slot: EPOCH_SLOT.get().unwrap_or(72000),
             last_epoch_block: LAST_EPOCH_BLOCK.get().unwrap_or(0),
             now,
             side_chain_pub: SIDE_CHAIN_MULTI_KEY.get().unwrap_or(Address::zero()),
@@ -137,15 +137,15 @@ pub mod subnet {
     /// 仅治理合约（gov）可调用。
     ///
     /// # 参数
-    /// - `epoch_solt`：新的 epoch 间隔区块数。
+    /// - `epoch_slot`：新的 epoch 间隔区块数。
     ///
     /// # 返回值
     /// - `Ok(())`：设置成功。
     /// - `Err(Error::MustCallByMainContract)`：调用者不是治理合约。
     #[revive(message, write)]
-    pub fn set_epoch_solt(epoch_solt: u32) -> Result<(), Error> {
+    pub fn set_epoch_slot(epoch_slot: u32) -> Result<(), Error> {
         ensure_from_gov()?;
-        EPOCH_SOLT.set(&epoch_solt);
+        EPOCH_SLOT.set(&epoch_slot);
         Ok(())
     }
 
@@ -978,9 +978,9 @@ pub mod subnet {
     /// - `Vec<(u64, u32)>`：待处理 Secret 节点 ID 与权重的列表。
     #[revive(message)]
     pub fn get_pending_secrets() -> Vec<(u64, u32)> {
-        let len = PENDING_SECRETS_LEN.get().unwrap_or(0);
-        (0..len)
-            .filter_map(|i| PENDING_SECRETS.get(&i))
+        let ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
+        ids.into_iter()
+            .filter_map(|id| PENDING_VALIDATORS.get(&id).map(|pow| (id, pow)))
             .collect()
     }
 
@@ -1053,8 +1053,10 @@ pub mod subnet {
         SECRETS.set(&id, &node);
         SECRET_OF_USER.set(&caller, &id);
         if id == 0 {
-            RUNING_SECRETS.set(&0u32, &(0u64, 1u32));
-            RUNING_SECRETS_LEN.set(&1u32);
+            RUNNING_VALIDATORS.set(&0u64, &1u32);
+            let mut ids = Vec::new();
+            ids.push(0u64);
+            RUNNING_VALIDATOR_IDS.set(&ids);
         }
         Ok(id)
     }
@@ -1138,20 +1140,16 @@ pub mod subnet {
         let caller = env().caller();
         let mut node = SECRETS.get(&id).ok_or(Error::NodeNotExist)?;
         ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
-        let runing_len = RUNING_SECRETS_LEN.get().unwrap_or(0);
-        for i in 0..runing_len {
-            if let Some((nid, _)) = RUNING_SECRETS.get(&i) {
-                if nid == id {
-                    return Err(Error::NodeIsRunning);
-                }
+        let running_ids = RUNNING_VALIDATOR_IDS.get().unwrap_or_default();
+        for nid in running_ids.iter() {
+            if *nid == id {
+                return Err(Error::NodeIsRunning);
             }
         }
-        let pending_len = PENDING_SECRETS_LEN.get().unwrap_or(0);
-        for i in 0..pending_len {
-            if let Some((nid, _)) = PENDING_SECRETS.get(&i) {
-                if nid == id {
-                    return Err(Error::NodeIsRunning);
-                }
+        let pending_ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
+        for nid in pending_ids.iter() {
+            if *nid == id {
+                return Err(Error::NodeIsRunning);
             }
         }
         if SECRET_MORTGAGES.get(&id).unwrap_or(U256::ZERO) != U256::ZERO {
@@ -1173,10 +1171,13 @@ pub mod subnet {
     /// - `Vec<(u64, SecretNode, u32)>`：验证者 ID、节点详情和权重的列表。
     #[revive(message)]
     pub fn validators() -> Vec<(u64, SecretNode, u32)> {
-        let len = RUNING_SECRETS_LEN.get().unwrap_or(0);
+        let ids = RUNNING_VALIDATOR_IDS.get().unwrap_or_default();
         let mut out = Vec::new();
-        for i in 0..len {
-            if let Some((id, power)) = RUNING_SECRETS.get(&i) {
+        for id in ids.into_iter() {
+            if let Some(power) = RUNNING_VALIDATORS.get(&id) {
+                if power == 0 {
+                    continue;
+                }
                 if let Some(node) = SECRETS.get(&id) {
                     out.push((id, node, power));
                 }
@@ -1187,7 +1188,7 @@ pub mod subnet {
 
     /// 将指定 Secret 节点加入验证者集合（待处理）。
     ///
-    /// 将目标节点以权重 1 加入 `PENDING_SECRETS` 列表。若该节点已在待处理列表中，
+    /// 将目标节点以权重 1 加入 `PENDING_VALIDATORS`。若该节点已在待处理列表中，
     /// 则将其权重设为 1。该变更将在下一个 epoch 生效。
     ///
     /// # 调用权限
@@ -1204,34 +1205,25 @@ pub mod subnet {
     pub fn validator_join(id: NodeID) -> Result<(), Error> {
         ensure_from_gov()?;
         SECRETS.get(&id).ok_or(Error::NodeNotExist)?;
-        let raw_len = PENDING_SECRETS_LEN.get().unwrap_or(0);
-
-        let mut nodes: Vec<(u64, u32)> = (0..raw_len)
-            .filter_map(|i| PENDING_SECRETS.get(&i))
-            .collect();
+        let mut ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
         let mut found = false;
-        for n in nodes.iter_mut() {
-            if n.0 == id {
-                n.1 = 1;
+        for existing_id in ids.iter() {
+            if *existing_id == id {
                 found = true;
                 break;
             }
         }
         if !found {
-            nodes.push((id, 1));
+            ids.push(id);
+            PENDING_VALIDATOR_IDS.set(&ids);
         }
-        let new_len = nodes.len() as u32;
-        for (idx, (nid, pow)) in nodes.into_iter().enumerate() {
-            PENDING_SECRETS.set(&(idx as u32), &(nid, pow));
-        }
-        
-        PENDING_SECRETS_LEN.set(&new_len);
+        PENDING_VALIDATORS.set(&id, &1u32);
         Ok(())
     }
 
     /// 将指定 Secret 节点从验证者集合中移除（待处理）。
     ///
-    /// 将目标节点以权重 0 加入 `PENDING_SECRETS` 列表。若该节点已在待处理列表中，
+    /// 将目标节点以权重 0 加入 `PENDING_VALIDATORS`。若该节点已在待处理列表中，
     /// 则将其权重设为 0（表示移除）。该变更将在下一个 epoch 生效。
     ///
     /// # 调用权限
@@ -1246,33 +1238,26 @@ pub mod subnet {
     #[revive(message, write)]
     pub fn validator_delete(id: NodeID) -> Result<(), Error> {
         ensure_from_gov()?;
-        let pending_len = PENDING_SECRETS_LEN.get().unwrap_or(0);
-        let mut nodes: Vec<(u64, u32)> = (0..pending_len)
-            .filter_map(|i| PENDING_SECRETS.get(&i))
-            .collect();
+        let mut ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
         let mut found = false;
-        for n in nodes.iter_mut() {
-            if n.0 == id {
-                n.1 = 0;
+        for existing_id in ids.iter() {
+            if *existing_id == id {
                 found = true;
                 break;
             }
         }
         if !found {
-            nodes.push((id, 0));
+            ids.push(id);
+            PENDING_VALIDATOR_IDS.set(&ids);
         }
-        let new_len = nodes.len() as u32;
-        for (idx, (nid, pow)) in nodes.into_iter().enumerate() {
-            PENDING_SECRETS.set(&(idx as u32), &(nid, pow));
-        }
-        PENDING_SECRETS_LEN.set(&new_len);
+        PENDING_VALIDATORS.set(&id, &0u32);
         Ok(())
     }
 
     /// 推进到下一个 epoch 并更新验证者集合。
     ///
     /// 侧链调用此函数来触发 epoch 切换。首次调用时会将调用者地址记录为侧链多签地址；
-    /// 后续调用必须由该多签地址发起。调用时需满足距离上一个 epoch 已超过 `epoch_solt` 区块数。
+    /// 后续调用必须由该多签地址发起。调用时需满足距离上一个 epoch 已超过 `epoch_slot` 区块数。
     /// epoch 切换后会调用 `calc_new_validators` 合并 pending 列表，更新运行中的验证者集合。
     ///
     /// # 调用权限
@@ -1300,11 +1285,11 @@ pub mod subnet {
             ensure!(caller == key, Error::InvalidSideChainCaller);
         }
 
-        // 校验当前 epoch 是否已到期（距离上次切换达到 epoch_solt 个区块）
-        // Verify current epoch has expired (blocks since last switch reached epoch_solt)
-        let epoch_solt = EPOCH_SOLT.get().unwrap_or(72000) as u64;
+        // 校验当前 epoch 是否已到期（距离上次切换达到 epoch_slot 个区块）
+        // Verify current epoch has expired (blocks since last switch reached epoch_slot)
+        let epoch_slot = EPOCH_SLOT.get().unwrap_or(72000) as u64;
         ensure!(
-            (now as u64).saturating_sub(last_epoch as u64) >= epoch_solt,
+            (now as u64).saturating_sub(last_epoch as u64) >= epoch_slot,
             Error::EpochNotExpired
         );
 
@@ -1329,33 +1314,32 @@ pub mod subnet {
     ///
     /// # 返回值
     /// - `Ok(Vec<(u64, SecretNode, u32)>)`：下一个 epoch 的验证者 ID、详情和权重列表。
-    /// - `Err(Error::EpochNotExpired)`：当前 epoch 尚未接近到期（距离上次 epoch 不足 `epoch_solt - 5` 个区块）。
+    /// - `Err(Error::EpochNotExpired)`：当前 epoch 尚未接近到期（距离上次 epoch 不足 `epoch_slot - 5` 个区块）。
     #[revive(message)]
     pub fn next_epoch_validators() -> Result<Vec<(u64, SecretNode, u32)>, Error> {
         let now = env().block_number();
         let last_epoch = LAST_EPOCH_BLOCK.get().unwrap_or(0);
-        let epoch_solt = EPOCH_SOLT.get().unwrap_or(72000);
+        let epoch_slot = EPOCH_SLOT.get().unwrap_or(72000);
         ensure!(
-            (now as u64).saturating_sub(last_epoch as u64) >= (epoch_solt.saturating_sub(5)) as u64,
+            (now as u64).saturating_sub(last_epoch as u64) >= (epoch_slot.saturating_sub(5)) as u64,
             Error::EpochNotExpired
         );
-        let runing_len = RUNING_SECRETS_LEN.get().unwrap_or(0);
-        let pending_len = PENDING_SECRETS_LEN.get().unwrap_or(0);
-        let mut runings: Vec<(u64, u32)> = (0..runing_len)
-            .filter_map(|i| RUNING_SECRETS.get(&i))
+        let running_ids = RUNNING_VALIDATOR_IDS.get().unwrap_or_default();
+        let pending_ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
+        let mut runnings: Vec<(u64, u32)> = running_ids
+            .into_iter()
+            .filter_map(|id| RUNNING_VALIDATORS.get(&id).map(|pow| (id, pow)))
             .collect();
-        let pendings: Vec<(u64, u32)> = (0..pending_len)
-            .filter_map(|i| PENDING_SECRETS.get(&i))
-            .collect();
-        for (pid, ppow) in pendings {
-            if let Some(r) = runings.iter_mut().find(|x| x.0 == pid) {
+        for pid in pending_ids {
+            let ppow = PENDING_VALIDATORS.get(&pid).unwrap_or(0);
+            if let Some(r) = runnings.iter_mut().find(|x| x.0 == pid) {
                 r.1 = ppow;
             } else {
-                runings.push((pid, ppow));
+                runnings.push((pid, ppow));
             }
         }
-        runings.retain(|x| x.1 != 0);
-        let out: Vec<(u64, SecretNode, u32)> = runings
+        runnings.retain(|x| x.1 != 0);
+        let out: Vec<(u64, SecretNode, u32)> = runnings
             .into_iter()
             .filter_map(|(id, power)| SECRETS.get(&id).map(|node| (id, node, power)))
             .collect();
@@ -1365,32 +1349,31 @@ pub mod subnet {
     fn calc_new_validators() {
         // Epoch 切换时重新计算验证者集合：合并 running + pending，剔除权重为 0 的节点
         // Recalculate validator set during epoch transition: merge running + pending, remove nodes with zero weight
-        let runing_len = RUNING_SECRETS_LEN.get().unwrap_or(0);
-        let pending_len = PENDING_SECRETS_LEN.get().unwrap_or(0);
-        let mut runings: Vec<(u64, u32)> = (0..runing_len)
-            .filter_map(|i| RUNING_SECRETS.get(&i))
-            .collect();
-        let pendings: Vec<(u64, u32)> = (0..pending_len)
-            .filter_map(|i| PENDING_SECRETS.get(&i))
+        let running_ids = RUNNING_VALIDATOR_IDS.get().unwrap_or_default();
+        let pending_ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
+        let mut runnings: Vec<(u64, u32)> = running_ids
+            .into_iter()
+            .filter_map(|id| RUNNING_VALIDATORS.get(&id).map(|pow| (id, pow)))
             .collect();
         // 将 pending 中的变更合并到 running：已存在则更新权重，不存在则新增
         // Merge pending changes into running: update weight if exists, add new if not
-        for (pid, ppow) in pendings {
-            if let Some(r) = runings.iter_mut().find(|x| x.0 == pid) {
+        for pid in pending_ids {
+            let ppow = PENDING_VALIDATORS.get(&pid).unwrap_or(0);
+            if let Some(r) = runnings.iter_mut().find(|x| x.0 == pid) {
                 r.1 = ppow;
             } else {
-                runings.push((pid, ppow));
+                runnings.push((pid, ppow));
             }
         }
         // 过滤掉权重为 0 的节点（被移除的验证者）
         // Filter out nodes with weight 0 (removed validators)
-        runings.retain(|x| x.1 != 0);
-        let new_len = runings.len() as u32;
-        for (idx, (nid, pow)) in runings.into_iter().enumerate() {
-            RUNING_SECRETS.set(&(idx as u32), &(nid, pow));
+        runnings.retain(|x| x.1 != 0);
+        let new_ids: Vec<u64> = runnings.iter().map(|(id, _)| *id).collect();
+        for (nid, pow) in runnings.into_iter() {
+            RUNNING_VALIDATORS.set(&nid, &pow);
         }
-        RUNING_SECRETS_LEN.set(&new_len);
-        PENDING_SECRETS_LEN.set(&0);
+        RUNNING_VALIDATOR_IDS.set(&new_ids);
+        PENDING_VALIDATOR_IDS.set(&Vec::new());
     }
 
     fn ensure_from_gov() -> Result<(), Error> {

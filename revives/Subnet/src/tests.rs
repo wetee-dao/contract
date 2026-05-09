@@ -28,7 +28,7 @@ fn deploy_and_epoch_info() {
     let _ = subnet::new();
     let info = subnet::epoch_info();
     assert_eq!(info.epoch, 0);
-    assert_eq!(info.epoch_solt, 72000);
+    assert_eq!(info.epoch_slot, 72000);
     assert_eq!(subnet::side_chain_key(), Address::zero());
 }
 
@@ -47,14 +47,14 @@ fn init_sets_gov_and_is_idempotent() {
 }
 
 #[test]
-fn set_epoch_solt_only_by_gov() {
+fn set_epoch_slot_only_by_gov() {
     setup_deployed_and_inited();
-    let _ = subnet::set_epoch_solt(36000);
+    let _ = subnet::set_epoch_slot(36000);
     let info = subnet::epoch_info();
-    assert_eq!(info.epoch_solt, 36000);
+    assert_eq!(info.epoch_slot, 36000);
 
     with_engine(|e| e.set_caller([99u8; 20]));
-    let res = subnet::set_epoch_solt(1);
+    let res = subnet::set_epoch_slot(1);
     assert_eq!(res, Err(Error::MustCallByMainContract));
 }
 
@@ -478,10 +478,10 @@ fn worker_start_only_by_side_chain_fails() {
 }
 
 #[test]
-fn set_next_epoch_before_epoch_solt_returns_epoch_not_expired() {
+fn set_next_epoch_before_epoch_slot_returns_epoch_not_expired() {
     setup_deployed_and_inited();
     with_engine(|e| e.set_caller(gov_caller()));
-    // off_chain block_number() returns 0, last_epoch=0, epoch_solt=72000 => (0-0) < 72000
+    // off_chain block_number() returns 0, last_epoch=0, epoch_slot=72000 => (0-0) < 72000
     let res = subnet::set_next_epoch(0);
     assert_eq!(res, Err(Error::EpochNotExpired));
 }

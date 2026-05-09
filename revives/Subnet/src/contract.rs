@@ -731,6 +731,12 @@ pub mod subnet {
         let caller = env().caller();
         let mut worker = WORKERS.get(&id).ok_or(Error::WorkerNotExist)?;
         ensure!(worker.owner == caller, Error::WorkerNotOwnedByCaller);
+        // 运行中的 Worker 不允许修改 IP，防止劫持活跃 Pod 的网络流量
+        // Running workers cannot change IP to prevent hijacking active Pod traffic
+        let status = WORKER_STATUS.get(&id).unwrap_or(0);
+        if status == 1 {
+            ensure!(worker.ip == ip, Error::WorkerStatusNotReady);
+        }
         worker.name = name;
         worker.ip = ip;
         worker.port = port;
@@ -992,8 +998,13 @@ pub mod subnet {
     /// - `Vec<(u64, u32)>`：待处理 Secret 节点 ID 与权重的列表。
     #[revive(message)]
     pub fn get_pending_secrets() -> Vec<(u64, u32)> {
-        let len = PENDING_SECRETS_LEN.get().unwrap_or(0);
-        (0..len).filter_map(|i| PENDING_SECRETS.get(&i)).collect()
+        let ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
+        ids.into_iter()
+            .map(|id| {
+                let power = PENDING_VALIDATORS.get(&id).unwrap_or(0);
+                (id, power)
+            })
+            .collect()
     }
 
     /// 列出所有已注册的 Secret 节点。
@@ -1047,6 +1058,12 @@ pub mod subnet {
         port: u32,
     ) -> Result<NodeID, Error> {
         let caller = env().caller();
+        // 每个地址仅可注册一个 Secret 节点，与 worker_register 行为一致
+        // Each address can only register one Secret node, consistent with worker_register
+        ensure!(
+            SECRET_OF_USER.get(&caller).is_none(),
+            Error::WorkerNotOwnedByCaller
+        );
         let now = env().block_number();
         let node = SecretNode {
             name,
@@ -1095,6 +1112,11 @@ pub mod subnet {
         let caller = env().caller();
         let mut node = SECRETS.get(&id).ok_or(Error::NodeNotExist)?;
         ensure!(node.owner == caller, Error::WorkerNotOwnedByCaller);
+        // 活跃验证者不允许修改 IP，防止劫持共识网络流量
+        // Active validators cannot change IP to prevent hijacking consensus traffic
+        if RUNNING_VALIDATORS.get(&id).unwrap_or(0) > 0 {
+            ensure!(node.ip == ip, Error::WorkerStatusNotReady);
+        }
         node.name = name;
         node.ip = ip;
         node.port = port;
@@ -1176,6 +1198,11 @@ pub mod subnet {
         }
         node.terminal_block = Some(env().block_number());
         SECRETS.set(&id, &node);
+        // 清理地址→节点映射，允许该地址重新注册
+        // Clean up address→node mapping to allow re-registration
+        if SECRET_OF_USER.get(&caller) == Some(id) {
+            SECRET_OF_USER.clear(&caller);
+        }
         Ok(())
     }
 
@@ -1236,12 +1263,9 @@ pub mod subnet {
             ids.push(id);
             PENDING_VALIDATOR_IDS.set(&ids);
         }
-        let new_len = nodes.len() as u32;
-        for (idx, (nid, pow)) in nodes.into_iter().enumerate() {
-            PENDING_SECRETS.set(&(idx as u32), &(nid, pow));
-        }
-
-        PENDING_SECRETS_LEN.set(&new_len);
+        // 将待处理节点同步到 PENDING_VALIDATORS，权重默认设为 1（加入）
+        // Sync pending node to PENDING_VALIDATORS with default weight 1 (join)
+        PENDING_VALIDATORS.set(&id, &1u32);
         Ok(())
     }
 
@@ -1262,6 +1286,9 @@ pub mod subnet {
     #[revive(message, write)]
     pub fn validator_delete(id: NodeID) -> Result<(), Error> {
         ensure_from_gov()?;
+        // 校验节点存在，与 validator_join 保持一致
+        // Verify node exists, consistent with validator_join
+        SECRETS.get(&id).ok_or(Error::NodeNotExist)?;
         let mut ids = PENDING_VALIDATOR_IDS.get().unwrap_or_default();
         let mut found = false;
         for existing_id in ids.iter() {
@@ -1381,12 +1408,12 @@ pub mod subnet {
             .collect();
         // 将 pending 中的变更合并到 running：已存在则更新权重，不存在则新增
         // Merge pending changes into running: update weight if exists, add new if not
-        for pid in pending_ids {
+        for pid in pending_ids.iter() {
             let ppow = PENDING_VALIDATORS.get(&pid).unwrap_or(0);
-            if let Some(r) = runnings.iter_mut().find(|x| x.0 == pid) {
+            if let Some(r) = runnings.iter_mut().find(|x| x.0 == *pid) {
                 r.1 = ppow;
             } else {
-                runnings.push((pid, ppow));
+                runnings.push((*pid, ppow));
             }
         }
         // 过滤掉权重为 0 的节点（被移除的验证者）
@@ -1397,6 +1424,11 @@ pub mod subnet {
             RUNNING_VALIDATORS.set(&nid, &pow);
         }
         RUNNING_VALIDATOR_IDS.set(&new_ids);
+        // 清除已处理的 pending 记录，防止存储膨胀
+        // Clear processed pending records to prevent storage bloat
+        for pid in pending_ids.iter() {
+            PENDING_VALIDATORS.clear(&pid);
+        }
         PENDING_VALIDATOR_IDS.set(&Vec::new());
     }
 

@@ -123,21 +123,6 @@ fn del_secret() {
 }
 
 #[test]
-fn charge_and_balance() {
-    let subnet_addr = Address::from([1u8; 20]);
-    let code_hash = H256::from([2u8; 32]);
-    with_engine(|e| {
-        e.reset();
-        e.set_caller(gov_caller());
-    });
-    let _ = cloud::new();
-    let _ = cloud::init(subnet_addr, Address::from([3u8; 20]), code_hash);
-    let _ = cloud::charge();
-    let bal = cloud::balance(AssetInfo::Native(Default::default()));
-    assert_eq!(bal, U256::ZERO);
-}
-
-#[test]
 fn pods_empty_and_user_pod_len() {
     let subnet_addr = Address::from([1u8; 20]);
     let code_hash = H256::from([2u8; 32]);

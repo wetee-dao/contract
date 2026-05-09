@@ -42,7 +42,7 @@ pub mod cloud {
     const WORKER_OF_POD: Mapping<u64, u64> = mapping!(b"worker_of_pod");
 
     const POD_OF_USER: List2D<Address, u64, u64> = list_2d!(b"pod_of_user");
-    const PODS_OF_WORKER: List2D<u64, u64, u64> = list_2d!(b"pods_of_worker");
+    const POD_OF_WORKER: List2D<u64, u64, u64> = list_2d!(b"pod_of_worker");
     const POD_CONTAINERS: List2D<u64, u64, Container> = list_2d!(b"pod_containers");
     const USER_SECRETS: List2D<Address, u64, Secret> = list_2d!(b"user_secrets");
     const USER_DISKS: List2D<Address, u64, Disk> = list_2d!(b"user_disks");
@@ -456,7 +456,7 @@ pub mod cloud {
     ///   每个元素为 (pod_id, version, last_mint_block, status)。
     #[revive(message)]
     pub fn worker_pods_version(worker_id: u64) -> Vec<(u64, BlockNumber, BlockNumber, u8)> {
-        let ids = PODS_OF_WORKER.desc_list(&worker_id, None, u32::MAX);
+        let ids = POD_OF_WORKER.desc_list(&worker_id, None, u32::MAX);
         let mut out = Vec::new();
         for (_k2, pod_id) in ids.into_iter() {
             let state = POD_STATE.get(&pod_id).unwrap_or_default();
@@ -485,7 +485,7 @@ pub mod cloud {
         start: Option<u64>,
         size: u64,
     ) -> Vec<(u64, Pod, Vec<(u64, Container)>, u8)> {
-        let ids = PODS_OF_WORKER.desc_list(&worker_id, start, size as u32);
+        let ids = POD_OF_WORKER.desc_list(&worker_id, start, size as u32);
         let mut out = Vec::new();
         for (_k2, pod_id) in ids.into_iter() {
             if let Some(detail) = get_pod_detail(pod_id) {
@@ -506,7 +506,7 @@ pub mod cloud {
     /// - `u64`：该 worker 上的 Pod 数量。
     #[revive(message)]
     pub fn worker_pod_len(worker_id: u64) -> u64 {
-        PODS_OF_WORKER.len(&worker_id)
+        POD_OF_WORKER.len(&worker_id)
     }
 
     /// 分页查询指定用户的 Secret 列表（按 k2 倒序）。
@@ -835,7 +835,19 @@ pub mod cloud {
         ensure_from_gov()?;
         match asset {
             AssetInfo::Native(_) => {
-                ensure!(env().balance() >= amount, Error::BalanceNotEnough);
+                // 防止转移预留的平台费和区块奖励池资金，确保会计变量与实际余额一致
+                // Prevent transferring reserved platform fee and block reward pool funds,
+                // ensuring accounting variables stay consistent with actual balance
+                let fee_total = PLATFORM_FEE_TOTAL.get().unwrap_or(U256::ZERO);
+                let reward_pool = BLOCK_REWARD_POOL.get().unwrap_or(U256::ZERO);
+                let reserved = fee_total + reward_pool;
+                let balance = env().balance();
+                let freely_available = if balance >= reserved {
+                    balance - reserved
+                } else {
+                    U256::ZERO
+                };
+                ensure!(freely_available >= amount, Error::BalanceNotEnough);
                 env().transfer(&to, &amount).map_err(|_| Error::PayFailed)?;
                 Ok(())
             }
@@ -1017,6 +1029,23 @@ pub mod cloud {
         Some((pod, containers, state.version, state.status))
     }
 
+    /// 查询指定 Pod 是否已完成结算。
+    ///
+    /// 供 Pod 合约在 withdraw 时校验，防止在 mint_pod 之前抢跑提现导致支付失败。
+    ///
+    /// 调用权限：任何人可调用。
+    ///
+    /// # 参数
+    /// - `pod_id`：目标 Pod ID。
+    ///
+    /// # 返回值
+    /// - `true`：Pod 已结算，可以安全提现。
+    /// - `false`：Pod 不存在或未结算。
+    #[revive(message)]
+    pub fn is_pod_settled(pod_id: u64) -> bool {
+        PODS.get(&pod_id).map(|p| p.is_settled).unwrap_or(false)
+    }
+
     /// 创建一个新的 Pod。
     ///
     /// 调用者需一次性预付运行期间的全额费用（通过 `value_transferred`），函数会：
@@ -1170,7 +1199,7 @@ pub mod cloud {
 
         PODS.set(&pod_id, &pod);
         POD_OF_USER.insert(&caller, &pod_id);
-        PODS_OF_WORKER.insert(&worker_id, &pod_id);
+        POD_OF_WORKER.insert(&worker_id, &pod_id);
         WORKER_OF_POD.set(&pod_id, &worker_id);
         LAST_MINT_BLOCK.set(&pod_id, &now);
 
@@ -1243,11 +1272,14 @@ pub mod cloud {
         ensure!(pod.owner == caller, Error::NotPodOwner);
 
         let mut state = POD_STATE.get(&pod_id).unwrap_or_default();
+        // 仅允许停止正在运行中的 Pod（status == 1），防止重复停止
+        // Only allow stopping a running Pod (status == 1), preventing redundant stops
+        ensure!(state.status == 1, Error::PodStatusError);
         state.status = 3;
         POD_STATE.set(&pod_id, &state);
         let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerNotFound)?;
 
-        PODS_OF_WORKER
+        POD_OF_WORKER
             .clear(&worker_id, pod_id)
             .ok_or(Error::DelFailed)?;
         Ok(())
@@ -1286,7 +1318,7 @@ pub mod cloud {
         if state.status == 3 {
             let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerNotFound)?;
             state.status = 0;
-            PODS_OF_WORKER.insert(&worker_id, &pod_id);
+            POD_OF_WORKER.insert(&worker_id, &pod_id);
             let now = env().block_number();
             LAST_MINT_BLOCK.set(&pod_id, &now);
         }
@@ -1352,7 +1384,15 @@ pub mod cloud {
                 .map_err(|_| Error::PayFailed)?;
         }
 
-        pod.end_block = pod.end_block.saturating_add(additional_blocks);
+        // 若 Pod 已过期，从当前区块开始计算新的 end_block，避免续费后 end_block 仍落在过去
+        // If Pod has expired, compute new end_block from current block to avoid end_block staying in the past
+        let now = env().block_number();
+        let base_block = if now > pod.end_block {
+            now
+        } else {
+            pod.end_block
+        };
+        pod.end_block = base_block.saturating_add(additional_blocks);
         pod.prepaid_amount = pod.prepaid_amount + additional_amount;
         pod.is_settled = false;
         PODS.set(&pod_id, &pod);
@@ -1398,7 +1438,10 @@ pub mod cloud {
         // Verify Pod has not expired; prevent settling an already-expired Pod
         ensure!(env().block_number() <= pod.end_block, Error::PodStatusError);
 
-        POD_REPORT.set(&pod_id, &report);
+        // 将报告写入 POD_STATE.report，与 pod_report() 读取位置保持一致
+        // Write report to POD_STATE.report, consistent with pod_report() read location
+        state.report = report;
+        POD_STATE.set(&pod_id, &state);
         let (_per_block_pay, asset_info, _price, worker_owner) = calc_pod_block_cost(pod_id)?;
 
         // 将 Pod 合约中未结算的预付款（prepaid - settled）分配给各方，支持续费后再次调用
@@ -1419,7 +1462,7 @@ pub mod cloud {
             // 95% 转给矿工作为任务执行报酬（按创建时锁定的当前价格成交）
             // 95% transferred to worker as task reward (locked at current price at creation time)
             if worker_amount > U256::ZERO {
-                pod::pod::api::pay_for_woker(
+                pod::pod::api::pay_for_worker(
                     &pod.pod_address,
                     &worker_owner,
                     &asset_info,
@@ -1432,7 +1475,7 @@ pub mod cloud {
             // 2.5% 平台费转入 Cloud 合约
             // 2.5% platform fee transferred to Cloud contract
             if cloud_fee > U256::ZERO {
-                pod::pod::api::pay_for_woker(
+                pod::pod::api::pay_for_worker(
                     &pod.pod_address,
                     &cloud_address,
                     &asset_info,
@@ -1447,7 +1490,7 @@ pub mod cloud {
             // 2.5% 区块奖励转入 Cloud 合约的 BLOCK_REWARD_POOL
             // 2.5% block reward transferred to Cloud's BLOCK_REWARD_POOL
             if block_reward > U256::ZERO {
-                pod::pod::api::pay_for_woker(
+                pod::pod::api::pay_for_worker(
                     &pod.pod_address,
                     &cloud_address,
                     &asset_info,
@@ -1463,6 +1506,12 @@ pub mod cloud {
         pod.settled_amount = pod.prepaid_amount;
         pod.is_settled = true;
         PODS.set(&pod_id, &pod);
+
+        // 通知 Pod 合约已完成结算，允许 owner 提现剩余资金
+        // Notify Pod contract that settlement is complete, enabling owner withdrawals
+        pod::pod::api::mark_settled(&pod.pod_address)
+            .map_err(|_| Error::CallFailed)?
+            .map_err(|_| Error::CallFailed)?;
 
         Ok(())
     }
@@ -1505,6 +1554,9 @@ pub mod cloud {
         let caller = env().caller();
         let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
         ensure!(pod.owner == caller, Error::NotPodOwner);
+        // 已结算的 Pod 不允许再修改容器配置，保证状态一致性
+        // Prevent editing containers on settled pods to maintain state consistency
+        ensure!(!pod.is_settled, Error::PodAlreadySettled);
 
         for c in containers.iter() {
             match &c.etype {

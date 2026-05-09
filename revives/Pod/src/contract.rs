@@ -33,6 +33,10 @@ pub enum Error {
     CodeUpgradeNotSupported,
     /// initialize 已被调用过，不允许重复初始化
     AlreadyInitialized,
+    /// 提现时 Pod 尚未完成结算（mint_pod），防止抢跑攻击导致矿工无法收款
+    NotSettled,
+    /// 跨合约调用失败
+    CallFailed,
 }
 
 #[revive_contract]
@@ -48,6 +52,8 @@ pub mod pod {
     const POD_ID: Storage<u64> = storage!(b"pod_id");
     /// Pod 所有者地址
     const OWNER: Storage<Address> = storage!(b"owner");
+    /// 结算完成标记，由 Cloud 合约在 mint_pod 后设置，用于 withdraw 的结算校验
+    const SETTLED: Storage<bool> = storage!(b"settled");
 
     /// Pod 实现合约的构造函数。
     ///
@@ -221,18 +227,37 @@ pub mod pod {
         let caller = env().caller();
         let owner = OWNER.get().unwrap_or(Address::zero());
         ensure!(caller == owner, Error::NotOwner);
+
+        // 校验 Pod 已完成结算，防止在 mint_pod 之前抢跑提现导致矿工无法收款
+        // Verify Pod is settled before allowing withdrawal, preventing race-condition
+        // drain attack that would leave insufficient funds for worker payment
+        ensure!(SETTLED.get().unwrap_or(false), Error::NotSettled);
+
         match asset {
             AssetInfo::Native(_) => {
-                // Pod 所有者从 Pod 合约余额中提取资金，用于回收未使用的预付款
-                // Pod owner withdraws funds from Pod contract balance to reclaim unused prepayment
-                // 要求 balance > amount（严格大于）：至少保留 1 wei，防止在 mint_pod 之前抢跑提光导致支付失败
-                // Require balance > amount (strict greater-than): keep at least 1 wei to prevent race-condition emptying before mint_pod
-                ensure!(env().balance() > amount, Error::InsufficientBalance);
+                ensure!(env().balance() >= amount, Error::InsufficientBalance);
                 transfer_native(&to, amount)?;
                 Ok(())
             }
             AssetInfo::ERC20(_, _) => Err(Error::UnsupportedAsset),
         }
+    }
+
+    /// 标记 Pod 已完成结算，由 Cloud 合约在 mint_pod 完成后调用。
+    ///
+    /// 设置 `SETTLED` 标记后，Pod owner 方可调用 `withdraw` 提取剩余资金。
+    /// 此函数幂等：已标记则直接返回成功。
+    ///
+    /// # 调用权限
+    /// **仅云合约可调用**，其他调用者将返回 `Error::MustCallByCloudContract`。
+    ///
+    /// # 返回值
+    /// - `Ok(())`：标记成功或已标记。
+    #[revive(message, write)]
+    pub fn mark_settled() -> Result<(), Error> {
+        ensure_from_cloud()?;
+        SETTLED.set(&true);
+        Ok(())
     }
 
     /// 更新合约代码。

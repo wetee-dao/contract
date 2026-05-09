@@ -21,7 +21,7 @@ use wrevive_macro::{mapping, revive_contract, storage};
 
 pub use curve::{Curve, CurveArg, Percent, arg_to_curve};
 pub use datas::{
-    Call, CallInput, CalllId, Opinion, PropStatus, Selector, Spend, TokenInfo, Track, VoteInfo,
+    Call, CallId, CallInput, Opinion, PropStatus, Selector, Spend, TokenInfo, Track, VoteInfo,
 };
 pub use errors::Error;
 pub use primitives::{ensure, ok_or_err};
@@ -290,16 +290,17 @@ pub mod dao {
     #[revive(message, write)]
     pub fn sudo(call: Call) -> Result<Vec<u8>, Error> {
         let caller = env().caller();
-<<<<<<< HEAD
-        ensure!(SUDO_ACCOUNT.get().unwrap_or(None) == Some(caller), Error::MustCallByGov);
-        ensure!(!REENTRANCY_GUARD.get().unwrap_or(false), Error::ReentrantCall);
-        REENTRANCY_GUARD.set(&true);
-=======
         ensure!(
             SUDO_ACCOUNT.get().unwrap_or(None) == Some(caller),
             Error::MustCallByGov
         );
->>>>>>> origin/main
+        // 重入锁：防止 sudo call 在执行期间被递归调用
+        // Reentrancy guard: prevent recursive calls while sudo call is executing
+        ensure!(
+            !REENTRANCY_GUARD.get().unwrap_or(false),
+            Error::ReentrantCall
+        );
+        REENTRANCY_GUARD.set(&true);
         let call_id = NEXT_SUDO_CALL_ID.get().unwrap_or(0);
         NEXT_SUDO_CALL_ID.set(&(call_id + 1));
         SUDO_CALLS.set(&call_id, &call);
@@ -452,23 +453,16 @@ pub mod dao {
     }
 
     fn transfer_from_to(from: Address, to: Address, value: U256) -> Result<(), Error> {
-<<<<<<< HEAD
-        ensure!(MEMBER_BALANCES.get(&from).is_some(), Error::MemberNotExisted);
-        ensure!(MEMBER_BALANCES.get(&to).is_some(), Error::MemberNotExisted);
-=======
         ensure!(
             MEMBER_BALANCES.get(&from).is_some(),
             Error::MemberNotExisted
         );
->>>>>>> origin/main
         let free = free_balance(from);
         ensure!(free >= value, Error::LowBalance);
         let from_balance = MEMBER_BALANCES.get(&from).unwrap_or(U256::ZERO);
         MEMBER_BALANCES.set(&from, &(from_balance - value));
         let to_balance = MEMBER_BALANCES.get(&to).unwrap_or(U256::ZERO);
         MEMBER_BALANCES.set(&to, &(to_balance + value));
-<<<<<<< HEAD
-=======
         let mut members = MEMBERS.get().unwrap_or_default();
         if !members.iter().any(|x| *x == to) {
             // 初始化新成员的锁仓余额，保持与 join()/public_join() 状态一致
@@ -477,7 +471,6 @@ pub mod dao {
             members.push(to);
             MEMBERS.set(&members);
         }
->>>>>>> origin/main
         Ok(())
     }
 

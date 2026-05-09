@@ -20,36 +20,36 @@ pub use primitives::ensure;
 pub mod proxy {
     use super::*;
 
-    const IMPLEMENTATION: Storage<Address> = storage!(b"_proxy_implementation");
-    const ADMIN: Storage<Address> = storage!(b"_proxy_admin");
+    const PROXY_IMPLEMENTATION: Storage<Address> = storage!(b"_proxy_implementation");
+    const PROXY_ADMIN: Storage<Address> = storage!(b"_proxy_admin");
 
     /// 部署代理：设置实现合约地址与管理员。若不传 admin，则使用 caller 为管理员。
     #[revive(constructor)]
     pub fn new(implementation: Address, admin: Option<Address>) -> Result<(), Error> {
         let caller = env().caller();
         let admin_addr = admin.unwrap_or(caller);
-        IMPLEMENTATION.set(&implementation);
-        ADMIN.set(&admin_addr);
+        PROXY_IMPLEMENTATION.set(&implementation);
+        PROXY_ADMIN.set(&admin_addr);
         Ok(())
     }
 
     /// 当前实现合约地址
     #[revive(message)]
     pub fn get_implementation() -> Address {
-        IMPLEMENTATION.get().unwrap_or(Address::zero())
+        PROXY_IMPLEMENTATION.get().unwrap_or(Address::zero())
     }
 
     /// 管理员地址（有权调用 upgrade）
     #[revive(message)]
     pub fn get_admin() -> Address {
-        ADMIN.get().unwrap_or(Address::zero())
+        PROXY_ADMIN.get().unwrap_or(Address::zero())
     }
 
     /// 升级实现合约（仅管理员可调）
     #[revive(message, write)]
     pub fn upgrade(implementation: Address) -> Result<(), Error> {
         ensure_admin()?;
-        IMPLEMENTATION.set(&implementation);
+        PROXY_IMPLEMENTATION.set(&implementation);
         Ok(())
     }
 
@@ -57,7 +57,7 @@ pub mod proxy {
     #[revive(message, write)]
     pub fn transfer_admin(new_admin: Address) -> Result<(), Error> {
         ensure_admin()?;
-        ADMIN.set(&new_admin);
+        PROXY_ADMIN.set(&new_admin);
         Ok(())
     }
 
@@ -65,7 +65,7 @@ pub mod proxy {
     #[revive(fallback)]
     pub fn fallback() {
         let api = env();
-        let callee = IMPLEMENTATION.get().unwrap_or(Address::zero());
+        let callee = PROXY_IMPLEMENTATION.get().unwrap_or(Address::zero());
         if callee == Address::zero() {
             let error = Error::AddressNotFound;
             api.return_value(ReturnFlags::REVERT, &Encode::encode(&error));
@@ -98,7 +98,7 @@ pub mod proxy {
 
     fn ensure_admin() -> Result<(), Error> {
         let caller = env().caller();
-        let admin = ADMIN.get().unwrap_or(Address::zero());
+        let admin = PROXY_ADMIN.get().unwrap_or(Address::zero());
         ensure!(caller == admin, Error::Unauthorized);
         Ok(())
     }

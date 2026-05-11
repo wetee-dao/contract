@@ -26,6 +26,11 @@ type Error struct { // Enum
 	InvalidSideChainCaller    *bool // 14
 	RegionNotExist            *bool // 15
 	AssetNotExist             *bool // 16
+	DepositNotEnough          *bool // 17
+	MortgageNotEnough         *bool // 18
+	SlashAmountTooLarge       *bool // 19
+	CloudContractNotSet       *bool // 20
+	ResourceNotEnough         *bool // 21
 }
 
 func (ty Error) Encode(encoder scale.Encoder) (err error) {
@@ -164,6 +169,46 @@ func (ty Error) Encode(encoder scale.Encoder) (err error) {
 		}
 		return nil
 	}
+
+	if ty.DepositNotEnough != nil {
+		err = encoder.PushByte(17)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.MortgageNotEnough != nil {
+		err = encoder.PushByte(18)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.SlashAmountTooLarge != nil {
+		err = encoder.PushByte(19)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.CloudContractNotSet != nil {
+		err = encoder.PushByte(20)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if ty.ResourceNotEnough != nil {
+		err = encoder.PushByte(21)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 	return fmt.Errorf("unrecognized enum")
 }
 
@@ -241,6 +286,26 @@ func (ty *Error) Decode(decoder scale.Decoder) (err error) {
 		t := true
 		ty.AssetNotExist = &t
 		return
+	case 17: // Base
+		t := true
+		ty.DepositNotEnough = &t
+		return
+	case 18: // Base
+		t := true
+		ty.MortgageNotEnough = &t
+		return
+	case 19: // Base
+		t := true
+		ty.SlashAmountTooLarge = &t
+		return
+	case 20: // Base
+		t := true
+		ty.CloudContractNotSet = &t
+		return
+	case 21: // Base
+		t := true
+		ty.ResourceNotEnough = &t
+		return
 	default:
 		return fmt.Errorf("unrecognized enum")
 	}
@@ -313,12 +378,32 @@ func (ty *Error) Error() string {
 	if ty.AssetNotExist != nil {
 		return "AssetNotExist"
 	}
+
+	if ty.DepositNotEnough != nil {
+		return "DepositNotEnough"
+	}
+
+	if ty.MortgageNotEnough != nil {
+		return "MortgageNotEnough"
+	}
+
+	if ty.SlashAmountTooLarge != nil {
+		return "SlashAmountTooLarge"
+	}
+
+	if ty.CloudContractNotSet != nil {
+		return "CloudContractNotSet"
+	}
+
+	if ty.ResourceNotEnough != nil {
+		return "ResourceNotEnough"
+	}
 	return "Unknown"
 }
 
 type EpochInfo struct { // Composite
 	Epoch          uint32
-	EpochSolt      uint32
+	EpochSlot      uint32
 	LastEpochBlock uint32
 	Now            uint32
 	SideChainPub   types.H160
@@ -416,6 +501,14 @@ type Tuple_27 struct { // Tuple
 	F0 AssetInfo
 	F1 types.U256
 }
+type Tuple_31 struct { // Tuple
+	F0 uint32
+	F1 uint32
+	F2 uint32
+	F3 uint32
+	F4 uint32
+	F5 uint32
+}
 type Ip struct { // Composite
 	Ipv4   util.Option[uint32]
 	Ipv6   util.Option[types.U128]
@@ -434,7 +527,7 @@ type K8sCluster struct { // Composite
 	Port          uint32
 	Status        byte
 }
-type Tuple_41 struct { // Tuple
+type Tuple_44 struct { // Tuple
 	F0 uint64
 	F1 K8sCluster
 }
@@ -449,15 +542,15 @@ type SecretNode struct { // Composite
 	Port          uint32
 	Status        byte
 }
-type Tuple_55 struct { // Tuple
+type Tuple_58 struct { // Tuple
 	F0 uint64
 	F1 uint32
 }
-type Tuple_58 struct { // Tuple
+type Tuple_61 struct { // Tuple
 	F0 uint64
 	F1 SecretNode
 }
-type Tuple_61 struct { // Tuple
+type Tuple_64 struct { // Tuple
 	F0 uint64
 	F1 SecretNode
 	F2 uint32

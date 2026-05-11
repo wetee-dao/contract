@@ -29,7 +29,7 @@ func TestCloudQueryPodCode(t *testing.T) {
 		panic(err)
 	}
 
-	codeHash, _, err := cloudContract.QueryPodContract(chain.DryRunParams{
+	codeHash, _, err := cloudContract.QueryPodImpl(chain.DryRunParams{
 		Origin:    pk.AccountID(),
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	})
@@ -97,7 +97,23 @@ func TestCloudSetPodCode(t *testing.T) {
 		panic(err)
 	}
 
-	err = cloudContract.ExecSetPodContract(*podCode, chain.ExecParams{
+	// Deploy Pod implementation from uploaded code hash
+	podImplAddr, err := client.DeployContract(
+		util.InkCode{Existing: podCode},
+		&pk,
+		types.NewU128(*big.NewInt(0)),
+		util.InkContractInput{
+			Selector: "0x00000000",
+			Args:     []any{},
+		},
+		util.NewSome(genSalt()),
+	)
+	if err != nil {
+		util.LogWithPurple("DeployContract", err)
+		panic(err)
+	}
+
+	err = cloudContract.ExecSetPodImpl(*podImplAddr, chain.ExecParams{
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	})
@@ -106,7 +122,7 @@ func TestCloudSetPodCode(t *testing.T) {
 		panic(err)
 	}
 
-	fmt.Println("set pod code success")
+	fmt.Println("set pod impl success")
 }
 
 func TestCloudUpdatePodContract(t *testing.T) {
@@ -135,12 +151,28 @@ func TestCloudUpdatePodContract(t *testing.T) {
 		panic(err)
 	}
 
+	// Deploy Pod implementation from uploaded code hash
+	podImplAddr, err := client.DeployContract(
+		util.InkCode{Existing: podCode},
+		&pk,
+		types.NewU128(*big.NewInt(0)),
+		util.InkContractInput{
+			Selector: "0x00000000",
+			Args:     []any{},
+		},
+		util.NewSome(genSalt()),
+	)
+	if err != nil {
+		util.LogWithPurple("DeployContract", err)
+		panic(err)
+	}
+
 	cloudContract, err := cloud.InitCloudContract(client, CloudAddress)
 	if err != nil {
 		panic(err)
 	}
 
-	err = cloudContract.ExecSetPodContract(*podCode, chain.ExecParams{
+	err = cloudContract.ExecSetPodImpl(*podImplAddr, chain.ExecParams{
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	})

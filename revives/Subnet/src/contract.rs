@@ -43,7 +43,6 @@ pub mod subnet {
     const WORKER_STATUS: Mapping<u64, u8> = mapping!(b"worker_status");
     const OWNER_OF_WORKER: Mapping<Address, u64> = mapping!(b"owner_of_worker");
     const MINT_OF_WORKER: Mapping<AccountId, u64> = mapping!(b"mint_of_worker");
-    const SECRET_OF_USER: Mapping<Address, u64> = mapping!(b"secret_of_user");
     const SECRET_MORTGAGES: Mapping<u64, U256> = mapping!(b"secret_mortgages");
     const LEVEL_PRICES: Mapping<u8, RunPrice> = mapping!(b"level_prices");
     const ASSET_INFOS: Mapping<u32, AssetInfo> = mapping!(b"asset_infos");
@@ -1058,12 +1057,6 @@ pub mod subnet {
         port: u32,
     ) -> Result<NodeID, Error> {
         let caller = env().caller();
-        // 每个地址仅可注册一个 Secret 节点，与 worker_register 行为一致
-        // Each address can only register one Secret node, consistent with worker_register
-        ensure!(
-            SECRET_OF_USER.get(&caller).is_none(),
-            Error::WorkerNotOwnedByCaller
-        );
         let now = env().block_number();
         let node = SecretNode {
             name,
@@ -1080,7 +1073,6 @@ pub mod subnet {
         let next = id.checked_add(1).ok_or(Error::NodeNotExist)?;
         NEXT_SECRET_ID.set(&next);
         SECRETS.set(&id, &node);
-        SECRET_OF_USER.set(&caller, &id);
         if id == 0 {
             RUNNING_VALIDATORS.set(&0u64, &1u32);
             let mut ids = Vec::new();
@@ -1198,11 +1190,6 @@ pub mod subnet {
         }
         node.terminal_block = Some(env().block_number());
         SECRETS.set(&id, &node);
-        // 清理地址→节点映射，允许该地址重新注册
-        // Clean up address→node mapping to allow re-registration
-        if SECRET_OF_USER.get(&caller) == Some(id) {
-            SECRET_OF_USER.clear(&caller);
-        }
         Ok(())
     }
 

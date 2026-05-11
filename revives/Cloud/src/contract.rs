@@ -1202,6 +1202,16 @@ pub mod cloud {
         POD_OF_WORKER.insert(&worker_id, &pod_id);
         WORKER_OF_POD.set(&pod_id, &worker_id);
         LAST_MINT_BLOCK.set(&pod_id, &now);
+        // 显式初始化 Pod 状态，避免依赖 unwrap_or_default 隐式行为
+        // Explicitly initialize Pod state to avoid implicit unwrap_or_default behavior
+        POD_STATE.set(
+            &pod_id,
+            &PodState {
+                version: 0,
+                status: 0,
+                report: H256::zero(),
+            },
+        );
 
         // 保存容器配置到链上存储，供后续计费和查询使用
         // Save container configurations to on-chain storage for subsequent billing and querying
@@ -1442,7 +1452,7 @@ pub mod cloud {
         // Write report to POD_STATE.report, consistent with pod_report() read location
         state.report = report;
         POD_STATE.set(&pod_id, &state);
-        let (_per_block_pay, asset_info, _price, worker_owner) = calc_pod_block_cost(pod_id)?;
+        let (asset_info, worker_owner) = calc_pod_asset_and_worker(pod_id)?;
 
         // 将 Pod 合约中未结算的预付款（prepaid - settled）分配给各方，支持续费后再次调用
         // Distribute unsettled prepayment (prepaid - settled) from Pod contract, supports re-calling after renewal
@@ -1468,7 +1478,7 @@ pub mod cloud {
                     &asset_info,
                     &worker_amount,
                 )
-                .map_err(|_| Error::PayFailed)?
+                .map_err(|_| Error::CallFailed)?
                 .map_err(|_| Error::PayFailed)?;
             }
 
@@ -1481,7 +1491,7 @@ pub mod cloud {
                     &asset_info,
                     &cloud_fee,
                 )
-                .map_err(|_| Error::PayFailed)?
+                .map_err(|_| Error::CallFailed)?
                 .map_err(|_| Error::PayFailed)?;
                 let current_total = PLATFORM_FEE_TOTAL.get().unwrap_or(U256::ZERO);
                 PLATFORM_FEE_TOTAL.set(&(current_total + cloud_fee));
@@ -1496,7 +1506,7 @@ pub mod cloud {
                     &asset_info,
                     &block_reward,
                 )
-                .map_err(|_| Error::PayFailed)?
+                .map_err(|_| Error::CallFailed)?
                 .map_err(|_| Error::PayFailed)?;
                 let current_pool = BLOCK_REWARD_POOL.get().unwrap_or(U256::ZERO);
                 BLOCK_REWARD_POOL.set(&(current_pool + block_reward));
@@ -1692,6 +1702,22 @@ pub mod cloud {
         }
 
         Ok((pay_value, asset_info, price, worker.owner))
+    }
+
+    /// 获取 Pod 的资产信息和工人地址（供 mint_pod 使用，无需计算区块费用和查询等级价格）。
+    ///
+    /// Fetch Pod's asset info and worker address (used by mint_pod, no need for block cost or level price).
+    fn calc_pod_asset_and_worker(pod_id: u64) -> Result<(AssetInfo, Address), Error> {
+        let worker_id = WORKER_OF_POD.get(&pod_id).ok_or(Error::WorkerIdNotFound)?;
+        let subnet = SUBNET_ADDRESS.get().unwrap_or(Address::zero());
+        let worker: K8sCluster = subnet::subnet::api::worker(&subnet, &worker_id)
+            .map_err(|_| Error::CallFailed)?
+            .ok_or(Error::WorkerNotFound)?;
+        let pod = PODS.get(&pod_id).ok_or(Error::PodNotFound)?;
+        let (asset_info, _price) = subnet::subnet::api::asset(&subnet, &pod.pay_asset_id)
+            .map_err(|_| Error::CallFailed)?
+            .ok_or(Error::AssetNotFound)?;
+        Ok((asset_info, worker.owner))
     }
 }
 

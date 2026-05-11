@@ -216,14 +216,30 @@ func upgradePodCode(client *chain.ChainClient, pk chain.Signer, envCfg EnvConfig
 	}
 	fmt.Println("pod code uploaded: ", codeHash.Hex())
 
+	// Deploy the new Pod implementation from uploaded code hash
+	podImplAddr, err := client.DeployContract(
+		util.InkCode{Existing: codeHash},
+		&pk,
+		types.NewU128(*big.NewInt(0)),
+		util.InkContractInput{
+			Selector: "0x00000000",
+			Args:     []any{},
+		},
+		util.NewSome(genSalt()),
+	)
+	if err != nil {
+		exitf("deploy pod impl: %v", err)
+	}
+	fmt.Println("pod impl deployed: ", podImplAddr.Hex())
+
 	cloudContract, err := cloud.InitCloudContract(client, cloudAddr)
 	if err != nil {
 		exitf("init cloud contract: %v", err)
 	}
 
-	err = cloudContract.ExecSetPodContract(*codeHash, callParams)
+	err = cloudContract.ExecSetPodImpl(*podImplAddr, callParams)
 	if err != nil {
-		exitf("set pod contract: %v", err)
+		exitf("set pod impl: %v", err)
 	}
 
 	fmt.Println("========================================")

@@ -83,15 +83,19 @@ fn transfer_between_members() {
 }
 
 #[test]
-fn transfer_to_non_member_fails() {
+fn transfer_to_non_member_auto_adds() {
     setup();
     let users = vec![(alice(), U256::from(100u64))];
     let _ = dao::new_with_default_track(users, true, Some(Address::from(gov())));
 
     with_engine(|e| e.set_caller([1u8; 20]));
     let charlie = Address::from([3u8; 20]);
-    assert_eq!(dao::transfer(charlie, U256::from(10u64)), Err(Error::MemberNotExisted));
-    assert_eq!(dao::balance_of(charlie), U256::ZERO);
+    // 转账给非成员会自动将其加入成员列表并初始化余额
+    // Transfer to non-member auto-adds them to members list and initializes balance
+    assert_eq!(dao::transfer(charlie, U256::from(10u64)), Ok(()));
+    assert_eq!(dao::balance_of(charlie), U256::from(10u64));
+    // Charlie 应该已被加入成员列表
+    assert!(dao::list().iter().any(|x| *x == charlie));
 }
 
 #[test]

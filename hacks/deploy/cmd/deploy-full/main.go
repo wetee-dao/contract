@@ -132,7 +132,7 @@ func main() {
 
 	targetDir := filepath.Join(rootDir, "target")
 
-	// Upload pod code
+	// Upload and deploy pod implementation contract
 	podData, err := os.ReadFile(filepath.Join(targetDir, "pod.release.polkavm"))
 	if err != nil {
 		exitf("read pod code: %v", err)
@@ -142,9 +142,25 @@ func main() {
 		exitf("upload pod code: %v", err)
 	}
 
+	// Deploy Pod implementation contract (standalone, Proxy will delegate_call to this)
+	podImplAddress, err := client.DeployContract(
+		util.InkCode{Existing: podCodeHash},
+		&pk,
+		types.NewU128(*big.NewInt(0)),
+		util.InkContractInput{
+			Selector: "0x00000000",
+			Args:     []any{},
+		},
+		util.NewSome(genSalt()),
+	)
+	if err != nil {
+		exitf("deploy pod impl: %v", err)
+	}
+	fmt.Println("pod impl address: ", podImplAddress.Hex())
+
 	// Deploy full system
 	subnetImplAddress, _ := deploySubnetContract(client, pk, targetDir)
-	cloudProxyAddress, _ := deployCloudContract(client, *subnetImplAddress, *podCodeHash, pk, targetDir)
+	cloudProxyAddress, _ := deployCloudContract(client, *subnetImplAddress, *podImplAddress, *podCodeHash, pk, targetDir)
 
 	initSubnet(client, pk, subnetImplAddress.Hex(), genesisCfg)
 	initWorker(client, pk, subnetImplAddress.Hex(), genesisCfg)
@@ -207,7 +223,7 @@ func deploySubnetContract(client *chain.ChainClient, pk chain.Signer, targetDir 
 	return subnetProxyAddress, subnetContract
 }
 
-func deployCloudContract(client *chain.ChainClient, subnetAddress types.H160, podCodeHash types.H256, pk chain.Signer, targetDir string) (*types.H160, *cloud.Cloud) {
+func deployCloudContract(client *chain.ChainClient, subnetAddress types.H160, podImplAddress types.H160, podCodeHash types.H256, pk chain.Signer, targetDir string) (*types.H160, *cloud.Cloud) {
 	data, err := os.ReadFile(filepath.Join(targetDir, "cloud.release.polkavm"))
 	if err != nil {
 		util.LogWithPurple("read file error", err)
@@ -247,7 +263,7 @@ func deployCloudContract(client *chain.ChainClient, subnetAddress types.H160, po
 	if err != nil {
 		panic(err)
 	}
-	err = cloudContract.ExecInit(subnetAddress, podCodeHash, chain.ExecParams{
+	err = cloudContract.ExecInit(subnetAddress, podImplAddress, podCodeHash, chain.ExecParams{
 		Signer:    &pk,
 		PayAmount: types.NewU128(*big.NewInt(0)),
 	})
@@ -373,14 +389,17 @@ func initWorker(client *chain.ChainClient, pk chain.Signer, subnetAddress string
 		err = subnetContract.ExecWorkerMortgage(
 			0,
 			w.Cpu, w.Memory,
-			w.Disk, w.Gpu,
-			1000000,
-			0,
+			0, 0, // cvm_cpu, cvm_mem
+			w.Disk, w.Gpu, // disk, gpu
 			types.NewU256(*big.NewInt(w.Mortgage)),
-			_call,
+			chain.ExecParams{
+				Signer:    &pk,
+				PayAmount: types.NewU128(*big.NewInt(w.Mortgage)),
+			},
 		)
 		if err != nil {
-			panic(err)
+			fmt.Println("error:", err)
+			// panic(err)
 		}
 	}
 }

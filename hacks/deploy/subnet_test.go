@@ -42,7 +42,7 @@ func TestSubnetQueryEpochInfo(t *testing.T) {
 
 	fmt.Printf("Epoch Info:\n")
 	fmt.Printf("  Epoch: %d\n", epochInfo.Epoch)
-	fmt.Printf("  EpochSolt: %d\n", epochInfo.EpochSolt)
+	fmt.Printf("  EpochSlot: %d\n", epochInfo.EpochSlot)
 	fmt.Printf("  LastEpochBlock: %d\n", epochInfo.LastEpochBlock)
 	fmt.Printf("  Now: %d\n", epochInfo.Now)
 	fmt.Printf("  SideChainPub: %s\n", epochInfo.SideChainPub.Hex())

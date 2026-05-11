@@ -137,12 +137,12 @@ func (c *Subnet) QueryEpochInfo(
 	return v, gas, nil
 }
 
-func (c *Subnet) DryRunSetEpochSolt(
-	epoch_solt uint32, __ink_params chain.DryRunParams,
+func (c *Subnet) DryRunSetEpochSlot(
+	epoch_slot uint32, __ink_params chain.DryRunParams,
 ) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
-		util.LogWithPurple("[ DryRun   method ]", "set_epoch_solt")
+		util.LogWithPurple("[ DryRun   method ]", "set_epoch_slot")
 	}
 	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
 		c,
@@ -151,8 +151,8 @@ func (c *Subnet) DryRunSetEpochSolt(
 		__ink_params.GasLimit,
 		__ink_params.StorageDepositLimit,
 		util.InkContractInput{
-			Selector: "0xe05fb410",
-			Args:     []any{epoch_solt},
+			Selector: "0x6c9fe8a0",
+			Args:     []any{epoch_slot},
 		},
 	)
 	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
@@ -165,12 +165,12 @@ func (c *Subnet) DryRunSetEpochSolt(
 	return v, gas, nil
 }
 
-func (c *Subnet) ExecSetEpochSolt(
-	epoch_solt uint32, __ink_params chain.ExecParams,
+func (c *Subnet) ExecSetEpochSlot(
+	epoch_slot uint32, __ink_params chain.ExecParams,
 ) error {
 	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
 	_param.PayAmount = __ink_params.PayAmount
-	_, gas, err := c.DryRunSetEpochSolt(epoch_solt, _param)
+	_, gas, err := c.DryRunSetEpochSlot(epoch_slot, _param)
 	if err != nil {
 		return err
 	}
@@ -179,17 +179,17 @@ func (c *Subnet) ExecSetEpochSolt(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0xe05fb410",
-			Args:     []any{epoch_solt},
+			Selector: "0x6c9fe8a0",
+			Args:     []any{epoch_slot},
 		},
 		__ink_params,
 	)
 }
 
-func (c *Subnet) CallOfSetEpochSolt(
-	epoch_solt uint32, __ink_params chain.DryRunParams,
+func (c *Subnet) CallOfSetEpochSlot(
+	epoch_slot uint32, __ink_params chain.DryRunParams,
 ) (*types.Call, error) {
-	_, gas, err := c.DryRunSetEpochSolt(epoch_solt, __ink_params)
+	_, gas, err := c.DryRunSetEpochSlot(epoch_slot, __ink_params)
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +199,8 @@ func (c *Subnet) CallOfSetEpochSolt(
 		gas.GasRequired,
 		gas.StorageDeposit,
 		util.InkContractInput{
-			Selector: "0xe05fb410",
-			Args:     []any{epoch_solt},
+			Selector: "0x6c9fe8a0",
+			Args:     []any{epoch_slot},
 		},
 	)
 }
@@ -529,6 +529,398 @@ func (c *Subnet) QueryAsset(
 	return v, gas, nil
 }
 
+func (c *Subnet) DryRunSetCloudContract(
+	addr types.H160, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "set_cloud_contract")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x2316651f",
+			Args:     []any{addr},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Subnet) ExecSetCloudContract(
+	addr types.H160, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunSetCloudContract(addr, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x2316651f",
+			Args:     []any{addr},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Subnet) CallOfSetCloudContract(
+	addr types.H160, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunSetCloudContract(addr, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x2316651f",
+			Args:     []any{addr},
+		},
+	)
+}
+
+func (c *Subnet) QueryCloudContract(
+	__ink_params chain.DryRunParams,
+) (*types.H160, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "cloud_contract")
+	}
+	v, gas, err := chain.DryRunInk[types.H160](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x8b70fb23",
+			Args:     []any{},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Subnet) DryRunSetMinMortgage(
+	amount types.U256, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "set_min_mortgage")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x0d1e75a9",
+			Args:     []any{amount},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Subnet) ExecSetMinMortgage(
+	amount types.U256, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunSetMinMortgage(amount, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x0d1e75a9",
+			Args:     []any{amount},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Subnet) CallOfSetMinMortgage(
+	amount types.U256, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunSetMinMortgage(amount, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x0d1e75a9",
+			Args:     []any{amount},
+		},
+	)
+}
+
+func (c *Subnet) QueryMinMortgage(
+	__ink_params chain.DryRunParams,
+) (*types.U256, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "min_mortgage")
+	}
+	v, gas, err := chain.DryRunInk[types.U256](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xd4a4e1ac",
+			Args:     []any{},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Subnet) DryRunSetLevelMinMortgage(
+	level byte, amount types.U256, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "set_level_min_mortgage")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xb752c615",
+			Args:     []any{level, amount},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Subnet) ExecSetLevelMinMortgage(
+	level byte, amount types.U256, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunSetLevelMinMortgage(level, amount, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0xb752c615",
+			Args:     []any{level, amount},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Subnet) CallOfSetLevelMinMortgage(
+	level byte, amount types.U256, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunSetLevelMinMortgage(level, amount, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0xb752c615",
+			Args:     []any{level, amount},
+		},
+	)
+}
+
+func (c *Subnet) QueryLevelMinMortgage(
+	level byte, __ink_params chain.DryRunParams,
+) (*types.U256, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "level_min_mortgage")
+	}
+	v, gas, err := chain.DryRunInk[types.U256](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0xe11eb329",
+			Args:     []any{level},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Subnet) QueryWorkerTotalResources(
+	worker_id uint64, __ink_params chain.DryRunParams,
+) (*Tuple_31, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "worker_total_resources")
+	}
+	v, gas, err := chain.DryRunInk[Tuple_31](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x1be9202d",
+			Args:     []any{worker_id},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Subnet) QueryWorkerTotalMortgage(
+	worker_id uint64, __ink_params chain.DryRunParams,
+) (*types.U256, *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "worker_total_mortgage")
+	}
+	v, gas, err := chain.DryRunInk[types.U256](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x340487c0",
+			Args:     []any{worker_id},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	return v, gas, nil
+}
+
+func (c *Subnet) DryRunSlashWorkerMortgage(
+	worker_id uint64, amount types.U256, to types.H160, __ink_params chain.DryRunParams,
+) (*util.Result[util.NullTuple, Error], *chain.DryRunReturnGas, error) {
+	if c.ChainClient.Debug {
+		fmt.Println()
+		util.LogWithPurple("[ DryRun   method ]", "slash_worker_mortgage")
+	}
+	v, gas, err := chain.DryRunInk[util.Result[util.NullTuple, Error]](
+		c,
+		__ink_params.Origin,
+		__ink_params.PayAmount,
+		__ink_params.GasLimit,
+		__ink_params.StorageDepositLimit,
+		util.InkContractInput{
+			Selector: "0x174e58ad",
+			Args:     []any{worker_id, amount, to},
+		},
+	)
+	if err != nil && !errors.Is(err, chain.ErrContractReverted) {
+		return nil, nil, err
+	}
+	if v != nil && v.IsErr {
+		return nil, nil, errors.New("Contract Reverted: " + v.E.Error())
+	}
+
+	return v, gas, nil
+}
+
+func (c *Subnet) ExecSlashWorkerMortgage(
+	worker_id uint64, amount types.U256, to types.H160, __ink_params chain.ExecParams,
+) error {
+	_param := chain.DefaultParamWithOrigin(__ink_params.Signer.AccountID())
+	_param.PayAmount = __ink_params.PayAmount
+	_, gas, err := c.DryRunSlashWorkerMortgage(worker_id, amount, to, _param)
+	if err != nil {
+		return err
+	}
+	return chain.CallInk(
+		c,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x174e58ad",
+			Args:     []any{worker_id, amount, to},
+		},
+		__ink_params,
+	)
+}
+
+func (c *Subnet) CallOfSlashWorkerMortgage(
+	worker_id uint64, amount types.U256, to types.H160, __ink_params chain.DryRunParams,
+) (*types.Call, error) {
+	_, gas, err := c.DryRunSlashWorkerMortgage(worker_id, amount, to, __ink_params)
+	if err != nil {
+		return nil, err
+	}
+	return chain.CallOfTransaction(
+		c,
+		__ink_params.PayAmount,
+		gas.GasRequired,
+		gas.StorageDeposit,
+		util.InkContractInput{
+			Selector: "0x174e58ad",
+			Args:     []any{worker_id, amount, to},
+		},
+	)
+}
+
 func (c *Subnet) QueryWorker(
 	id uint64, __ink_params chain.DryRunParams,
 ) (*util.Option[K8sCluster], *chain.DryRunReturnGas, error) {
@@ -555,12 +947,12 @@ func (c *Subnet) QueryWorker(
 
 func (c *Subnet) QueryWorkers(
 	start util.Option[uint64], size uint64, __ink_params chain.DryRunParams,
-) (*[]Tuple_41, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_44, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "workers")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_41](
+	v, gas, err := chain.DryRunInk[[]Tuple_44](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -579,12 +971,12 @@ func (c *Subnet) QueryWorkers(
 
 func (c *Subnet) QueryUserWorker(
 	user types.H160, __ink_params chain.DryRunParams,
-) (*util.Option[Tuple_41], *chain.DryRunReturnGas, error) {
+) (*util.Option[Tuple_44], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "user_worker")
 	}
-	v, gas, err := chain.DryRunInk[util.Option[Tuple_41]](
+	v, gas, err := chain.DryRunInk[util.Option[Tuple_44]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -603,12 +995,12 @@ func (c *Subnet) QueryUserWorker(
 
 func (c *Subnet) QueryMintWorker(
 	id util.AccountId, __ink_params chain.DryRunParams,
-) (*util.Option[Tuple_41], *chain.DryRunReturnGas, error) {
+) (*util.Option[Tuple_44], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "mint_worker")
 	}
-	v, gas, err := chain.DryRunInk[util.Option[Tuple_41]](
+	v, gas, err := chain.DryRunInk[util.Option[Tuple_44]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1131,12 +1523,12 @@ func (c *Subnet) QueryBootNodes(
 
 func (c *Subnet) QueryGetPendingSecrets(
 	__ink_params chain.DryRunParams,
-) (*[]Tuple_55, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_58, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "get_pending_secrets")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_55](
+	v, gas, err := chain.DryRunInk[[]Tuple_58](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1155,12 +1547,12 @@ func (c *Subnet) QueryGetPendingSecrets(
 
 func (c *Subnet) QuerySecrets(
 	__ink_params chain.DryRunParams,
-) (*[]Tuple_58, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_61, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "secrets")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_58](
+	v, gas, err := chain.DryRunInk[[]Tuple_61](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1451,12 +1843,12 @@ func (c *Subnet) CallOfSecretDelete(
 
 func (c *Subnet) QueryValidators(
 	__ink_params chain.DryRunParams,
-) (*[]Tuple_61, *chain.DryRunReturnGas, error) {
+) (*[]Tuple_64, *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "validators")
 	}
-	v, gas, err := chain.DryRunInk[[]Tuple_61](
+	v, gas, err := chain.DryRunInk[[]Tuple_64](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
@@ -1679,12 +2071,12 @@ func (c *Subnet) CallOfSetNextEpoch(
 
 func (c *Subnet) QueryNextEpochValidators(
 	__ink_params chain.DryRunParams,
-) (*util.Result[[]Tuple_61, Error], *chain.DryRunReturnGas, error) {
+) (*util.Result[[]Tuple_64, Error], *chain.DryRunReturnGas, error) {
 	if c.ChainClient.Debug {
 		fmt.Println()
 		util.LogWithPurple("[ DryRun   method ]", "next_epoch_validators")
 	}
-	v, gas, err := chain.DryRunInk[util.Result[[]Tuple_61, Error]](
+	v, gas, err := chain.DryRunInk[util.Result[[]Tuple_64, Error]](
 		c,
 		__ink_params.Origin,
 		__ink_params.PayAmount,
